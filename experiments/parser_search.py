@@ -171,7 +171,7 @@ class SearchParser(Parser):
         self.add_pattern("invalid", r"(Plan invalid)", type=str)
 
         self.add_pattern("num_objects", r"Num objects: (\d+)", type=int)
-
+        self.add_pattern("std_bad_alloc", r".*(std::bad_alloc).*", type=str, file="run.err")
         self.add_function(process_invalid)
         self.add_function(process_unsolvable)
         self.add_function(add_search_time_s)
