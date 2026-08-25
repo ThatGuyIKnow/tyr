@@ -51,6 +51,10 @@ int main(int argc, char** argv)
         .default_value(false)
         .implicit_value(true)
         .help("Collect destination worker lock wait and hold times.");
+    program.add_argument("--search-time-limit")
+        .default_value(size_t(0))
+        .scan<'u', size_t>()
+        .help("Wall-clock search budget in seconds. 0 = no limit (default).");
     program.add_argument("-R", "--random-seed").default_value(uint64_t(0)).scan<'u', uint64_t>().help("The random seed.");
     program.add_argument("-S", "--shuffle-labeled-succ-nodes").default_value(false).implicit_value(true).help("Enable shuffling the labeled successor nodes.");
     program.add_argument("-G", "--instantiate-ground-task")
@@ -96,6 +100,7 @@ int main(int argc, char** argv)
         auto parallel_search_mode = parallel_search_mode_name == "synchronous" ? planning::astar_eager::ParallelSearchMode::SYNCHRONOUS :
                                                                                  planning::astar_eager::ParallelSearchMode::ASYNCHRONOUS;
         auto collect_destination_lock_statistics = program.get<bool>("--collect-destination-lock-statistics");
+        auto search_time_limit_s = program.get<std::size_t>("--search-time-limit");
         auto random_seed = program.get<uint64_t>("--random-seed");
         auto shuffle_labeled_succ_nodes = program.get<bool>("--shuffle-labeled-succ-nodes");
         auto instantiate_ground_task = program.get<bool>("--instantiate-ground-task");
@@ -143,6 +148,18 @@ int main(int argc, char** argv)
                 state_repository_mode_name == "shared" ? state_repository_factory.create_concurrent(lifted_task) : state_repository_factory.create(lifted_task);
             auto successor_generator = planning::SuccessorGeneratorFactory<LiftedTag>().create(lifted_task, execution_context);
 
+            {
+                auto prog = successor_generator->get_action_program().get_datalog_program().get_program();
+                std::cout << "[SIZING] objects=" << std::ranges::distance(prog.get_objects())
+                          << " static_preds=" << std::ranges::distance(prog.get_predicates<formalism::StaticTag>())
+                          << " fluent_preds=" << std::ranges::distance(prog.get_predicates<formalism::FluentTag>())
+                          << " static_atoms=" << std::ranges::distance(prog.get_atoms<formalism::StaticTag>())
+                          << " fluent_atoms=" << std::ranges::distance(prog.get_atoms<formalism::FluentTag>())
+                          << " rules=" << prog.get_rules<formalism::PredicateTag>().size()
+                                          + prog.get_rules<formalism::FunctionTag>().size()
+                          << std::endl;
+            }
+
             auto options = planning::astar_eager::Options<LiftedTag>();
             options.start_node = successor_generator->get_initial_node(*state_repository, *axiom_evaluator);
             options.event_handler = planning::astar_eager::DefaultEventHandler<LiftedTag>::create(verbosity);
@@ -153,6 +170,8 @@ int main(int argc, char** argv)
             options.collect_destination_lock_statistics = collect_destination_lock_statistics;
             options.random_seed = random_seed;
             options.shuffle_labeled_succ_nodes = shuffle_labeled_succ_nodes;
+            if (search_time_limit_s != 0)
+                options.max_time = std::chrono::seconds(search_time_limit_s);
 
             auto heuristic = std::shared_ptr<planning::Heuristic<LiftedTag>> { nullptr };
             if (heuristic_type == "blind")
@@ -220,6 +239,8 @@ int main(int argc, char** argv)
                 options.collect_destination_lock_statistics = collect_destination_lock_statistics;
                 options.random_seed = random_seed;
                 options.shuffle_labeled_succ_nodes = shuffle_labeled_succ_nodes;
+                if (search_time_limit_s != 0)
+                    options.max_time = std::chrono::seconds(search_time_limit_s);
 
                 auto heuristic = std::shared_ptr<planning::Heuristic<GroundTag>> { nullptr };
                 if (heuristic_type == "blind")

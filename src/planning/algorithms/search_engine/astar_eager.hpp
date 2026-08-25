@@ -25,6 +25,8 @@
 #include "tyr/planning/algorithms/openlists/priority_queue.hpp"
 
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <limits>
 #include <stdexcept>
 #include <tuple>
@@ -134,15 +136,15 @@ public:
 
     struct QueueEntry
     {
-        using KeyType = std::tuple<ygg::float_t, SearchNodeStatus, ygg::uint_t>;
+        using KeyType = std::tuple<ygg::float_t, SearchNodeStatus, ygg::float_t, ygg::uint_t>;
         using ItemType = std::tuple<ygg::float_t, ygg::Index<State<Kind>>>;
 
         ygg::float_t f_value;
         ygg::Index<State<Kind>> state;
         SearchNodeStatus status;
-        ygg::uint_t step;
+        ygg::float_t g_value;
 
-        KeyType get_key() const { return std::make_tuple(f_value, status, step); }
+        KeyType get_key() const { return std::make_tuple(f_value, status, g_value, ygg::uint_t(state)); }
         ItemType get_item() const { return std::make_tuple(f_value, state); }
     };
 
@@ -169,7 +171,7 @@ public:
 
     void open_start(ygg::Index<State<Kind>> state, const SearchNode& search_node)
     {
-        m_openlist.insert(QueueEntry { m_f_value, state, search_node.status, m_step++ });
+        m_openlist.insert(QueueEntry { m_f_value, state, search_node.status, search_node.g_value });
     }
 
     bool empty() const { return m_openlist.empty(); }
@@ -212,6 +214,14 @@ public:
         ModePolicy::finish_f_layer(entry.f_value, m_f_value, emit_event);
         // A remote lower-f entry may arrive later, so a parallel worker cannot declare an f-layer finished.
 
+        if (std::getenv("TYR_DEBUG_TRACE") != nullptr)
+            std::fprintf(stderr,
+                         "POP idx=%u f=%.6f g=%.6f status=%d\n",
+                         static_cast<unsigned>(ygg::uint_t(entry.state)),
+                         entry.f_value,
+                         search_node.g_value,
+                         static_cast<int>(search_node.status));
+
         if (search_node.status == SearchNodeStatus::GOAL)
             return ExpansionResult::GOAL;
 
@@ -241,7 +251,7 @@ public:
         const auto f_value = ygg::FloatTolerance<ygg::float_t>::canonicalize(g_value + h_value);
         if (std::isnan(f_value))
             throw std::runtime_error("A* successor f-value is NaN.");
-        m_openlist.insert(QueueEntry { f_value, state, status, m_step++ });
+        m_openlist.insert(QueueEntry { f_value, state, status, g_value });
     }
 
     template<typename Engine, typename WorkerData, typename EmitTransition>
@@ -335,7 +345,6 @@ public:
 private:
     static constexpr ParentState no_parent() noexcept { return ParentPolicy::no_parent(); }
 
-    ygg::uint_t m_step { 0 };
     ygg::float_t m_f_value { 0 };
     ygg::SegmentedVector<SearchNode> m_search_nodes;
     PriorityQueue<QueueEntry> m_openlist;
