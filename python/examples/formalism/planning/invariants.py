@@ -1,5 +1,7 @@
-"""
-Synthesize and inspect invariants from a planning domain.
+# Copyright (C) 2026 Dominik Drexler
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+"""Synthesize and inspect invariants from a planning domain.
 
 Example usage (benchmark files are provided by the pypddl-datasets package):
 
@@ -14,18 +16,19 @@ from itertools import product
 from pathlib import Path
 
 from pypddl.formalism import ParserOptions
+
 from pytyr.formalism.planning import (
-    Parser,
-    ParameterIndex,
-    ObjectIndex,
     Invariant,
-    synthesize_invariants,
     InvariantMatchData,
     InvariantMatcher,
     InvariantQueryResult,
     InvariantQueryWorkspace,
+    ObjectIndex,
     ObjectSubstitution,
+    ParameterIndex,
+    Parser,
     TaskVariableDomains,
+    synthesize_invariants,
 )
 
 
@@ -34,26 +37,28 @@ def rigid_parameter_domains_from_task_variable_domains(
     task_variable_domains: TaskVariableDomains,
     all_object_indices: set[ObjectIndex],
 ) -> list[list[ObjectIndex]]:
-    domains = [set(all_object_indices) for _ in range(inv.num_rigid_variables)]
+    """Return the candidate objects of each rigid variable, sorted, or an empty list if some variable has none.
+
+    A rigid variable's candidates are the objects allowed at every fluent predicate position where it occurs.
+    """
+    domains = [set(all_object_indices) for _ in range(inv.get_num_rigid_variables())]
 
     fluent_predicate_domains = task_variable_domains.fluent_predicate_domains
 
-    for atom in inv.atoms:
-        predicate_domains = fluent_predicate_domains[atom.predicate]
+    for atom in inv.get_atoms():
+        predicate_domains = fluent_predicate_domains[atom.get_predicate()]
 
-        for position, term in enumerate(atom.terms):
-            value = term.value
+        for position, term in enumerate(atom.get_terms()):
+            value = term.get_variant()
 
             if not isinstance(value, ParameterIndex):
                 continue
 
             parameter = int(value)
-            if parameter >= inv.num_rigid_variables:
+            if parameter >= inv.get_num_rigid_variables():
                 continue
 
-            allowed_objects = {
-                obj.get_index() for obj in predicate_domains[position].objects
-            }
+            allowed_objects = {obj.get_index() for obj in predicate_domains[position].objects}
 
             domains[parameter] &= allowed_objects
 
@@ -71,16 +76,14 @@ def enumerate_rigid_bindings(
     task_variable_domains: TaskVariableDomains,
     all_object_indices: set[ObjectIndex],
 ) -> list[ObjectSubstitution]:
-    """
-    Enumerate all rigid substitutions consistent with the task variable domains.
-    """
+    """Enumerate all rigid substitutions consistent with the task variable domains."""
     rigid_domains = rigid_parameter_domains_from_task_variable_domains(
         inv,
         task_variable_domains,
         all_object_indices,
     )
 
-    if inv.num_rigid_variables == 0:
+    if inv.get_num_rigid_variables() == 0:
         return [ObjectSubstitution()]
 
     if not rigid_domains:
@@ -89,7 +92,7 @@ def enumerate_rigid_bindings(
     result: list[ObjectSubstitution] = []
 
     for assignment in product(*rigid_domains):
-        rho = ObjectSubstitution.from_range(ParameterIndex(0), inv.num_rigid_variables)
+        rho = ObjectSubstitution.from_range(ParameterIndex(0), inv.get_num_rigid_variables())
 
         ok = True
         for parameter, object_index in enumerate(assignment):
@@ -108,9 +111,7 @@ def build_invariant_match_data(
     task_variable_domains: TaskVariableDomains,
     all_object_indices: set[ObjectIndex],
 ) -> list[InvariantMatchData]:
-    """
-    Build one InvariantMatchData object per invariant.
-    """
+    """Build one InvariantMatchData object per invariant."""
     result: list[InvariantMatchData] = []
 
     for inv in invariants:
@@ -127,9 +128,8 @@ def build_invariant_match_data(
 
 
 def main() -> None:
-    arg_parser = argparse.ArgumentParser(
-        description="Parse and traverse planning formalism structures."
-    )
+    """Synthesize the domain's invariants and match the first one against the initial fluent atoms."""
+    arg_parser = argparse.ArgumentParser(description="Parse and traverse planning formalism structures.")
     arg_parser.add_argument(
         "-d",
         "--domain-filepath",
@@ -154,8 +154,9 @@ def main() -> None:
 
     planning_domain = parser.get_domain()
 
-    # 1. Synthesize invariants from the planning domain.
-    invariants = synthesize_invariants(planning_domain.get_domain())
+    # 1. Synthesize invariants from the planning domain. They are interned into the domain's repository, so this comes
+    #    before parsing tasks of the domain.
+    invariants = synthesize_invariants(planning_domain)
 
     print("Synthesized invariants:")
     for i, inv in enumerate(invariants):
@@ -180,10 +181,7 @@ def main() -> None:
 
     print("\nBuilt invariant match data:")
     for i, data in enumerate(invariant_match_data):
-        print(
-            f"[{i}] invariant={data.invariant}, "
-            f"rigid variable substitutions={data.rigid_variable_bindings}"
-        )
+        print(f"[{i}] invariant={data.invariant}, rigid variable substitutions={data.rigid_variable_bindings}")
 
     # 4. Create an InvariantMatcher.
     matcher = InvariantMatcher(invariant_match_data)
@@ -208,11 +206,7 @@ def main() -> None:
         for match in query_result.matches:
             data = invariant_match_data[match.invariant_index]
             binding = data.rigid_variable_bindings[match.binding_index]
-            print(
-                f"  invariant_index={match.invariant_index}, "
-                f"binding_index={match.binding_index}, "
-                f"binding={binding}"
-            )
+            print(f"  invariant_index={match.invariant_index}, binding_index={match.binding_index}, binding={binding}")
 
 
 if __name__ == "__main__":

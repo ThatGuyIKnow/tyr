@@ -7,6 +7,7 @@ function(add_gtest test_name)
     target_link_libraries(${test_name} PRIVATE tyr::core TBB::tbb GTest::gtest)
     target_include_directories(${test_name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     add_test(NAME ${test_name} COMMAND ${test_name})
+    set_tests_properties(${test_name} PROPERTIES FAIL_REGULAR_EXPRESSION "does NOT link in any test case;Running 0 tests")
 endfunction()
 
 # Compile related repository families together while keeping one source per public family.
@@ -33,25 +34,13 @@ add_gtest(
     "formalism/datalog/conjunctive_effect.cpp"
     "formalism/datalog/function_expression.cpp"
     "formalism/datalog/function_term.cpp"
-    "formalism/datalog/ground_atom.cpp"
-    "formalism/datalog/ground_conditional_effect.cpp"
-    "formalism/datalog/ground_conjunctive_condition.cpp"
-    "formalism/datalog/ground_conjunctive_effect.cpp"
-    "formalism/datalog/ground_function_expression.cpp"
-    "formalism/datalog/ground_function_term.cpp"
-    "formalism/datalog/ground_function_term_value.cpp"
-    "formalism/datalog/ground_literal.cpp"
-    "formalism/datalog/ground_numeric_effect.cpp"
-    "formalism/datalog/ground_numeric_effect_operator.cpp"
-    "formalism/datalog/ground_program.cpp"
-    "formalism/datalog/ground_rule.cpp"
+    "formalism/datalog/function_term_value.cpp"
     "formalism/datalog/literal.cpp"
-    "formalism/datalog/metric.cpp"
-    "formalism/datalog/multi_operator.cpp"
     "formalism/datalog/numeric_effect.cpp"
     "formalism/datalog/numeric_effect_operator.cpp"
     "formalism/datalog/program.cpp"
     "formalism/datalog/rule.cpp"
+    "formalism/datalog/multi_operator.cpp"
     "formalism/datalog/unary_operator.cpp"
 )
 
@@ -68,27 +57,15 @@ add_gtest(
     "formalism/planning/conjunctive_effect.cpp"
     "formalism/planning/domain.cpp"
     "formalism/planning/fdr_fact.cpp"
-    "formalism/planning/fdr_task.cpp"
     "formalism/planning/fdr_variable.cpp"
     "formalism/planning/function_expression.cpp"
     "formalism/planning/function_term.cpp"
-    "formalism/planning/ground_action.cpp"
-    "formalism/planning/ground_atom.cpp"
-    "formalism/planning/ground_axiom.cpp"
-    "formalism/planning/ground_conditional_effect.cpp"
-    "formalism/planning/ground_conjunctive_condition.cpp"
-    "formalism/planning/ground_conjunctive_effect.cpp"
-    "formalism/planning/ground_function_expression.cpp"
-    "formalism/planning/ground_function_term.cpp"
-    "formalism/planning/ground_function_term_value.cpp"
-    "formalism/planning/ground_literal.cpp"
-    "formalism/planning/ground_numeric_effect.cpp"
-    "formalism/planning/ground_numeric_effect_operator.cpp"
+    "formalism/planning/function_term_value.cpp"
     "formalism/planning/literal.cpp"
-    "formalism/planning/metric.cpp"
-    "formalism/planning/multi_operator.cpp"
     "formalism/planning/numeric_effect.cpp"
     "formalism/planning/numeric_effect_operator.cpp"
+    "formalism/planning/metric.cpp"
+    "formalism/planning/multi_operator.cpp"
     "formalism/planning/task.cpp"
     "formalism/planning/unary_operator.cpp"
 )
@@ -110,7 +87,7 @@ add_gtest(
     "planning/state.cpp"
 )
 
-add_gtest(planning_applicability "planning/applicability.cpp")
+add_gtest(planning_applicability "planning/applicability.cpp" "planning/applicability_schema.cpp")
 add_gtest(planning_plan_reconstruction "planning/plan_reconstruction.cpp")
 add_gtest(planning_search_engine "planning/search_engine.cpp")
 target_include_directories(planning_search_engine PRIVATE ${PROJECT_SOURCE_DIR}/src)
@@ -119,15 +96,16 @@ add_gtest(planning_state_routing "planning/state_routing.cpp")
 target_include_directories(planning_state_routing PRIVATE ${PROJECT_SOURCE_DIR}/src)
 add_gtest(formalism_planning_invariants_synthesis "formalism/planning/invariants/synthesis.cpp")
 target_link_libraries(formalism_planning_invariants_synthesis PRIVATE Boost::json)
+add_gtest(planning_invariant_order "planning/lifted/invariant_order.cpp")
 add_gtest(formalism_unification "formalism/unification.cpp")
+add_gtest(formalism_numeric_expression_utils "formalism/numeric_expression_utils.cpp")
 add_gtest(algorithms_kckp "algorithms/kckp/kckp.cpp")
 target_include_directories(algorithms_kckp PRIVATE ${PROJECT_SOURCE_DIR}/src)
 
 add_gtest(datalog_cost_policy "datalog/cost_policy.cpp")
-add_gtest(datalog_numeric_utils "datalog/numeric_utils.cpp")
 add_gtest(datalog_ground_solver "datalog/ground/solver.cpp")
 add_gtest(datalog_lifted_assignment_sets "datalog/assignment_sets.cpp")
-add_gtest(datalog_lifted_solver "datalog/lifted/solver.cpp")
+add_gtest(datalog_lifted_solver "datalog/lifted/solver.cpp" "datalog/lifted/solver_numeric.cpp")
 target_link_libraries(datalog_lifted_solver PRIVATE Boost::iostreams Boost::json)
 add_gtest(algorithms_delta_kckp "algorithms/kckp/delta_kckp.cpp")
 
@@ -151,3 +129,6 @@ add_gtest(planning_algorithms_utils "planning/algorithms/utils.cpp")
 add_gtest(planning_algorithms_iw_novelty_table "planning/algorithms/iw/novelty_table.cpp")
 add_gtest(planning_algorithms_serialized "planning/algorithms/serialized.cpp")
 target_link_libraries(planning_algorithms_serialized PRIVATE Boost::json)
+
+add_gtest(serialization_planning "serialization/planning.cpp" "serialization/planning_runtime.cpp")
+target_link_libraries(serialization_planning PRIVATE Boost::json)

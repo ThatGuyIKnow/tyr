@@ -22,11 +22,10 @@
 #include "tyr/analysis/stratification.hpp"
 #include "tyr/datalog/cost_buckets.hpp"
 #include "tyr/datalog/declarations.hpp"
-#include "tyr/datalog/policies/annotation_concept.hpp"
-#include "tyr/datalog/policies/cost_concept.hpp"
-#include "tyr/datalog/policies/termination_concept.hpp"
+#include "tyr/datalog/policies/annotation_concepts.hpp"
+#include "tyr/datalog/policies/cost_concepts.hpp"
+#include "tyr/datalog/policies/termination_concepts.hpp"
 #include "tyr/formalism/datalog/declarations.hpp"
-#include "tyr/formalism/datalog/rule_index.hpp"
 
 #include <boost/dynamic_bitset/dynamic_bitset.hpp>
 #include <cassert>
@@ -41,13 +40,13 @@
 namespace tyr::datalog
 {
 
-template<::tyr::formalism::RelationKind R>
+template<formalism::RelationKind R>
 class TypedRuleSchedulerStratum
 {
 public:
     TypedRuleSchedulerStratum(const analysis::TypedRuleStratum<R>& rules,
                               const analysis::TypedListenerStratum<R>& listeners,
-                              const ::tyr::formalism::datalog::Repository& context,
+                              const formalism::datalog::Repository& context,
                               size_t num_fluent_predicates,
                               size_t num_fluent_functions);
 
@@ -55,33 +54,34 @@ public:
 
     void on_start_iteration() noexcept;
 
-    void on_generate(ygg::Index<::tyr::formalism::Predicate<::tyr::formalism::FluentTag>> predicate);
-    void on_generate(ygg::Index<::tyr::formalism::Function<::tyr::formalism::FluentTag>> function);
+    void on_generate(ygg::Index<formalism::Predicate<formalism::FluentTag>> predicate);
+    void on_generate(ygg::Index<formalism::Function<formalism::FluentTag>> function);
 
     void on_finish_iteration();
 
-    const ::tyr::formalism::datalog::Repository& get_context() const noexcept { return m_context; }
-    const ygg::IndexList<::tyr::formalism::datalog::Rule<R>>& get_rules() const noexcept { return m_rules; }
+    [[nodiscard]] const formalism::datalog::Repository& get_context() const noexcept { return *m_context; }
+    [[nodiscard]] const ygg::IndexList<formalism::datalog::Rule<LiftedTag, R>>& get_rules() const noexcept { return *m_rules; }
 
     /// Active rules in sorted index order: hash-set iteration order is platform-unspecified, but the
     /// rule processing order assigns program-repository rows (first-derivation order) that delta
     /// bitsets are indexed by, so it must be identical on every platform.
-    const ygg::IndexList<::tyr::formalism::datalog::Rule<R>>& get_active_rules() const noexcept { return m_sorted_active_rules; }
+    [[nodiscard]] const ygg::IndexList<formalism::datalog::Rule<LiftedTag, R>>& get_active_rules() const noexcept { return m_sorted_active_rules; }
 
-    bool requires_full_enumeration(ygg::Index<::tyr::formalism::datalog::Rule<R>> rule) const noexcept { return m_full_enumeration_rules.contains(rule); }
+    [[nodiscard]] bool requires_full_enumeration(ygg::Index<formalism::datalog::Rule<LiftedTag, R>> rule) const noexcept
+    { return m_full_enumeration_rules.contains(rule); }
 
 private:
     void rebuild_sorted_active_rules();
 
-    const analysis::TypedRuleStratum<R>& m_rules;
-    const analysis::TypedListenerStratum<R>& m_listeners;
-    const ::tyr::formalism::datalog::Repository& m_context;
+    const analysis::TypedRuleStratum<R>* m_rules;
+    const analysis::TypedListenerStratum<R>* m_listeners;
+    const formalism::datalog::Repository* m_context;
 
     boost::dynamic_bitset<> m_active_predicates;
     boost::dynamic_bitset<> m_active_functions;
-    ygg::UnorderedSet<ygg::Index<::tyr::formalism::datalog::Rule<R>>> m_active_rules;
-    ygg::UnorderedSet<ygg::Index<::tyr::formalism::datalog::Rule<R>>> m_full_enumeration_rules;
-    ygg::IndexList<::tyr::formalism::datalog::Rule<R>> m_sorted_active_rules;
+    ygg::UnorderedSet<ygg::Index<formalism::datalog::Rule<LiftedTag, R>>> m_active_rules;
+    ygg::UnorderedSet<ygg::Index<formalism::datalog::Rule<LiftedTag, R>>> m_full_enumeration_rules;
+    ygg::IndexList<formalism::datalog::Rule<LiftedTag, R>> m_sorted_active_rules;
 };
 
 template<>
@@ -90,32 +90,26 @@ class Scheduler<LiftedTag>
 public:
     Scheduler(const analysis::RuleStratum& rules,
               const analysis::ListenerStratum& listeners,
-              const ::tyr::formalism::datalog::Repository& context,
+              const formalism::datalog::Repository& context,
               size_t num_fluent_predicates,
               size_t num_fluent_functions);
 
-    auto& get(::tyr::formalism::PredicateTag) noexcept { return predicate_rules; }
-    auto& get(::tyr::formalism::FunctionTag) noexcept { return function_rules; }
-    const auto& get(::tyr::formalism::PredicateTag) const noexcept { return predicate_rules; }
-    const auto& get(::tyr::formalism::FunctionTag) const noexcept { return function_rules; }
+    auto& get(formalism::PredicateTag) noexcept { return predicate_rules; }
+    auto& get(formalism::FunctionTag) noexcept { return function_rules; }
+    [[nodiscard]] const auto& get(formalism::PredicateTag) const noexcept { return predicate_rules; }
+    [[nodiscard]] const auto& get(formalism::FunctionTag) const noexcept { return function_rules; }
 
-    template<::tyr::formalism::RelationKind R>
+    template<formalism::RelationKind R>
     auto& get() noexcept
-    {
-        return get(R {});
-    }
+    { return get(R {}); }
 
-    template<::tyr::formalism::RelationKind R>
-    const auto& get() const noexcept
-    {
-        return get(R {});
-    }
+    template<formalism::RelationKind R>
+    [[nodiscard]] const auto& get() const noexcept
+    { return get(R {}); }
 
     template<AnnotationPolicyConcept AP, TerminationPolicyConcept TP, RuleCostPolicyConcept CP>
     void begin_stratum([[maybe_unused]] ProgramExecutionContext<LiftedTag, AP, TP, CP>& ctx)
-    {
-        activate_all();
-    }
+    { activate_all(); }
 
     template<AnnotationPolicyConcept AP, TerminationPolicyConcept TP, RuleCostPolicyConcept CP>
     void begin_iteration(ProgramExecutionContext<LiftedTag, AP, TP, CP>& ctx)
@@ -126,19 +120,17 @@ public:
     }
 
     template<AnnotationPolicyConcept AP, TerminationPolicyConcept TP, RuleCostPolicyConcept CP>
-    void notify_numeric_changed(::tyr::formalism::datalog::FunctionBindingView<::tyr::formalism::FluentTag> binding,
+    void notify_numeric_changed(formalism::datalog::FunctionBindingIndex<formalism::FluentTag> binding,
                                 [[maybe_unused]] ProgramExecutionContext<LiftedTag, AP, TP, CP>& ctx)
-    {
-        activate(binding.get_index().relation);
-    }
+    { activate(binding.relation); }
 
     template<AnnotationPolicyConcept AP, TerminationPolicyConcept TP, RuleCostPolicyConcept CP>
     void notify_generated(const CostBuckets::Bucket& bucket, [[maybe_unused]] ProgramExecutionContext<LiftedTag, AP, TP, CP>& ctx)
     {
         for (const auto fact : bucket.predicate)
-            activate(fact.get_index().relation);
+            activate(fact.relation);
         for (const auto& entry : bucket.function)
-            activate(entry.first.get_index().relation);
+            activate(entry.first.relation);
     }
 
     void finish_iteration([[maybe_unused]] SchedulerIterationTrigger trigger)
@@ -156,17 +148,17 @@ public:
 private:
     void activate_all();
     void on_start_iteration() noexcept;
-    void activate(ygg::Index<::tyr::formalism::Predicate<::tyr::formalism::FluentTag>> predicate);
-    void activate(ygg::Index<::tyr::formalism::Function<::tyr::formalism::FluentTag>> function);
+    void activate(ygg::Index<formalism::Predicate<formalism::FluentTag>> predicate);
+    void activate(ygg::Index<formalism::Function<formalism::FluentTag>> function);
     void on_finish_iteration();
 
-    TypedRuleSchedulerStratum<::tyr::formalism::PredicateTag> predicate_rules;
-    TypedRuleSchedulerStratum<::tyr::formalism::FunctionTag> function_rules;
+    TypedRuleSchedulerStratum<formalism::PredicateTag> predicate_rules;
+    TypedRuleSchedulerStratum<formalism::FunctionTag> function_rules;
 };
 
 std::vector<Scheduler<LiftedTag>> create_schedulers(const analysis::RuleStrata& rules,
                                                     const analysis::ListenerStrata& listeners,
-                                                    const ::tyr::formalism::datalog::Repository& context,
+                                                    const formalism::datalog::Repository& context,
                                                     size_t num_fluent_predicates,
                                                     size_t num_fluent_functions);
 

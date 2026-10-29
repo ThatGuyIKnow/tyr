@@ -30,7 +30,7 @@ template<TaskKind Kind>
 class FFRPGHeuristic : public Heuristic<Kind>
 {
 public:
-    FFRPGHeuristic(TaskPtr<Kind> task, ygg::ExecutionContextPtr execution_context, CostMode cost_mode = CostMode::GENERAL);
+    FFRPGHeuristic(TaskPtr<Kind> task, ygg::ExecutionContextPtr execution_context, CostMode cost_mode = CostMode::UNIT);
     ~FFRPGHeuristic() override;
 
     FFRPGHeuristic(const FFRPGHeuristic&) = delete;
@@ -38,14 +38,14 @@ public:
     FFRPGHeuristic(FFRPGHeuristic&&) noexcept;
     FFRPGHeuristic& operator=(FFRPGHeuristic&&) noexcept;
 
-    static FFRPGHeuristicPtr<Kind> create(TaskPtr<Kind> task, ygg::ExecutionContextPtr execution_context, CostMode cost_mode = CostMode::GENERAL);
+    static FFRPGHeuristicPtr<Kind> create(TaskPtr<Kind> task, ygg::ExecutionContextPtr execution_context, CostMode cost_mode = CostMode::UNIT);
 
     using Heuristic<Kind>::evaluate;
 
-    void set_goal(::tyr::formalism::planning::GroundConjunctiveConditionView goal) override;
+    void set_goal(formalism::planning::ConjunctiveConditionView<GroundTag> goal) override;
     ygg::float_t evaluate(const ygg::Builder<State<Kind>>& state) override;
     [[nodiscard]] HeuristicPtr<Kind> make_worker(ygg::ExecutionContextPtr execution_context) const override;
-    const ygg::UnorderedSet<::tyr::formalism::planning::ActionBindingView>& get_preferred_actions() override;
+    [[nodiscard]] const ygg::UnorderedSet<formalism::planning::ActionBindingView>* get_relaxed_plan() const override;
     void print_summary(size_t verbosity) const override;
 
 private:

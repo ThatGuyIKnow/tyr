@@ -27,11 +27,11 @@
 #include "tyr/formalism/datalog/grounder.hpp"
 #include "tyr/formalism/planning/grounder.hpp"
 #include "tyr/formalism/planning/merge_planning.hpp"
-#include "tyr/planning/lifted/state_builder.hpp"
 #include "tyr/planning/lifted/state_data.hpp"
-#include "tyr/planning/lifted/state_view.hpp"
 #include "tyr/planning/lifted/task.hpp"
 #include "tyr/planning/programs/rpg.hpp"
+#include "tyr/planning/state_builder.hpp"
+#include "tyr/planning/state_repository.hpp"
 
 #include <cassert>
 #include <fmt/ostream.h>
@@ -45,24 +45,22 @@ namespace tyr::planning::detail
 template<>
 struct RPGPolicy<LiftedTag>
 {
-    using Action = ::tyr::formalism::planning::ActionBindingView;
+    using Action = formalism::planning::ActionBindingView;
 
     template<typename Workspace>
-    static std::optional<::tyr::formalism::planning::GroundAtomView<::tyr::formalism::FluentTag>>
-    translate_cut_atom(const RPGDefinition<LiftedTag>& definition,
-                       Workspace& workspace,
-                       ::tyr::formalism::datalog::PredicateBindingView<::tyr::formalism::FluentTag> head)
+    static std::optional<formalism::planning::AtomView<GroundTag, formalism::FluentTag>>
+    translate_cut_atom(const RPGDefinition<LiftedTag>& definition, Workspace& workspace, formalism::datalog::PredicateBindingView<formalism::FluentTag> head)
     {
         const auto& mapping = definition.rpg_program.get_translation_context().d2p.fluent_to_fluent_predicate;
         if (!mapping.contains(head.get_relation()))
             return std::nullopt;
 
-        auto merge_context = ::tyr::formalism::planning::MergePlanningContext { workspace.planning_builder, *definition.task->get_repository() };
-        return ::tyr::formalism::planning::merge_atom_d2p<::tyr::formalism::FluentTag, ::tyr::formalism::FluentTag>(head, mapping, merge_context).first;
+        auto merge_context = formalism::planning::MergePlanningContext { workspace.planning_builder, *definition.task->get_repository() };
+        return formalism::planning::merge_atom_d2p<formalism::FluentTag, formalism::FluentTag>(head, mapping, merge_context).first;
     }
 
     template<typename Workspace>
-    static void set_goal(RPGDefinition<LiftedTag>&, Workspace&, ::tyr::formalism::planning::GroundConjunctiveConditionView) noexcept
+    static void set_goal(RPGDefinition<LiftedTag>&, Workspace&, formalism::planning::ConjunctiveConditionView<GroundTag>) noexcept
     {
         // Lifted ground bindings live in the evaluation repository, which reset_evaluation()
         // clears. The goal is therefore materialized in begin_state_evaluation() after the reset.
@@ -70,52 +68,77 @@ struct RPGPolicy<LiftedTag>
 
     template<typename Workspace>
     static void
-    begin_state_evaluation(RPGDefinition<LiftedTag>& definition, Workspace& workspace, ::tyr::formalism::planning::GroundConjunctiveConditionView source_goal)
+    begin_state_evaluation(RPGDefinition<LiftedTag>& definition, Workspace& workspace, formalism::planning::ConjunctiveConditionView<GroundTag> source_goal)
     {
         workspace.reset_evaluation();
         // Lifted ground bindings live in the evaluation repository and must be restored after it is cleared.
         materialize_goal(definition, workspace, source_goal);
     }
 
-    template<::tyr::formalism::RelationKind R, typename Workspace>
+    template<formalism::RelationKind R, typename Workspace>
     static std::optional<Action> get_action(const RPGDefinition<LiftedTag>& definition, Workspace& workspace, const datalog::WitnessAnnotation<R>& witness)
     {
-        const auto rule_binding = witness.get_rule_key();
         const auto& mapping = definition.rpg_program.template get_rule_to_action_mapping<R>();
-        const auto it = mapping.find(rule_binding.get_relation());
+        const auto it = mapping.find(witness.get_rule_key().relation);
         if (it == mapping.end())
             return std::nullopt;
 
-        auto grounder_context =
-            ::tyr::formalism::planning::GrounderContext { workspace.planning_builder, *definition.task->get_repository(), workspace.binding };
+        auto grounder_context = formalism::planning::GrounderContext { workspace.planning_builder, *definition.task->get_repository(), workspace.binding };
         workspace.binding.clear();
+        if constexpr (std::same_as<R, formalism::PredicateTag>)
+        {
+            const auto& origins = definition.rpg_program.get_rule_splitting().origins;
+            if (const auto origin = origins.find(witness.get_rule_key().relation); origin != origins.end())
+            {
+                workspace.binding.resize(origin->second.num_source_variables);
+                recover_split_binding(definition, workspace, witness);
+                return formalism::planning::ground(it->second, grounder_context).first;
+            }
+        }
+        const auto rule_binding = ygg::make_view(witness.get_rule_key(), *workspace.workspace_repository);
         ygg::extend(rule_binding.get_objects(), workspace.binding);
-        return ::tyr::formalism::planning::ground(it->second, grounder_context).first;
+        return formalism::planning::ground(it->second, grounder_context).first;
     }
 
-    template<typename Workspace, typename Executor>
-    static bool is_action_applicable(const RPGDefinition<LiftedTag>& definition,
-                                     Workspace& workspace,
-                                     Executor& executor,
-                                     Action action,
-                                     const StateContext<LiftedTag>& state_context)
+    /// Writes the objects that the witness of a split rule binds to its variables' positions among the source rule's variables,
+    /// and those of the projections it uses, through the witnesses of their atoms.
+    template<typename Workspace>
+    static void
+    recover_split_binding(const RPGDefinition<LiftedTag>& definition, Workspace& workspace, const datalog::WitnessAnnotation<formalism::PredicateTag>& witness)
     {
-        workspace.binding.clear();
-        ygg::extend(action.get_objects(), workspace.binding);
+        const auto& origin = definition.rpg_program.get_rule_splitting().origins.at(witness.get_rule_key().relation);
+        const auto rule_binding = ygg::make_view(witness.get_rule_key(), *workspace.workspace_repository);
+        auto position = static_cast<size_t>(0);
+        for (const auto object : rule_binding.get_objects())
+            workspace.binding[origin.source_positions[position++]] = object.get_index();
 
-        auto grounder_context =
-            ::tyr::formalism::planning::GrounderContext { workspace.planning_builder, *definition.task->get_repository(), workspace.binding };
-        return executor.is_applicable(action.get_relation(), state_context, grounder_context, *definition.task->get_fdr_context());
+        const auto& projection_rules = definition.rpg_program.get_rule_splitting().projection_rules;
+        visit_witness_rule_instance(workspace,
+                                    witness,
+                                    [&](const auto& instance)
+                                    {
+                                        for (const auto literal : instance.get_body().template get_literals<formalism::FluentTag>())
+                                        {
+                                            if (!projection_rules.contains(literal.get_atom().get_predicate().get_index()))
+                                                continue;
+                                            const auto* annotation = workspace.annotations.find(instance.resolve(literal.get_atom()).get_index());
+                                            const auto* projection =
+                                                annotation ? std::get_if<datalog::WitnessAnnotation<formalism::PredicateTag>>(annotation) : nullptr;
+                                            assert(projection && "A derived projection atom has a witness.");
+                                            if (projection)
+                                                recover_split_binding(definition, workspace, *projection);
+                                        }
+                                    });
     }
 
-    template<::tyr::formalism::RelationKind R, typename Workspace, typename Callback>
+    template<formalism::RelationKind R, typename Workspace, typename Callback>
     static void visit_witness_rule_instance(Workspace& workspace, const datalog::WitnessAnnotation<R>& witness, Callback&& callback)
     {
-        const auto rule_binding = witness.get_rule_key();
-        const auto& const_rule_workspace = *workspace.const_workspace.template get_rules<R>()[ygg::uint_t(rule_binding.get_relation().get_index())];
-        auto binding = ygg::IndexList<::tyr::formalism::Object> {};
+        const auto rule_binding = ygg::make_view(witness.get_rule_key(), *workspace.workspace_repository);
+        const auto& const_rule_workspace = *workspace.const_workspace->template get_rules<R>()[static_cast<ygg::uint_t>(witness.get_rule_key().relation)];
+        auto binding = ygg::IndexList<formalism::Object> {};
         ygg::extend(rule_binding.get_objects(), binding);
-        auto grounder_context = ::tyr::formalism::datalog::GrounderContext { workspace.datalog_builder, workspace.workspace_repository, binding };
+        auto grounder_context = formalism::datalog::GrounderContext { workspace.datalog_builder, *workspace.workspace_repository, binding };
         const auto instance = datalog::RuleInstance<LiftedTag, R>(const_rule_workspace, grounder_context);
         std::forward<Callback>(callback)(instance);
     }
@@ -126,26 +149,26 @@ struct RPGPolicy<LiftedTag>
         if (verbosity < 1)
             return;
 
-        std::cout << "[RPGHeuristic] Summary" << std::endl;
+        std::cout << "[RPGHeuristic] Summary" << '\n';
         fmt::print(std::cout, "{}\n", workspace.statistics);
         auto rule_statistics = std::vector<datalog::RuleStatistics> {};
-        const auto collect_rule_statistics = [&]<::tyr::formalism::RelationKind R>()
+        const auto collect_rule_statistics = [&]<formalism::RelationKind R>()
         {
             for (const auto& ws_rule : workspace.template get_rules<R>())
                 rule_statistics.push_back(ws_rule->common.statistics);
         };
-        collect_rule_statistics.template operator()<::tyr::formalism::PredicateTag>();
-        collect_rule_statistics.template operator()<::tyr::formalism::FunctionTag>();
+        collect_rule_statistics.template operator()<formalism::PredicateTag>();
+        collect_rule_statistics.template operator()<formalism::FunctionTag>();
         fmt::print(std::cout, "{}\n", datalog::compute_aggregated_rule_statistics(rule_statistics));
         auto rule_worker_statistics = std::vector<datalog::RuleWorkerStatistics> {};
-        const auto collect_worker_statistics = [&]<::tyr::formalism::RelationKind R>()
+        const auto collect_worker_statistics = [&]<formalism::RelationKind R>()
         {
             for (const auto& ws_rule : workspace.template get_rules<R>())
                 for (const auto& worker : ws_rule->worker)
                     rule_worker_statistics.push_back(worker.solve.statistics);
         };
-        collect_worker_statistics.template operator()<::tyr::formalism::PredicateTag>();
-        collect_worker_statistics.template operator()<::tyr::formalism::FunctionTag>();
+        collect_worker_statistics.template operator()<formalism::PredicateTag>();
+        collect_worker_statistics.template operator()<formalism::FunctionTag>();
         fmt::print(std::cout, "{}\n", datalog::compute_aggregated_rule_worker_statistics(rule_worker_statistics));
     }
 };

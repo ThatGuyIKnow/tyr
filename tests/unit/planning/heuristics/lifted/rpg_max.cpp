@@ -15,14 +15,28 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "tyr/planning/planning.hpp"
+#include "tyr/planning/heuristics/rpg_max.hpp"
+
+#include "../heuristic.hpp"
 
 namespace tyr::tests
 {
-using HeuristicTaskKind = LiftedTag;
-template<TaskKind Kind>
-using TestedHeuristic = ::tyr::planning::MaxRPGHeuristic<Kind>;
-inline constexpr const char* kHeuristicFixture = "tests/fixtures/planning/heuristics/lifted/rpg_max.json";
-}
+namespace
+{
+class HeuristicFixtureTest : public ::testing::TestWithParam<HeuristicCase>
+{
+};
 
-#include "../heuristic.hpp"
+TEST(TyrPlanningHeuristicWorkerTest, SnapshotsConfiguredGoal) { expect_worker_snapshots_configured_goal<LiftedTag, tyr::planning::MaxRPGHeuristic>(); }
+
+TEST(TyrPlanningHeuristicEvaluationTest, AlternatingStatesReplacePreviousModel)
+{ expect_alternating_states_replace_previous_model<LiftedTag, tyr::planning::MaxRPGHeuristic>(); }
+
+TEST_P(HeuristicFixtureTest, InitialStateMatchesFixture) { check_heuristic_case<LiftedTag, tyr::planning::MaxRPGHeuristic>(GetParam()); }
+
+INSTANTIATE_TEST_SUITE_P(TyrPlanningHeuristicFixture,
+                         HeuristicFixtureTest,
+                         ::testing::ValuesIn(load_cases("tests/fixtures/planning/heuristics/lifted/rpg_max.json")),
+                         [](const testing::TestParamInfo<HeuristicCase>& param_info) { return param_info.param.name; });
+}
+}

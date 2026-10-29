@@ -20,9 +20,9 @@
 
 #include "tyr/datalog/declarations.hpp"
 #include "tyr/datalog/lifted/contexts/rule.hpp"
-#include "tyr/datalog/policies/annotation_concept.hpp"
-#include "tyr/datalog/policies/cost_concept.hpp"
-#include "tyr/datalog/policies/termination_concept.hpp"
+#include "tyr/datalog/policies/annotation_concepts.hpp"
+#include "tyr/datalog/policies/cost_concepts.hpp"
+#include "tyr/datalog/policies/termination_concepts.hpp"
 #include "tyr/declarations.hpp"
 
 namespace tyr::datalog
@@ -33,38 +33,36 @@ struct StratumExecutionContext
     class In
     {
     public:
-        explicit In(const ProgramExecutionContext<LiftedTag, AP, TP, CP>& ctx) : m_ctx(ctx) {}
+        explicit In(const ProgramExecutionContext<LiftedTag, AP, TP, CP>& ctx) : m_ctx(&ctx) {}
 
-        const auto& program() const noexcept { return m_ctx.in(); }
-        bool is_single_threaded() const noexcept { return m_ctx.is_single_threaded(); }
+        [[nodiscard]] const auto& program() const noexcept { return m_ctx->in(); }
+        [[nodiscard]] bool is_single_threaded() const noexcept { return m_ctx->is_single_threaded(); }
 
     private:
-        const ProgramExecutionContext<LiftedTag, AP, TP, CP>& m_ctx;
+        const ProgramExecutionContext<LiftedTag, AP, TP, CP>* m_ctx;
     };
 
     class Out
     {
     public:
-        Out(Scheduler<LiftedTag>& scheduler, ProgramExecutionContext<LiftedTag, AP, TP, CP>& ctx) : m_scheduler(scheduler), m_ctx(ctx) {}
+        Out(Scheduler<LiftedTag>& scheduler, ProgramExecutionContext<LiftedTag, AP, TP, CP>& ctx) : m_scheduler(&scheduler), m_ctx(&ctx) {}
 
-        auto& scheduler() noexcept { return m_scheduler; }
-        auto& program() noexcept { return m_ctx.out(); }
-        auto& program_context() noexcept { return m_ctx; }
+        auto& scheduler() noexcept { return *m_scheduler; }
+        auto& program() noexcept { return m_ctx->out(); }
+        auto& program_context() noexcept { return *m_ctx; }
 
     private:
-        Scheduler<LiftedTag>& m_scheduler;
-        ProgramExecutionContext<LiftedTag, AP, TP, CP>& m_ctx;
+        Scheduler<LiftedTag>* m_scheduler;
+        ProgramExecutionContext<LiftedTag, AP, TP, CP>* m_ctx;
     };
 
     StratumExecutionContext(Scheduler<LiftedTag>& scheduler, ProgramExecutionContext<LiftedTag, AP, TP, CP>& ctx) : m_in(ctx), m_out(scheduler, ctx) {}
 
-    template<::tyr::formalism::RelationKind R>
-    auto get_rule_execution_context(ygg::Index<::tyr::formalism::datalog::Rule<R>> rule)
-    {
-        return RuleExecutionContext<R, AP, TP, CP> { rule, *this };
-    }
+    template<formalism::RelationKind R>
+    auto get_rule_execution_context(ygg::Index<formalism::datalog::Rule<LiftedTag, R>> rule)
+    { return RuleExecutionContext<R, AP, TP, CP> { rule, *this }; }
 
-    const auto& in() const noexcept { return m_in; }
+    [[nodiscard]] const auto& in() const noexcept { return m_in; }
     auto& out() noexcept { return m_out; }
 
 private:

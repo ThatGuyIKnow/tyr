@@ -1,4 +1,8 @@
+# Copyright (C) 2026 Dominik Drexler
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import argparse
+from pathlib import Path
 
 import pytest
 
@@ -6,10 +10,11 @@ pytest.importorskip("lab")
 
 from experiments import run_search
 from experiments.parser_search import SearchParser
+from lab import environments
 
 
-def configuration(**overrides):
-    result = {
+def configuration(**overrides: object) -> dict[str, object]:
+    result: dict[str, object] = {
         "name": "lifted",
         "task_kind": "lifted",
         "heuristic": "rpg_ff",
@@ -20,11 +25,11 @@ def configuration(**overrides):
     return result
 
 
-def what(**overrides):
-    result = {
+def what(**overrides: object) -> dict[str, object]:
+    result: dict[str, object] = {
         "name": "search",
         "planner": "gbfs_lazy",
-        "suite_sets": {"local": ["tiny"], "tetralith": ["ipc"]},
+        "suite_sets": {"local": ["tiny"], "arrhenius": ["ipc"]},
         "configurations": [configuration(), configuration(name="ground", task_kind="ground")],
         "parsers": ["search", "datalog"],
     }
@@ -32,8 +37,8 @@ def what(**overrides):
     return result
 
 
-def local_how(**overrides):
-    result = {
+def local_how(**overrides: object) -> dict[str, object]:
+    result: dict[str, object] = {
         "name": "local",
         "environment": "local",
         "build_dir": "build",
@@ -47,17 +52,17 @@ def local_how(**overrides):
     return result
 
 
-def tetralith_how(**overrides):
-    result = {
+def arrhenius_how(**overrides: object) -> dict[str, object]:
+    result: dict[str, object] = {
         "name": "cluster",
-        "environment": "tetralith",
+        "environment": "arrhenius",
         "build_dir": "build",
         "output_root": "results",
         "memory_limit_mib": 16000,
         "cpu_time_limit_s": 60,
         "wall_time_limit_s": 120,
         "account": "project",
-        "partition": "thin",
+        "partition": "cpu",
         "qos": "normal",
         "cpus_per_task": 8,
         "memory_per_cpu_mib": 2000,
@@ -68,7 +73,7 @@ def tetralith_how(**overrides):
     return result
 
 
-def test_validate_what_accepts_valid_config():
+def test_validate_what_accepts_valid_config() -> None:
     config = what()
     assert run_search.validate_what(config) is config
 
@@ -81,12 +86,12 @@ def test_validate_what_accepts_valid_config():
         (what(parsers=["unknown"]), "unknown parsers"),
     ],
 )
-def test_validate_what_rejects_invalid_config(config, message):
+def test_validate_what_rejects_invalid_config(config: dict[str, object], message: str) -> None:
     with pytest.raises(run_search.ConfigError, match=message):
         run_search.validate_what(config)
 
 
-def test_checked_in_presets_are_valid():
+def test_checked_in_presets_are_valid() -> None:
     root = run_search.REPO / "experiments/configs"
     what_paths = sorted((root / "what").rglob("*.json"))
     how_paths = sorted((root / "how").glob("*.json"))
@@ -96,11 +101,16 @@ def test_checked_in_presets_are_valid():
     for path in what_paths:
         run_search.validate_what(run_search.load_json(path))
     for path in how_paths:
-        run_search.validate_how(run_search.load_json(path))
+        config = run_search.validate_how(run_search.load_json(path))
+        if config["environment"] == "arrhenius":
+            assert config["partition"] == "fat", path
+            assert config["cpus_per_task"] in {1, 4, 8, 16}, path
+            assert config["memory_limit_mib"] == 65536, path
+            assert config["cpus_per_task"] * config["memory_per_cpu_mib"] == 67584, path
 
 
-@pytest.mark.parametrize("config", [local_how(), tetralith_how()])
-def test_validate_how_accepts_valid_config(config):
+@pytest.mark.parametrize("config", [local_how(), arrhenius_how()])
+def test_validate_how_accepts_valid_config(config: dict[str, object]) -> None:
     assert run_search.validate_how(config) is config
 
 
@@ -108,17 +118,17 @@ def test_validate_how_accepts_valid_config(config):
     ("config", "message"),
     [
         (local_how(local_processes=0), "local_processes"),
-        (local_how(partition="thin"), "Tetralith keys"),
-        (tetralith_how(account=""), "how.account"),
+        (local_how(partition="cpu"), "Arrhenius keys"),
+        (arrhenius_how(account=""), "how.account"),
     ],
 )
-def test_validate_how_rejects_invalid_config(config, message):
+def test_validate_how_rejects_invalid_config(config: dict[str, object], message: str) -> None:
     with pytest.raises(run_search.ConfigError, match=message):
         run_search.validate_how(config)
 
 
-def test_cli_how_overrides_take_precedence():
-    config = tetralith_how()
+def test_cli_how_overrides_take_precedence() -> None:
+    config = arrhenius_how()
     args = argparse.Namespace(
         build_dir="build-cli",
         memory_limit_mib=8000,
@@ -134,10 +144,10 @@ def test_cli_how_overrides_take_precedence():
     assert overridden["memory_limit_mib"] == 8000
     assert overridden["cpu_time_limit_s"] is None
     assert overridden["max_tasks"] is None
-    assert config == tetralith_how()
+    assert config == arrhenius_how()
 
 
-def test_cli_can_switch_environment():
+def test_cli_can_switch_environment() -> None:
     args = argparse.Namespace(
         environment="local",
         local_processes=3,
@@ -145,7 +155,7 @@ def test_cli_can_switch_environment():
         no_max_tasks=False,
     )
 
-    overridden = run_search.apply_how_overrides(tetralith_how(), args)
+    overridden = run_search.apply_how_overrides(arrhenius_how(), args)
 
     assert run_search.validate_how(overridden) is overridden
     assert overridden["environment"] == "local"
@@ -153,16 +163,18 @@ def test_cli_can_switch_environment():
     assert "account" not in overridden
 
 
-def test_suite_and_configuration_selection():
-    config = what()
+def test_suite_and_configuration_selection() -> None:
+    ground = configuration(name="ground", task_kind="ground")
+    config = what(configurations=[configuration(), ground])
     assert run_search.select_suites(config, local_how(), None) == ["tiny"]
+    assert run_search.select_suites(config, arrhenius_how(), None) == ["ipc"]
     assert run_search.select_suites(config, local_how(), ["custom"]) == ["custom"]
-    assert run_search.select_configurations(config, ["ground"]) == [config["configurations"][1]]
+    assert run_search.select_configurations(config, ["ground"]) == [ground]
     with pytest.raises(run_search.ConfigError, match="unknown configurations: missing"):
         run_search.select_configurations(config, ["missing"])
 
 
-def test_default_output_separates_planners():
+def test_default_output_separates_planners() -> None:
     how_config = local_how(output_root="experiments/data")
     astar = what(name="ipc", planner="astar_eager")
     gbfs = what(name="ipc", planner="gbfs_lazy")
@@ -170,7 +182,7 @@ def test_default_output_separates_planners():
     assert run_search.default_output_dir(astar, how_config) != run_search.default_output_dir(gbfs, how_config)
 
 
-def test_search_parser_reads_parallel_statistics(tmp_path):
+def test_search_parser_reads_parallel_statistics(tmp_path: Path) -> None:
     (tmp_path / "run.log").write_text(
         """[INPUT] Num Datalog threads: 1
 [INPUT] Num search workers: 2
@@ -184,11 +196,11 @@ def test_search_parser_reads_parallel_statistics(tmp_path):
 [Search] Idle worker time: 75 ms (75000000 ns)
 [Search] Worker utilization: 0.8125
 [Search] Number of expanded states: 40
-[Search] Number of accepted successors: 70
+[Search] Number of generated successors: 70
 [Search] Number of dead-end states: 2
 [Search] Number of pruned states: 5
-[Search] Number of generated successors: 100
-[Search] Number of transferred successors: 40
+[Search] Number of generated candidates: 100
+[Search] Number of transferred candidates: 40
 [Search] Communication overhead: 0.4
 [Search] Number of registered states: 65
 [Search] State storage memory usage: 1000 bytes
@@ -196,12 +208,16 @@ def test_search_parser_reads_parallel_statistics(tmp_path):
 [Search] Predicate bindings memory usage: 102 bytes
 [Search] Axiom bindings memory usage: 103 bytes
 [Search] Function bindings memory usage: 104 bytes
-[Search] Worker 0: idle=25000000 ns, expanded=25, accepted=40, deadends=1, pruned=2, registered=35, state_storage=600 bytes
-[Search] Worker 1: idle=50000000 ns, expanded=15, accepted=30, deadends=1, pruned=3, registered=30, state_storage=400 bytes
-[Search] Worker 0 communication: generated=60, transferred=10
-[Search] Worker 1 communication: generated=40, transferred=30
+[Search] Worker 0: idle=25000000 ns, expanded=25, generated=40, deadends=1, pruned=2, registered=35, \
+state_storage=600 bytes
+[Search] Worker 1: idle=50000000 ns, expanded=15, generated=30, deadends=1, pruned=3, registered=30, \
+state_storage=400 bytes
+[Search] Worker 0 communication: generated_candidates=60, transferred_candidates=10
+[Search] Worker 1 communication: generated_candidates=40, transferred_candidates=30
 [Search] Number of expanded states at last snapshot: 39
-[Search] Number of accepted successors at last snapshot: 69
+[Search] Number of generated successors at last snapshot: 69
+[Search] Number of generated candidates at last snapshot: 99
+[Search] Number of transferred candidates at last snapshot: 39
 [Search] Number of deadend states at last snapshot: 1
 [Search] Number of pruned states at last snapshot: 4
 [Total] Retained plan states memory usage: 200 bytes
@@ -210,7 +226,7 @@ def test_search_parser_reads_parallel_statistics(tmp_path):
 """,
         encoding="utf-8",
     )
-    props = {}
+    props: dict[str, object] = {}
 
     SearchParser().parse(tmp_path, props)
 
@@ -224,112 +240,116 @@ def test_search_parser_reads_parallel_statistics(tmp_path):
     assert props["idle_time_ns"] == 75_000_000
     assert props["idle_time_s"] == 0.075
     assert props["worker_utilization"] == 0.8125
-    assert props["num_accepted_successors"] == 70
+    assert props["num_generated_successors"] == 70
     assert props["num_deadends"] == 2
     assert props["num_pruned"] == 5
-    assert props["num_generated_successors"] == 100
-    assert props["num_transferred_successors"] == 40
+    assert props["num_generated_candidates"] == 100
+    assert props["num_transferred_candidates"] == 40
     assert props["communication_overhead"] == 0.4
     assert props["num_registered_states"] == 65
     assert props["search_state_storage_memory_usage_bytes"] == 1000
     assert props["search_function_bindings_memory_usage_bytes"] == 104
     assert props["worker_idle_time_ns"] == [25_000_000, 50_000_000]
     assert props["worker_num_expanded"] == [25, 15]
-    assert props["worker_num_accepted_successors"] == [40, 30]
+    assert props["worker_num_generated_successors"] == [40, 30]
     assert props["worker_num_registered_states"] == [35, 30]
     assert props["worker_state_storage_memory_usage_bytes"] == [600, 400]
     assert props["worker_utilizations"] == [0.75, 0.5]
-    assert props["worker_num_generated_successors"] == [60, 40]
-    assert props["worker_num_transferred_successors"] == [10, 30]
+    assert props["worker_num_generated_candidates"] == [60, 40]
+    assert props["worker_num_transferred_candidates"] == [10, 30]
     assert props["worker_communication_overheads"] == pytest.approx([1 / 6, 0.75])
-    assert props["num_accepted_successors_until_last_snapshot"] == 69
+    assert props["num_generated_successors_until_last_snapshot"] == 69
+    assert props["num_generated_candidates_until_last_snapshot"] == 99
+    assert props["num_transferred_candidates_until_last_snapshot"] == 39
     assert props["num_deadends_until_last_snapshot"] == 1
     assert props["num_pruned_until_last_snapshot"] == 4
     assert props["retained_plan_states_memory_usage_bytes"] == 200
 
 
-def test_search_parser_rejects_incomplete_worker_statistics(tmp_path):
+def test_search_parser_rejects_incomplete_worker_statistics(tmp_path: Path) -> None:
     (tmp_path / "run.log").write_text(
         """[INPUT] Num search workers: 2
-[Search] Worker 0: idle=0 ns, expanded=1, accepted=2, deadends=0, pruned=0, registered=2, state_storage=100 bytes
+[Search] Worker 0: idle=0 ns, expanded=1, generated=2, deadends=0, pruned=0, registered=2, state_storage=100 bytes
 """,
         encoding="utf-8",
     )
-    props = {}
+    props: dict[str, object] = {}
 
     SearchParser().parse(tmp_path, props)
 
     assert props["unexplained_errors"] == ["Unexpected search worker indices: [0]"]
 
 
-def test_search_parser_rejects_missing_worker_statistics(tmp_path):
+def test_search_parser_rejects_missing_worker_statistics(tmp_path: Path) -> None:
     (tmp_path / "run.log").write_text(
         """[INPUT] Num search workers: 2
 [Search] Number of expanded states: 1
 """,
         encoding="utf-8",
     )
-    props = {}
+    props: dict[str, object] = {}
 
     SearchParser().parse(tmp_path, props)
 
     assert props["unexplained_errors"] == ["Unexpected search worker indices: []"]
 
 
-def test_search_parser_rejects_mismatched_communication_statistics(tmp_path):
+def test_search_parser_rejects_mismatched_communication_statistics(tmp_path: Path) -> None:
     (tmp_path / "run.log").write_text(
         """[INPUT] Num search workers: 2
-[Search] Number of generated successors: 10
-[Search] Number of transferred successors: 4
+[Search] Number of generated candidates: 10
+[Search] Number of transferred candidates: 4
 [Search] Communication overhead: 0.4
-[Search] Worker 0 communication: generated=5, transferred=1
-[Search] Worker 1 communication: generated=4, transferred=3
+[Search] Worker 0 communication: generated_candidates=5, transferred_candidates=1
+[Search] Worker 1 communication: generated_candidates=4, transferred_candidates=3
 """,
         encoding="utf-8",
     )
-    props = {}
+    props: dict[str, object] = {}
 
     SearchParser().parse(tmp_path, props)
 
-    assert props["unexplained_errors"] == ["Communication aggregate does not match worker values: num_generated_successors"]
+    assert props["unexplained_errors"] == [
+        "Communication aggregate does not match worker values: num_generated_candidates"
+    ]
 
 
-def test_search_parser_rejects_missing_communication_worker_statistics(tmp_path):
+def test_search_parser_rejects_missing_communication_worker_statistics(tmp_path: Path) -> None:
     (tmp_path / "run.log").write_text(
         """[INPUT] Num search workers: 2
-[Search] Number of generated successors: 10
-[Search] Number of transferred successors: 4
-[Search] Worker 0: idle=0 ns, expanded=1, accepted=2, deadends=0, pruned=0, registered=2, state_storage=100 bytes
-[Search] Worker 1: idle=0 ns, expanded=1, accepted=2, deadends=0, pruned=0, registered=2, state_storage=100 bytes
+[Search] Number of generated candidates: 10
+[Search] Number of transferred candidates: 4
+[Search] Worker 0: idle=0 ns, expanded=1, generated=2, deadends=0, pruned=0, registered=2, state_storage=100 bytes
+[Search] Worker 1: idle=0 ns, expanded=1, generated=2, deadends=0, pruned=0, registered=2, state_storage=100 bytes
 """,
         encoding="utf-8",
     )
-    props = {}
+    props: dict[str, object] = {}
 
     SearchParser().parse(tmp_path, props)
 
     assert props["unexplained_errors"] == ["Missing communication worker statistics"]
 
 
-def test_search_parser_derives_zero_communication_overhead(tmp_path):
+def test_search_parser_derives_zero_communication_overhead(tmp_path: Path) -> None:
     (tmp_path / "run.log").write_text(
         """[INPUT] Num search workers: 2
-[Search] Worker 0 communication: generated=0, transferred=0
-[Search] Worker 1 communication: generated=0, transferred=0
+[Search] Worker 0 communication: generated_candidates=0, transferred_candidates=0
+[Search] Worker 1 communication: generated_candidates=0, transferred_candidates=0
 """,
         encoding="utf-8",
     )
-    props = {}
+    props: dict[str, object] = {}
 
     SearchParser().parse(tmp_path, props)
 
-    assert props["num_generated_successors"] == 0
-    assert props["num_transferred_successors"] == 0
+    assert props["num_generated_candidates"] == 0
+    assert props["num_transferred_candidates"] == 0
     assert props["communication_overhead"] == 0
     assert props["worker_communication_overheads"] == [0, 0]
 
 
-def test_search_parser_reads_destination_lock_statistics(tmp_path):
+def test_search_parser_reads_destination_lock_statistics(tmp_path: Path) -> None:
     (tmp_path / "run.log").write_text(
         """[INPUT] Num search workers: 2
 [INPUT] Collect destination lock statistics: 1
@@ -343,7 +363,7 @@ def test_search_parser_reads_destination_lock_statistics(tmp_path):
 """,
         encoding="utf-8",
     )
-    props = {}
+    props: dict[str, object] = {}
 
     SearchParser().parse(tmp_path, props)
 
@@ -362,7 +382,7 @@ def test_search_parser_reads_destination_lock_statistics(tmp_path):
     assert props["worker_destination_lock_hold_time_ns"] == [12_000_000, 18_000_000]
 
 
-def test_search_parser_ignores_disabled_destination_lock_statistics(tmp_path):
+def test_search_parser_ignores_disabled_destination_lock_statistics(tmp_path: Path) -> None:
     (tmp_path / "run.log").write_text(
         """[INPUT] Num search workers: 2
 [INPUT] Collect destination lock statistics: 0
@@ -375,7 +395,7 @@ def test_search_parser_ignores_disabled_destination_lock_statistics(tmp_path):
 """,
         encoding="utf-8",
     )
-    props = {}
+    props: dict[str, object] = {}
 
     SearchParser().parse(tmp_path, props)
 
@@ -383,7 +403,7 @@ def test_search_parser_ignores_disabled_destination_lock_statistics(tmp_path):
     assert "communication_efficiency" not in props
 
 
-def test_search_parser_rejects_incomplete_destination_lock_statistics(tmp_path):
+def test_search_parser_rejects_incomplete_destination_lock_statistics(tmp_path: Path) -> None:
     (tmp_path / "run.log").write_text(
         """[INPUT] Num search workers: 2
 [Search] Destination lock acquisitions: 3
@@ -393,14 +413,14 @@ def test_search_parser_rejects_incomplete_destination_lock_statistics(tmp_path):
 """,
         encoding="utf-8",
     )
-    props = {}
+    props: dict[str, object] = {}
 
     SearchParser().parse(tmp_path, props)
 
     assert props["unexplained_errors"] == ["Unexpected destination-lock worker indices: [0]"]
 
 
-def test_search_parser_rejects_missing_destination_lock_worker_statistics(tmp_path):
+def test_search_parser_rejects_missing_destination_lock_worker_statistics(tmp_path: Path) -> None:
     (tmp_path / "run.log").write_text(
         """[INPUT] Num search workers: 2
 [Search] Destination lock acquisitions: 0
@@ -409,14 +429,14 @@ def test_search_parser_rejects_missing_destination_lock_worker_statistics(tmp_pa
 """,
         encoding="utf-8",
     )
-    props = {}
+    props: dict[str, object] = {}
 
     SearchParser().parse(tmp_path, props)
 
     assert props["unexplained_errors"] == ["Missing destination-lock worker statistics"]
 
 
-def test_search_parser_derives_destination_lock_aggregates_from_worker_rows(tmp_path):
+def test_search_parser_derives_destination_lock_aggregates_from_worker_rows(tmp_path: Path) -> None:
     (tmp_path / "run.log").write_text(
         """[INPUT] Num search workers: 2
 [Search] Search time: 100 ms (100000000 ns)
@@ -426,7 +446,7 @@ def test_search_parser_derives_destination_lock_aggregates_from_worker_rows(tmp_
 """,
         encoding="utf-8",
     )
-    props = {}
+    props: dict[str, object] = {}
 
     SearchParser().parse(tmp_path, props)
 
@@ -437,14 +457,14 @@ def test_search_parser_derives_destination_lock_aggregates_from_worker_rows(tmp_
     assert "communication_efficiency" not in props
 
 
-def test_search_parser_rejects_missing_enabled_destination_lock_statistics(tmp_path):
+def test_search_parser_rejects_missing_enabled_destination_lock_statistics(tmp_path: Path) -> None:
     (tmp_path / "run.log").write_text(
         """[INPUT] Num search workers: 2
 [INPUT] Collect destination lock statistics: 1
 """,
         encoding="utf-8",
     )
-    props = {}
+    props: dict[str, object] = {}
 
     SearchParser().parse(tmp_path, props)
 
@@ -459,8 +479,8 @@ def test_search_parser_rejects_missing_enabled_destination_lock_statistics(tmp_p
     ],
 )
 def test_search_parser_ignores_missing_destination_lock_statistics_for_interrupted_runs(
-    tmp_path, filename, message, status
-):
+    tmp_path: Path, filename: str, message: str, status: str
+) -> None:
     (tmp_path / "run.log").write_text(
         """[INPUT] Num search workers: 2
 [INPUT] Collect destination lock statistics: 1
@@ -468,7 +488,7 @@ def test_search_parser_ignores_missing_destination_lock_statistics_for_interrupt
         encoding="utf-8",
     )
     (tmp_path / filename).write_text(message, encoding="utf-8")
-    props = {}
+    props: dict[str, object] = {}
 
     SearchParser().parse(tmp_path, props)
 
@@ -476,7 +496,7 @@ def test_search_parser_ignores_missing_destination_lock_statistics_for_interrupt
     assert "unexplained_errors" not in props
 
 
-def test_search_parser_rejects_incomplete_destination_lock_aggregates(tmp_path):
+def test_search_parser_rejects_incomplete_destination_lock_aggregates(tmp_path: Path) -> None:
     (tmp_path / "run.log").write_text(
         """[INPUT] Num search workers: 1
 [Search] Destination lock acquisitions: 3
@@ -484,24 +504,113 @@ def test_search_parser_rejects_incomplete_destination_lock_aggregates(tmp_path):
 """,
         encoding="utf-8",
     )
-    props = {}
+    props: dict[str, object] = {}
 
     SearchParser().parse(tmp_path, props)
 
     assert props["unexplained_errors"] == ["Incomplete destination-lock aggregate statistics"]
 
 
-def test_tetralith_state_round_trip(tmp_path):
-    what_config = what()
-    how_config = tetralith_how()
-    configurations = [what_config["configurations"][0]]
+def test_arrhenius_state_round_trip(tmp_path: Path) -> None:
+    lifted = configuration()
+    what_config = what(configurations=[lifted, configuration(name="ground", task_kind="ground")])
+    how_config = arrhenius_how()
+    configurations = [lifted]
     encoded = run_search.encode_state(what_config, how_config, ["ipc"], configurations, tmp_path / "experiment")
 
     restored = run_search.decode_state(encoded)
 
     assert restored[:4] == (what_config, how_config, ["ipc"], configurations)
     assert restored[4] == (tmp_path / "experiment").resolve()
-    assert f"{run_search.STATE_ENV}={encoded}" in run_search.make_environment(how_config, encoded).export
+    environment = run_search.make_environment(how_config, encoded)
+    assert isinstance(environment, environments.ArrheniusEnvironment)
+    assert f"{run_search.STATE_ENV}={encoded}" in environment.export
+
+
+@pytest.mark.parametrize("wall_time_limit_s", [300, 600])
+@pytest.mark.parametrize(
+    ("cpus_per_task", "memory_per_cpu_mib"),
+    [(1, 67584), (4, 16896), (8, 8448), (16, 4224)],
+)
+def test_arrhenius_slurm_submission(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, wall_time_limit_s: int, cpus_per_task: int, memory_per_cpu_mib: int
+) -> None:
+    presets = run_search.REPO / "experiments/configs"
+    what_config = run_search.validate_what(
+        run_search.load_json(presets / f"what/gbfs_lazy/2026-8-7-gbfs_lazy-lifted-parallel-search-{cpus_per_task}.json")
+    )
+    how_config = run_search.apply_how_overrides(
+        run_search.load_json(presets / f"how/arrhenius-build-65536m-{wall_time_limit_s}s-{cpus_per_task}cpu.json"),
+        argparse.Namespace(no_max_tasks=True),
+    )
+    suites = run_search.select_suites(what_config, how_config, None)
+    output_dir = tmp_path / "experiment"
+    encoded = run_search.encode_state(what_config, how_config, suites, what_config["configurations"], output_dir)
+    environment = run_search.make_environment(how_config, encoded)
+    experiment = run_search.Experiment(path=output_dir, environment=environment)
+    for _ in range(1001):
+        experiment.add_run()
+    experiment.add_step("start", experiment.start_runs)
+    submissions: list[list[str]] = []
+
+    def submit(command: list[str], **_kwargs: object) -> bytes:
+        submissions.append(command)
+        return b"Submitted batch job 123\n"
+
+    monkeypatch.setattr(environments.subprocess, "check_output", submit)
+
+    environment.run_steps(experiment.steps)
+
+    assert len(submissions) == 1
+    command = submissions[0]
+    assert command[:2] == ["sbatch", "--export"]
+    exported = command[2].split(",")
+    assert "PATH" in exported
+    state = next(value for value in exported if value.startswith(f"{run_search.STATE_ENV}="))
+    restored = run_search.decode_state(state.split("=", 1)[1])
+    assert restored[1]["wall_time_limit_s"] == wall_time_limit_s
+    assert restored[1]["memory_limit_mib"] == 65536
+    assert restored[1]["cpus_per_task"] * restored[1]["memory_per_cpu_mib"] == 67584
+    assert restored[2] == ["htg"]
+    assert restored[0] == what_config
+    assert restored[3] == what_config["configurations"]
+    assert len(restored[3]) == 2
+    for config, mode, name in zip(
+        restored[3],
+        ["shared", "hash-distributed"],
+        ["shared", "hash-random"],
+        strict=True,
+    ):
+        assert config["name"] == f"gbfs-lazy-lifted-hff-pref-{name}-{cpus_per_task}"
+        expected_args = [
+            "-H",
+            "rpg_ff",
+            "-R",
+            "0",
+            "--num-datalog-threads",
+            "1",
+            "--heuristic-cost-type",
+            "unit",
+            "--num-search-workers",
+            str(restored[1]["cpus_per_task"]),
+            "--state-repository-mode",
+            mode,
+            "--dist-hash-mode",
+            "random",
+        ]
+        if cpus_per_task > 1:
+            expected_args.append("--collect-destination-lock-statistics")
+        assert run_search.planner_command(config)[5:] == expected_args
+
+    script = Path(command[-1]).read_text(encoding="utf-8")
+    assert "#SBATCH --partition=fat\n" in script
+    assert "#SBATCH --account=naiss2026-4-697-cpu\n" in script
+    assert "#SBATCH --qos=normal\n" in script
+    assert "#SBATCH --time=24:00:00\n" in script
+    assert f"#SBATCH --cpus-per-task={cpus_per_task}\n" in script
+    assert f"#SBATCH --mem-per-cpu={memory_per_cpu_mib}M\n" in script
+    assert "#SBATCH --array=1-501\n" in script
+    assert "RUNS_PER_TASK=2\n" in script
 
 
 @pytest.mark.parametrize(
@@ -518,7 +627,7 @@ def test_tetralith_state_round_trip(tmp_path):
         ),
     ],
 )
-def test_planner_command(config, expected):
+def test_planner_command(config: dict[str, object], expected: list[str]) -> None:
     assert run_search.planner_command(config) == [
         "{run_planner}",
         "{planner_exe}",

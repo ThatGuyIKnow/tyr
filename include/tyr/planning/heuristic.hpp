@@ -29,36 +29,44 @@ namespace tyr::planning
 {
 
 /**
- * A heuristic instance is a mutable evaluator owned by one search worker. Evaluation may reuse scratch storage, update statistics, and replace preferred
- * actions, so evaluate() is intentionally non-const and must not be called concurrently on the same instance. Preferred actions describe the latest
+ * A heuristic instance is a mutable evaluator owned by one search worker. Evaluation may reuse scratch storage, update statistics, and replace the
+ * relaxed plan, so evaluate() is intentionally non-const and must not be called concurrently on the same instance. The relaxed plan describes the latest
  * evaluation and must not be retained across another evaluation or reconfiguration.
  *
- * Evaluation consumes state contents through a builder and must not depend on repository registration or state identity. Parallel eager search may
- * evaluate a completed candidate before duplicate and pruning checks.
+ * Evaluation consumes state contents through a builder and must not depend on repository registration or state identity.
  *
  * Heavy built-in heuristics hide a task-derived definition and a worker-local evaluator behind their private implementation. Definitions are frozen before
  * being shared between workers, while evaluators own all mutable workspaces. This avoids repeating task translation without exposing those implementation
  * details through the search API. set_goal() is configuration and must run before workers are materialized, or after they have been discarded. Custom
  * heuristics need not use the same internal representation, but must return an independently mutable evaluator from make_worker() that gives equivalent
- * results for identical task, goal, and state contents. Each worker instance is called serially, but may run on different OS threads because remote states
- * execute as work of their logical owner. Evaluation must not re-enter the search or wait for work from the same logical worker.
+ * results for identical task, goal, and state contents. Each worker instance is called serially by its source worker. In parallel eager search, the state
+ * being evaluated may be registered with a different logical owner. Evaluation must not re-enter the search or wait for work from the source worker.
  */
 template<TaskKind Kind>
 class Heuristic
 {
 public:
+    Heuristic() = default;
     virtual ~Heuristic() = default;
 
-    virtual void set_goal(::tyr::formalism::planning::GroundConjunctiveConditionView goal) = 0;
+    virtual void set_goal(formalism::planning::ConjunctiveConditionView<GroundTag> goal) = 0;
 
     ygg::float_t evaluate(const StateView<Kind>& state);
     virtual ygg::float_t evaluate(const ygg::Builder<State<Kind>>& state) = 0;
 
     [[nodiscard]] virtual HeuristicPtr<Kind> make_worker(ygg::ExecutionContextPtr execution_context) const = 0;
 
-    virtual const ygg::UnorderedSet<::tyr::formalism::planning::ActionBindingView>& get_preferred_actions();
+    /// The relaxed plan of the last evaluation, or nullptr if this heuristic does not compute one. An empty plan (e.g. in a goal state or a dead end) is
+    /// not nullptr. Searches decide which actions to prefer from it.
+    [[nodiscard]] virtual const ygg::UnorderedSet<formalism::planning::ActionBindingView>* get_relaxed_plan() const { return nullptr; }
 
     virtual void print_summary([[maybe_unused]] size_t verbosity) const {}
+
+protected:
+    Heuristic(const Heuristic&) = default;
+    Heuristic& operator=(const Heuristic&) = default;
+    Heuristic(Heuristic&&) = default;
+    Heuristic& operator=(Heuristic&&) = default;
 };
 
 }

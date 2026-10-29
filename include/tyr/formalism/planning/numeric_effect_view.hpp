@@ -21,7 +21,6 @@
 #include "tyr/formalism/planning/declarations.hpp"
 #include "tyr/formalism/planning/function_expression_view.hpp"
 #include "tyr/formalism/planning/function_term_view.hpp"
-#include "tyr/formalism/planning/numeric_effect_index.hpp"
 
 #include <yggdrasil/containers/variant.hpp>
 #include <yggdrasil/core/types.hpp>
@@ -29,29 +28,21 @@
 namespace ygg
 {
 
-template<::tyr::formalism::FactKind T, ::tyr::formalism::planning::Context C>
-class View<ygg::Index<::tyr::formalism::planning::NumericEffect<T>>, C>
+template<::tyr::TaskKind T, ::tyr::formalism::FactKind F, ygg::formalism::SymbolContextFor<::tyr::formalism::planning::NumericEffect<T, F>> C>
+class View<ygg::Index<::tyr::formalism::planning::NumericEffect<T, F>>, C> : public ygg::IndexViewBase<::tyr::formalism::planning::NumericEffect<T, F>, C>
 {
-    static_assert(std::same_as<T, ::tyr::formalism::FluentTag> || std::same_as<T, ::tyr::formalism::AuxiliaryTag>,
-                  "Unsupported NumericEffect<T> specialization.");
-
-private:
-    const C* m_context;
-    ygg::Index<::tyr::formalism::planning::NumericEffect<T>> m_handle;
+    static_assert(std::same_as<F, ::tyr::formalism::FluentTag> || std::same_as<F, ::tyr::formalism::AuxiliaryTag>,
+                  "Unsupported NumericEffect<F> specialization.");
 
 public:
-    View(ygg::Index<::tyr::formalism::planning::NumericEffect<T>> handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
+    View(ygg::Index<::tyr::formalism::planning::NumericEffect<T, F>> handle, const C& context) noexcept :
+        ygg::IndexViewBase<::tyr::formalism::planning::NumericEffect<T, F>, C>(handle, context)
+    {
+    }
 
-    const auto& get_data() const noexcept { return get_repository(*m_context)[m_handle]; }
-    const auto& get_context() const noexcept { return *m_context; }
-    const auto& get_handle() const noexcept { return m_handle; }
-
-    auto get_index() const noexcept { return m_handle; }
-    auto get_operator() const noexcept { return get_data().operator_kind; }
-    auto get_fterm() const noexcept { return ygg::make_view(get_data().fterm, *m_context); }
-    auto get_fexpr() const noexcept { return ygg::make_view(get_data().fexpr, *m_context); }
-
-    auto identifying_members() const noexcept { return std::tie(m_handle, m_context->get_index()); }
+    auto get_operator() const noexcept { return this->get_data().operator_kind; }
+    auto get_fterm() const noexcept { return ygg::make_view(this->get_data().fterm, this->get_context()); }
+    auto get_fexpr() const noexcept { return ygg::make_view(this->get_data().fexpr, this->get_context()); }
 };
 
 }

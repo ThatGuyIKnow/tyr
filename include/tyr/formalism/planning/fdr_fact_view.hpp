@@ -18,42 +18,45 @@
 #ifndef TYR_FORMALISM_PLANNING_FDR_FACT_VIEW_HPP_
 #define TYR_FORMALISM_PLANNING_FDR_FACT_VIEW_HPP_
 
-#include <yggdrasil/core/types.hpp>
-#include "tyr/formalism/object_index.hpp"
+#include "tyr/formalism/declarations.hpp"
 #include "tyr/formalism/planning/declarations.hpp"
 #include "tyr/formalism/planning/fdr_fact_data.hpp"
 #include "tyr/formalism/planning/fdr_value.hpp"
+#include "tyr/formalism/planning/fdr_variable_data.hpp"
+
+#include <optional>
+#include <yggdrasil/core/types.hpp>
 
 namespace ygg
 {
 template<::tyr::formalism::FactKind T, ::tyr::formalism::planning::Context C>
-class View<ygg::Data<::tyr::formalism::planning::FDRFact<T>>, C>
+class View<ygg::Data<::tyr::formalism::planning::FDRFact<T>>, C> : public ygg::DataViewBase<::tyr::formalism::planning::FDRFact<T>, C>
 {
-private:
-    const C* m_context;
-    ygg::Data<::tyr::formalism::planning::FDRFact<T>> m_handle;
+    // FDRContext::get_fact returns views of facts computed on the fly.
+    static_assert(ygg::uses_trivial_storage_v<::tyr::formalism::planning::FDRFact<T>>);
 
 public:
-    View(ygg::Data<::tyr::formalism::planning::FDRFact<T>> handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
+    View(const ygg::Data<::tyr::formalism::planning::FDRFact<T>>& handle, const C& context) noexcept :
+        ygg::DataViewBase<::tyr::formalism::planning::FDRFact<T>, C>(handle, context)
+    {
+    }
 
-    const auto& get_data() const noexcept { return m_handle; }
-    const auto& get_context() const noexcept { return *m_context; }
-    const auto& get_handle() const noexcept { return m_handle; }
-
-    auto get_variable() const noexcept { return ygg::make_view(get_data().variable, *m_context); }
-    auto get_value() const noexcept { return get_data().value; }
+    auto get_variable() const noexcept { return ygg::make_view(this->get_data().variable, this->get_context()); }
+    auto get_value() const noexcept { return this->get_data().value; }
     auto has_value() const noexcept { return get_value() != ::tyr::formalism::planning::FDRValue::none(); }
-    auto get_atom() const noexcept { return has_value() ? std::make_optional(get_variable().get_atoms()[ygg::uint_t(get_value() - 1)]) : std::nullopt; }
-
-    auto identifying_members() const noexcept { return std::tie(m_handle, m_context->get_index()); }
+    auto get_atom_index() const noexcept
+    { return has_value() ? std::make_optional(this->get_repository()[this->get_data().variable].atoms[ygg::uint_t(get_value() - 1)]) : std::nullopt; }
+    auto get_atom() const noexcept
+    {
+        const auto atom = get_atom_index();
+        return atom ? std::make_optional(ygg::make_view(*atom, this->get_context())) : std::nullopt;
+    }
 };
 
 /// Canonical context depends on variable.
 template<::tyr::formalism::FactKind T, typename C>
-auto make_view(const ygg::Data<::tyr::formalism::planning::FDRFact<T>>& element, const C& context) noexcept
-{
-    return ygg::View<ygg::Data<::tyr::formalism::planning::FDRFact<T>>, C>(element, ygg::make_view(element.variable, context).get_context());
-}
+const C& get_canonical_context(const ygg::Data<::tyr::formalism::planning::FDRFact<T>>& element, const C& context)
+{ return ygg::make_view(element.variable, context).get_context(); }
 
 }
 

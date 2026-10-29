@@ -18,8 +18,9 @@
 #ifndef TYR_FORMALISM_PLANNING_INVARIANTS_CONSTRAINTS_HPP_
 #define TYR_FORMALISM_PLANNING_INVARIANTS_CONSTRAINTS_HPP_
 
-#include "tyr/formalism/planning/invariants/invariant.hpp"
 #include "tyr/formalism/planning/mutable/atom.hpp"
+#include "tyr/formalism/planning/mutable/conjunctive_condition.hpp"
+#include "tyr/formalism/planning/mutable/invariant.hpp"
 #include "tyr/formalism/planning/mutable/literal.hpp"
 
 #include <map>
@@ -36,9 +37,9 @@ struct InvariantParameter : ygg::comparison::Mixin<InvariantParameter>
     size_t index;
 
     InvariantParameter() = default;
-    explicit InvariantParameter(size_t index) : index(index) {}
+    explicit InvariantParameter(size_t index_) : index(index_) {}
 
-    auto identifying_members() const noexcept { return std::tie(index); }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&InvariantParameter::index> {}; }
 };
 
 struct VariableTerm : ygg::comparison::Mixin<VariableTerm>
@@ -46,9 +47,9 @@ struct VariableTerm : ygg::comparison::Mixin<VariableTerm>
     ParameterIndex index;
 
     VariableTerm() = default;
-    explicit VariableTerm(ParameterIndex index) : index(index) {}
+    explicit VariableTerm(ParameterIndex index_) : index(index_) {}
 
-    auto identifying_members() const noexcept { return std::tie(index); }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&VariableTerm::index> {}; }
 };
 
 struct ObjectTerm : ygg::comparison::Mixin<ObjectTerm>
@@ -56,9 +57,9 @@ struct ObjectTerm : ygg::comparison::Mixin<ObjectTerm>
     ygg::Index<Object> index;
 
     ObjectTerm() = default;
-    explicit ObjectTerm(ygg::Index<Object> index) : index(index) {}
+    explicit ObjectTerm(ygg::Index<Object> index_) : index(index_) {}
 
-    auto identifying_members() const noexcept { return std::tie(index); }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&ObjectTerm::index> {}; }
 };
 
 using ConstraintTerm = std::variant<InvariantParameter, VariableTerm, ObjectTerm>;
@@ -70,16 +71,17 @@ struct InequalityDisjunction
     explicit InequalityDisjunction(std::vector<std::pair<ConstraintTerm, ConstraintTerm>> parts_);
 };
 
-struct EqualityConjunction
+class EqualityConjunction
 {
-    std::vector<std::pair<ConstraintTerm, ConstraintTerm>> equalities;
-
+public:
     explicit EqualityConjunction(std::vector<std::pair<ConstraintTerm, ConstraintTerm>> equalities_);
 
+    const std::vector<std::pair<ConstraintTerm, ConstraintTerm>>& get_equalities() const noexcept { return m_equalities; }
     bool is_consistent() const;
     const ygg::Map<ConstraintTerm, ConstraintTerm>& get_representative() const;
 
 private:
+    std::vector<std::pair<ConstraintTerm, ConstraintTerm>> m_equalities;
     mutable bool m_computed = false;
     mutable bool m_consistent = true;
     mutable ygg::Map<ConstraintTerm, ConstraintTerm> m_representative;
@@ -99,7 +101,7 @@ struct ConstraintSystem
     void add_not_constant(ConstraintTerm term);
     void extend(const ConstraintSystem& other);
 
-    bool is_solvable() const;
+    [[nodiscard]] bool is_solvable() const;
 
 private:
     static EqualityConjunction combine_equality_conjunctions(const std::vector<EqualityConjunction>& conjunctions);
@@ -109,12 +111,14 @@ ConstraintTerm make_constraint_term(ParameterIndex parameter);
 ConstraintTerm make_constraint_term(ygg::Index<Object> object);
 ConstraintTerm make_constraint_term(const ygg::Data<Term>& term);
 ConstraintTerm make_invariant_parameter_term(size_t index);
-EqualityConjunction make_cover_equality_conjunction(const MutableAtom<FluentTag>& pattern, const MutableAtom<FluentTag>& atom, const Invariant& inv);
+EqualityConjunction make_cover_equality_conjunction(const MutableAtom<FluentTag>& pattern, const MutableAtom<FluentTag>& atom, const MutableInvariant& inv);
 
-void ensure_cover(ConstraintSystem& system, const MutableAtom<FluentTag>& pattern, const MutableAtom<FluentTag>& atom, const Invariant& inv);
+void ensure_cover(ConstraintSystem& system, const MutableAtom<FluentTag>& pattern, const MutableAtom<FluentTag>& atom, const MutableInvariant& inv);
 void ensure_inequality(ConstraintSystem& system, const MutableAtom<FluentTag>& lhs, const MutableAtom<FluentTag>& rhs);
-void ensure_conjunction_sat(ConstraintSystem& system, const MutableLiteralList<FluentTag>& lits);
-
+/// Requires the conjunction to be satisfiable: `=` literals become (in)equalities, and a positive and a negative literal
+/// of the same predicate must differ in some argument. Static (including types and `=`), fluent and derived literals all
+/// constrain when an action applies, as in Helmert (2009, Fig. 7).
+void ensure_conjunction_sat(ConstraintSystem& system, const MutableConjunctiveCondition& conjunction);
 }
 
 #endif

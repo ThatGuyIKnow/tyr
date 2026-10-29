@@ -19,9 +19,10 @@
 #define TYR_FORMALISM_DATALOG_NUMERIC_EFFECT_OPERATOR_DATA_HPP_
 
 #include "tyr/formalism/datalog/declarations.hpp"
-#include "tyr/formalism/datalog/numeric_effect_index.hpp"
 
 #include <stdexcept>
+#include <tuple>
+#include <utility>
 #include <variant>
 #include <yggdrasil/containers/variant.hpp>
 #include <yggdrasil/core/types.hpp>
@@ -30,42 +31,38 @@
 namespace ygg
 {
 
-template<>
-struct Data<::tyr::formalism::datalog::NumericEffectOperator<::tyr::formalism::FluentTag>>
+template<::tyr::TaskKind T>
+struct Data<::tyr::formalism::datalog::NumericEffectOperator<T, ::tyr::formalism::FluentTag>>
 {
     using OperatorType = ::tyr::formalism::NumericEffectOperatorKind;
-    using Variant = ::cista::offset::variant<ygg::Index<::tyr::formalism::datalog::NumericEffect<::tyr::formalism::FluentTag>>>;
+    using Variant = ::cista::offset::variant<ygg::Index<::tyr::formalism::datalog::NumericEffect<T, ::tyr::formalism::FluentTag>>>;
 
     OperatorType operator_kind = OperatorType::Assign;
-    Variant value;
+    Variant variant;
 
     template<typename C>
-    using ViewVariant = std::variant<::ygg::View<ygg::Index<::tyr::formalism::datalog::NumericEffect<::tyr::formalism::FluentTag>>, C>>;
+    using ViewVariant = ::ygg::ViewVariant<Variant, C>;
 
     Data() = default;
-    Data(OperatorType operator_kind_, Variant value_) : operator_kind(operator_kind_), value(value_)
+    Data(OperatorType operator_kind_, Variant variant_) : operator_kind(operator_kind_), variant(variant_)
     {
-        if (!value.valid())
-            throw std::invalid_argument("NumericEffectOperator requires a valid value");
+        if (!variant.valid())
+            throw std::invalid_argument("NumericEffectOperator requires a valid variant");
     }
     template<typename C>
-    Data(ViewVariant<C> value_) :
-        operator_kind(std::visit([](const auto& view) { return view.get_operator(); }, value_)),
-        value(std::visit([](const auto& view) -> Variant { return Variant(view.get_index()); }, value_))
+    Data(const ViewVariant<C>& variant_) :
+        operator_kind(std::visit([](const auto& view) { return view.get_operator(); }, variant_)),
+        variant(std::visit([](const auto& view) -> Variant { return Variant(view.get_index()); }, variant_))
     {
     }
 
-    void clear() noexcept
-    {
-        operator_kind = OperatorType::Assign;
-        ygg::clear(value);
-    }
-
-    auto cista_members() const noexcept { return std::tie(operator_kind, value); }
-    auto identifying_members() const noexcept { return std::tie(operator_kind, value); }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::operator_kind, &Data::variant> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::operator_kind, &Data::variant> {}; }
+    void clear() noexcept { ygg::clear_members(*this); }
 };
 
-static_assert(!ygg::uses_trivial_storage_v<::tyr::formalism::datalog::NumericEffectOperator<::tyr::formalism::FluentTag>>);
+static_assert(!ygg::uses_trivial_storage_v<::tyr::formalism::datalog::NumericEffectOperator<::tyr::LiftedTag, ::tyr::formalism::FluentTag>>);
+static_assert(!ygg::uses_trivial_storage_v<::tyr::formalism::datalog::NumericEffectOperator<::tyr::GroundTag, ::tyr::formalism::FluentTag>>);
 
 }
 

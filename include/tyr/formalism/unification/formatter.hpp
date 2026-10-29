@@ -21,8 +21,11 @@
 #include "tyr/formalism/formatter.hpp"
 #include "tyr/formalism/unification/substitution.hpp"
 
+#include <fmt/core.h>
+#include <fmt/ostream.h>
+#include <fmt/ranges.h>
 #include <sstream>
-
+#include <yggdrasil/io/iostream.hpp>
 
 namespace fmt
 {
@@ -46,7 +49,7 @@ struct formatter<tyr::formalism::unification::SubstitutionFunction<T>, char>
 
             os << ygg::print_indent << "bindings = [\n";
             {
-                ygg::IndentScope scope(os);
+                ygg::IndentScope bindings_scope(os);
                 for (const auto& parameter : value.parameters())
                 {
                     os << ygg::print_indent;
@@ -59,7 +62,7 @@ struct formatter<tyr::formalism::unification::SubstitutionFunction<T>, char>
         }
         os << ygg::print_indent << ")";
 
-        return fmt::format_to(ctx.out(), "{}", os.str());
+        return fmt::format_to(ctx.out(), "{}", os.view());
     }
 };
 

@@ -17,34 +17,34 @@
 
 #include "tyr/formalism/datalog/variable_dependency_graph.hpp"
 
-#include "tyr/formalism/datalog/repository.hpp"
-
 #include "tyr/formalism/datalog/expression_arity.hpp"
+#include "tyr/formalism/datalog/repository.hpp"
 #include "tyr/formalism/views.hpp"
 
 #include <algorithm>
+#include <utility>
 
 namespace tyr::formalism::datalog
 {
-template<FactKind T, PolarityKind P>
+template<FactKind F, PolarityKind P>
 static void insert_literal_dependencies(const std::vector<ParameterIndex>& parameters, details::UnaryDependencies& unary, details::BinaryDependencies& binary)
 {
-    auto& unary_dep = details::select_literal_dependency<T, P>(unary);
-    auto& binary_dep = details::select_literal_dependency<T, P>(binary);
+    auto& unary_dep = details::select_literal_dependency<F, P>(unary);
+    auto& binary_dep = details::select_literal_dependency<F, P>(binary);
 
     for (const auto parameter : parameters)
     {
-        const auto pi = ygg::uint_t(parameter);
+        const auto pi = static_cast<ygg::uint_t>(parameter);
         unary_dep.set(pi);
     }
 
     for (ygg::uint_t i = 0; i < parameters.size(); ++i)
     {
-        const auto pi = ygg::uint_t(parameters[i]);
+        const auto pi = static_cast<ygg::uint_t>(parameters[i]);
 
         for (ygg::uint_t j = i + 1; j < parameters.size(); ++j)
         {
-            const auto pj = ygg::uint_t(parameters[j]);
+            const auto pj = static_cast<ygg::uint_t>(parameters[j]);
 
             binary_dep.set(binary.get_index(pi, pj));
             binary_dep.set(binary.get_index(pj, pi));
@@ -52,22 +52,22 @@ static void insert_literal_dependencies(const std::vector<ParameterIndex>& param
     }
 }
 
-template<FactKind T>
-static void insert_literal(LiteralView<T> literal, details::UnaryDependencies& unary, details::BinaryDependencies& binary)
+template<FactKind F>
+static void insert_literal(LiteralView<LiftedTag, F> literal, details::UnaryDependencies& unary, details::BinaryDependencies& binary)
 {
     const auto parameters_set = collect_parameters(literal);
     auto parameters = std::vector<ParameterIndex>(parameters_set.begin(), parameters_set.end());
     std::sort(parameters.begin(), parameters.end());
 
     if (literal.get_polarity())
-        insert_literal_dependencies<T, PositiveTag>(parameters, unary, binary);
+        insert_literal_dependencies<F, PositiveTag>(parameters, unary, binary);
     else
-        insert_literal_dependencies<T, NegativeTag>(parameters, unary, binary);
+        insert_literal_dependencies<F, NegativeTag>(parameters, unary, binary);
 }
 
-static void insert_numeric_constraint(LiftedBooleanOperatorView numeric_constraint, details::UnaryDependencies& unary, details::BinaryDependencies& binary)
+static void insert_numeric_constraint(BooleanOperatorView<LiftedTag> numeric_constraint, details::UnaryDependencies& unary, details::BinaryDependencies& binary)
 {
-    const auto parameters_set = collect_parameters(numeric_constraint);
+    const auto parameters_set = collect_parameters(std::move(numeric_constraint));
     auto parameters = std::vector<ParameterIndex>(parameters_set.begin(), parameters_set.end());
     std::sort(parameters.begin(), parameters.end());
 
@@ -76,17 +76,17 @@ static void insert_numeric_constraint(LiftedBooleanOperatorView numeric_constrai
 
     for (const auto parameter : parameters)
     {
-        const auto pi = ygg::uint_t(parameter);
+        const auto pi = static_cast<ygg::uint_t>(parameter);
         unary_dep.set(pi);
     }
 
     for (ygg::uint_t i = 0; i < parameters.size(); ++i)
     {
-        const auto pi = ygg::uint_t(parameters[i]);
+        const auto pi = static_cast<ygg::uint_t>(parameters[i]);
 
         for (ygg::uint_t j = i + 1; j < parameters.size(); ++j)
         {
-            const auto pj = ygg::uint_t(parameters[j]);
+            const auto pj = static_cast<ygg::uint_t>(parameters[j]);
 
             binary_dep.set(binary.get_index(pi, pj));
             binary_dep.set(binary.get_index(pj, pi));
@@ -94,7 +94,7 @@ static void insert_numeric_constraint(LiftedBooleanOperatorView numeric_constrai
     }
 }
 
-VariableDependencyGraph::VariableDependencyGraph(ConjunctiveConditionView condition) :
+VariableDependencyGraph::VariableDependencyGraph(ConjunctiveConditionView<LiftedTag> condition) :
     m_k(condition.get_arity()),
     m_unary_dependencies(m_k),
     m_binary_dependencies(m_k)

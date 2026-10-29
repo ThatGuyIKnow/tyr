@@ -18,10 +18,14 @@
 #ifndef TYR_FORMALISM_FDR_CONTEXT_HPP_
 #define TYR_FORMALISM_FDR_CONTEXT_HPP_
 
+#include "tyr/formalism/planning/atom_view.hpp"
+#include "tyr/formalism/planning/datas.hpp"
 #include "tyr/formalism/planning/declarations.hpp"
-#include "tyr/formalism/planning/repository.hpp"
+#include "tyr/formalism/planning/fdr_fact_view.hpp"
+#include "tyr/formalism/planning/fdr_variable_view.hpp"
 
 #include <atomic>
+#include <cstddef>
 #include <mutex>
 #include <optional>
 #include <vector>
@@ -38,17 +42,17 @@ public:
     explicit FDRContext(RepositoryPtr context);
 
     // Construct with ground mutexes.
-    FDRContext(const std::vector<GroundAtomViewList<FluentTag>>& mutexes, RepositoryPtr context);
+    FDRContext(const std::vector<AtomViewList<GroundTag, FluentTag>>& mutexes, RepositoryPtr context);
 
     // Construct with binary ground mutexes.
-    FDRContext(const GroundAtomViewList<FluentTag>& all_atoms, RepositoryPtr context);
+    FDRContext(const AtomViewList<GroundTag, FluentTag>& all_atoms, RepositoryPtr context);
 
     // Copy the FDRContext after concurrent registrations have completed.
     FDRContext(const FDRContext& other, Builder& builder, RepositoryPtr context);
 
-    FDRFactView<FluentTag> get_fact(GroundAtomView<FluentTag> atom);
+    FDRFactView<FluentTag> get_fact(AtomView<GroundTag, FluentTag> atom);
 
-    std::optional<FDRFactView<FluentTag>> get_fact(GroundAtomView<FluentTag> atom) const;
+    std::optional<FDRFactView<FluentTag>> get_fact(AtomView<GroundTag, FluentTag> atom) const;
 
     /// Concurrent get_fact calls must have completed before accessing the variable list.
     const FDRVariableViewList<FluentTag>& get_variables() const noexcept;
@@ -60,13 +64,15 @@ private:
         std::atomic_bool ready { false };
     };
 
-    std::optional<FDRFactView<FluentTag>> find_fact(GroundAtomView<FluentTag> atom) const;
-    void ensure_fact_slot(GroundAtomView<FluentTag> atom);
-    bool publish_fact(GroundAtomView<FluentTag> atom, ygg::Data<FDRFact<FluentTag>> fact);
+    static constexpr std::size_t first_fact_segment_size = 32;
+
+    std::optional<FDRFactView<FluentTag>> find_fact(AtomView<GroundTag, FluentTag> atom) const;
+    void ensure_fact_slot(AtomView<GroundTag, FluentTag> atom);
+    bool publish_fact(AtomView<GroundTag, FluentTag> atom, ygg::Data<FDRFact<FluentTag>> fact);
 
     RepositoryPtr m_context;
     // Facts are append-only and lock-free to read; only first registration serializes the reusable builder and variable list.
-    ygg::SegmentedVector<FactSlot, 32, true> m_facts;
+    ygg::SegmentedVector<FactSlot, first_fact_segment_size, true> m_facts;
     std::mutex m_registration_mutex;
     Builder m_builder;
     FDRVariableViewList<FluentTag> m_variables;

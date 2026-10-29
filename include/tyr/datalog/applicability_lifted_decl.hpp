@@ -20,13 +20,21 @@
 
 #include "tyr/datalog/declarations.hpp"
 #include "tyr/formalism/datalog/declarations.hpp"
+#include "tyr/formalism/datalog/grounder_decl.hpp"
 
 namespace tyr::datalog
 {
-struct ApplicabilityContext
+class ApplicabilityContext
 {
-    const FactSets& fact_sets;
-    ::tyr::formalism::datalog::GrounderContext& grounder;
+public:
+    ApplicabilityContext(const FactSets& fact_sets, formalism::datalog::GrounderContext& grounder) : m_fact_sets(&fact_sets), m_grounder(&grounder) {}
+
+    [[nodiscard]] const FactSets& fact_sets() const noexcept { return *m_fact_sets; }
+    [[nodiscard]] formalism::datalog::GrounderContext& grounder() const noexcept { return *m_grounder; }
+
+private:
+    const FactSets* m_fact_sets;
+    formalism::datalog::GrounderContext* m_grounder;
 };
 }
 

@@ -33,12 +33,12 @@ namespace tyr::planning
 template<>
 struct AtomPackedStorage<LiftedTag, HashSet> : ygg::comparison::Mixin<AtomPackedStorage<LiftedTag, HashSet>>
 {
-    ygg::uint_t index;
+    ygg::uint_t index = 0;
 
     AtomPackedStorage() = default;
     explicit AtomPackedStorage(ygg::uint_t index) : index(index) {}
 
-    auto identifying_members() const noexcept { return std::tie(index); }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&AtomPackedStorage::index> {}; }
 };
 
 template<bool ThreadSafe>
@@ -56,7 +56,7 @@ public:
     void unpack(const Packed& packed, Unpacked& unpacked);
 
 private:
-    typename Context::UintVectorSet& m_uint_vec_set;
+    UintVectorSetT<Context>* m_uint_vec_set;
 
     std::vector<ygg::uint_t> m_buffer;
 };

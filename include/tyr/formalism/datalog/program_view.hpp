@@ -19,14 +19,8 @@
 #define TYR_FORMALISM_DATALOG_PROGRAM_VIEW_HPP_
 
 #include "tyr/formalism/datalog/declarations.hpp"
-#include "tyr/formalism/datalog/ground_atom_index.hpp"
-#include "tyr/formalism/datalog/ground_conjunctive_condition_index.hpp"
-#include "tyr/formalism/datalog/ground_function_term_value_index.hpp"
-#include "tyr/formalism/datalog/metric_index.hpp"
-#include "tyr/formalism/datalog/program_index.hpp"
 #include "tyr/formalism/datalog/rule_view.hpp"
-#include "tyr/formalism/function_index.hpp"
-#include "tyr/formalism/predicate_index.hpp"
+#include "tyr/formalism/declarations.hpp"
 
 #include <yggdrasil/containers/optional.hpp>
 #include <yggdrasil/containers/vector.hpp>
@@ -34,51 +28,33 @@
 
 namespace ygg
 {
-template<::tyr::formalism::datalog::Context C>
-class View<ygg::Index<::tyr::formalism::datalog::Program>, C>
+
+template<::tyr::TaskKind T, ygg::formalism::SymbolContextFor<::tyr::formalism::datalog::Program<T>> C>
+class View<ygg::Index<::tyr::formalism::datalog::Program<T>>, C> : public ygg::IndexViewBase<::tyr::formalism::datalog::Program<T>, C>
 {
-private:
-    const C* m_context;
-    ygg::Index<::tyr::formalism::datalog::Program> m_handle;
-
 public:
-    View(ygg::Index<::tyr::formalism::datalog::Program> data, const C& context) noexcept : m_context(&context), m_handle(data) {}
+    View(ygg::Index<::tyr::formalism::datalog::Program<T>> handle, const C& context) noexcept :
+        ygg::IndexViewBase<::tyr::formalism::datalog::Program<T>, C>(handle, context)
+    {
+    }
 
-    const auto& get_data() const noexcept { return get_repository(*m_context)[m_handle]; }
-    const auto& get_context() const noexcept { return *m_context; }
-    const auto& get_handle() const noexcept { return m_handle; }
-
-    auto get_index() const noexcept { return m_handle; }
-    template<::tyr::formalism::FactKind T>
+    template<::tyr::formalism::FactKind F>
     auto get_predicates() const noexcept
-    {
-        return ygg::make_view(get_data().template get_predicates<T>(), *m_context);
-    }
-    template<::tyr::formalism::FactKind T>
+    { return ygg::make_view(this->get_data().template get_predicates<F>(), this->get_context()); }
+    template<::tyr::formalism::FactKind F>
     auto get_functions() const noexcept
-    {
-        return ygg::make_view(get_data().template get_functions<T>(), *m_context);
-    }
-    auto get_objects() const noexcept { return ygg::make_view(get_data().objects, *m_context); }
-    template<::tyr::formalism::FactKind T>
+    { return ygg::make_view(this->get_data().template get_functions<F>(), this->get_context()); }
+    auto get_objects() const noexcept { return ygg::make_view(this->get_data().objects, this->get_context()); }
+    template<::tyr::formalism::FactKind F>
     auto get_atoms() const noexcept
-    {
-        return ygg::make_view(get_data().template get_atoms<T>(), *m_context);
-    }
-    template<::tyr::formalism::FactKind T>
+    { return ygg::make_view(this->get_data().template get_atoms<F>(), this->get_context()); }
+    template<::tyr::formalism::FactKind F>
     auto get_fterm_values() const noexcept
-    {
-        return ygg::make_view(get_data().template get_fterm_values<T>(), *m_context);
-    }
-    auto get_goal() const noexcept { return ygg::make_view(get_data().goal, *m_context); }
-    auto get_metric() const noexcept { return ygg::make_view(get_data().metric, *m_context); }
+    { return ygg::make_view(this->get_data().template get_fterm_values<F>(), this->get_context()); }
+    auto get_goal() const noexcept { return ygg::make_view(this->get_data().goal, this->get_context()); }
     template<::tyr::formalism::RelationKind R>
     auto get_rules() const noexcept
-    {
-        return ygg::make_view(get_data().template get_rules<R>(), *m_context);
-    }
-
-    auto identifying_members() const noexcept { return std::tie(m_handle, m_context->get_index()); }
+    { return ygg::make_view(this->get_data().template get_rules<R>(), this->get_context()); }
 };
 
 }

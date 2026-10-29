@@ -18,10 +18,6 @@
 #ifndef TYR_FORMALISM_PLANNING_MUTABLE_CONJUNCTIVE_CONDITION_MATCHER_HPP_
 #define TYR_FORMALISM_PLANNING_MUTABLE_CONJUNCTIVE_CONDITION_MATCHER_HPP_
 
-#include <yggdrasil/semantics/comparators.hpp>
-#include <yggdrasil/containers/associative_containers.hpp>
-#include <yggdrasil/semantics/equal_to.hpp>
-#include <yggdrasil/semantics/hash.hpp>
 #include "tyr/formalism/planning/mutable/conjunctive_condition.hpp"
 #include "tyr/formalism/planning/mutable/literal.hpp"
 #include "tyr/formalism/unification/structure_traits.hpp"
@@ -29,6 +25,10 @@
 
 #include <boost/dynamic_bitset/dynamic_bitset.hpp>
 #include <vector>
+#include <yggdrasil/containers/associative_containers.hpp>
+#include <yggdrasil/semantics/comparators.hpp>
+#include <yggdrasil/semantics/equal_to.hpp>
+#include <yggdrasil/semantics/hash.hpp>
 
 namespace tyr::formalism::planning
 {
@@ -56,16 +56,16 @@ struct MutableAtomMatchData
 class ConjunctiveConditionMatcher
 {
 public:
-    ConjunctiveConditionMatcher(const MutableConjunctiveCondition& condition, const MutableAtomMatchData& data) : m_condition(condition), m_data(data) {}
+    ConjunctiveConditionMatcher(const MutableConjunctiveCondition& condition, const MutableAtomMatchData& data) : m_condition(&condition), m_data(&data) {}
 
     template<typename Callback>
-    void for_each_maximal_match(Callback&& callback) const
+    void for_each_maximal_match([[maybe_unused]] Callback callback) const
     {
     }
 
 private:
-    const MutableConjunctiveCondition& m_condition;
-    const MutableAtomMatchData& m_data;
+    const MutableConjunctiveCondition* m_condition;
+    const MutableAtomMatchData* m_data;
 };
 }
 

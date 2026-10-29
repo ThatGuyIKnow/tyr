@@ -18,11 +18,15 @@
 #ifndef TYR_PLANNING_ACTION_EXECUTOR_HPP_
 #define TYR_PLANNING_ACTION_EXECUTOR_HPP_
 
-#include "tyr/analysis/declarations.hpp"
 #include "tyr/formalism/planning/declarations.hpp"
+#include "tyr/formalism/planning/repository.hpp"
+#include "tyr/formalism/planning/views.hpp"
 #include "tyr/planning/applicability_lifted_decl.hpp"
 #include "tyr/planning/declarations.hpp"
 
+#include <boost/compat/function_ref.hpp>
+#include <span>
+#include <vector>
 #include <yggdrasil/core/types.hpp>
 
 namespace tyr::planning
@@ -36,41 +40,47 @@ public:
     // Ground action API
 
     template<TaskKind Kind>
-    bool is_applicable(::tyr::formalism::planning::GroundActionView action, const StateContext<Kind>& state);
+    bool is_applicable(formalism::planning::ActionView<GroundTag> action, const StateContext<Kind>& state);
 
     template<TaskKind Kind>
-    bool is_applicable_if_fires(::tyr::formalism::planning::GroundActionView action, const StateContext<Kind>& state);
+    bool is_applicable_if_fires(formalism::planning::ActionView<GroundTag> action, const StateContext<Kind>& state);
 
-    /// Applies the action into caller-owned storage without interning the successor; returns the updated auxiliary metric value.
+    /// Applies the action into caller-owned storage without interning the successor and writes the exact changes relative to
+    /// the parent into `delta`; returns the updated auxiliary metric value.
     template<TaskKind Kind>
     ygg::float_t apply_action_unregistered(const StateContext<Kind>& state_context,
-                                           ::tyr::formalism::planning::GroundActionView action,
-                                           ygg::Builder<State<Kind>>& successor_state_builder);
+                                           formalism::planning::ActionView<GroundTag> action,
+                                           ygg::Builder<State<Kind>>& successor_state_builder,
+                                           StateDelta& delta);
 
     // Lifted action API
 
-    bool is_applicable(::tyr::formalism::planning::ActionView action,
-                       const StateContext<LiftedTag>& state_context,
-                       ::tyr::formalism::planning::GrounderContext& grounder,
-                       const ::tyr::formalism::planning::FDRContext& fdr);
+    /// Calls the callback once for each completed binding of a conditional effect in the grounder's binding, which holds the action
+    /// binding before and after: the action binding followed by objects of the effect's variables for which the effect fires.
+    using ForEachEffectBinding = boost::compat::function_ref<void(formalism::planning::ConditionalEffectView<LiftedTag>, boost::compat::function_ref<void()>)>;
 
-    bool is_applicable_if_fires(::tyr::formalism::planning::ActionView action,
+    /// Whether the numeric effects of the action binding in `grounder` are valid together for the effect bindings that fire.
+    bool is_applicable_if_fires(formalism::planning::ActionView<LiftedTag> action,
                                 const StateContext<LiftedTag>& state_context,
-                                ::tyr::formalism::planning::GrounderContext& grounder,
-                                const ::tyr::formalism::planning::FDRContext& fdr);
+                                formalism::planning::GrounderContext& grounder,
+                                const formalism::planning::FDRContext& fdr,
+                                ForEachEffectBinding for_each_effect_binding);
 
-    /// Applies the action into caller-owned storage without interning the successor; returns the updated auxiliary metric value.
+    /// Applies the action binding in `grounder` for the effect bindings that fire into caller-owned storage without interning the
+    /// successor and writes the exact changes relative to the parent into `delta`; returns the updated auxiliary metric value.
     ygg::float_t apply_action_unregistered(const StateContext<LiftedTag>& state_context,
-                                           ::tyr::formalism::planning::ActionView action,
-                                           ::tyr::formalism::planning::GrounderContext& grounder,
-                                           ::tyr::formalism::planning::FDRContext& fdr,
-                                           ygg::Builder<State<LiftedTag>>& successor_state_builder);
+                                           formalism::planning::ActionView<LiftedTag> action,
+                                           formalism::planning::GrounderContext& grounder,
+                                           formalism::planning::FDRContext& fdr,
+                                           ForEachEffectBinding for_each_effect_binding,
+                                           ygg::Builder<State<LiftedTag>>& successor_state_builder,
+                                           StateDelta& delta);
 
 private:
-    ygg::DataList<::tyr::formalism::planning::FDRFact<::tyr::formalism::FluentTag>> m_del_effects;
-    ygg::DataList<::tyr::formalism::planning::FDRFact<::tyr::formalism::FluentTag>> m_add_effects;
-    ::tyr::formalism::planning::EffectFamilyList m_effect_families;
-    analysis::CompatibilityWorkspace m_compatibility_workspace;
+    ygg::DataList<formalism::planning::FDRFact<formalism::FluentTag>> m_del_effects;
+    ygg::DataList<formalism::planning::FDRFact<formalism::FluentTag>> m_add_effects;
+    std::vector<ygg::Index<formalism::planning::FunctionTerm<GroundTag, formalism::FluentTag>>> m_numeric_writes;
+    formalism::planning::EffectFamilyList m_effect_families;
 };
 }
 

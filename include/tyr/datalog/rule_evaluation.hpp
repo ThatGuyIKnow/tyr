@@ -19,17 +19,20 @@
 #define TYR_DATALOG_RULE_EVALUATION_HPP_
 
 #include "tyr/datalog/cost_buckets.hpp"
-#include "tyr/datalog/numeric_utils.hpp"
-#include "tyr/datalog/policies/annotation_concept.hpp"
+#include "tyr/datalog/policies/annotation_concepts.hpp"
 #include "tyr/datalog/policies/annotation_types.hpp"
 #include "tyr/datalog/policies/cost.hpp"
-#include "tyr/datalog/policies/cost_concept.hpp"
+#include "tyr/datalog/policies/cost_concepts.hpp"
 #include "tyr/datalog/policies/numeric_support.hpp"
-#include "tyr/datalog/policies/termination_concept.hpp"
+#include "tyr/datalog/policies/termination_concepts.hpp"
 #include "tyr/datalog/rule_instance.hpp"
+#include "tyr/formalism/numeric_expression_utils.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <boost/dynamic_bitset.hpp>
 #include <cassert>
+#include <cstdint>
 #include <limits>
 #include <optional>
 #include <span>
@@ -38,6 +41,7 @@
 #include <utility>
 #include <vector>
 #include <yggdrasil/containers/associative_containers.hpp>
+#include <yggdrasil/containers/dynamic_bitset.hpp>
 #include <yggdrasil/containers/variant.hpp>
 #include <yggdrasil/semantics/comparison.hpp>
 #include <yggdrasil/semantics/hash.hpp>
@@ -45,10 +49,32 @@
 namespace tyr::datalog
 {
 
-struct RuleEvaluationInput
+/// Conservative closure acceleration for detected label-preserving zero-edge bound growth.
+/// This does not imply exact numeric closure or global termination.
+inline ygg::ClosedInterval<ygg::float_t> widen_free_growth(ygg::ClosedInterval<ygg::float_t> next, const ygg::ClosedInterval<ygg::float_t>& current)
 {
-    const NumericSupportSelector& selector;
-    const PredicateAnnotations<>& predicate_annotations;
+    if (empty(current))
+        return next;
+
+    constexpr auto inf = std::numeric_limits<ygg::float_t>::infinity();
+    return ygg::ClosedInterval<ygg::float_t>(lower(next) < lower(current) ? -inf : lower(next), upper(next) > upper(current) ? inf : upper(next));
+}
+
+class RuleEvaluationInput
+{
+public:
+    RuleEvaluationInput(const NumericSupportSelector& selector, const PredicateAnnotations<>& predicate_annotations) noexcept :
+        m_selector(&selector),
+        m_predicate_annotations(&predicate_annotations)
+    {
+    }
+
+    [[nodiscard]] const NumericSupportSelector& selector() const noexcept { return *m_selector; }
+    [[nodiscard]] const PredicateAnnotations<>& predicate_annotations() const noexcept { return *m_predicate_annotations; }
+
+private:
+    const NumericSupportSelector* m_selector = nullptr;
+    const PredicateAnnotations<>* m_predicate_annotations = nullptr;
 };
 
 struct RuleEvaluationWorkspace
@@ -59,13 +85,11 @@ struct RuleEvaluationWorkspace
 
 struct CandidateEvidence
 {
-    ygg::ClosedInterval<ygg::float_t> metric;
     std::span<const NumericSupport> numeric_supports;
 };
 
 struct PredicateCandidate
 {
-    ::tyr::formalism::datalog::PredicateBindingView<::tyr::formalism::FluentTag> head;
     Cost cost;
     Cost queue_label;
     std::optional<CandidateEvidence> evidence;
@@ -73,7 +97,7 @@ struct PredicateCandidate
 
 struct FunctionCandidate
 {
-    ::tyr::formalism::datalog::FunctionBindingView<::tyr::formalism::FluentTag> head;
+    formalism::datalog::FunctionBindingIndex<formalism::FluentTag> head;
     ygg::ClosedInterval<ygg::float_t> interval;
     Cost cost;
     Cost queue_label;
@@ -81,47 +105,60 @@ struct FunctionCandidate
     std::optional<CandidateEvidence> evidence;
 };
 
-struct PredicateHeadUpdates
+class PredicateHeadUpdates
 {
-    using Binding = ::tyr::formalism::datalog::PredicateBindingView<::tyr::formalism::FluentTag>;
-    using Witness = WitnessAnnotation<::tyr::formalism::PredicateTag>;
+private:
+    using Binding = formalism::datalog::PredicateBindingIndex<formalism::FluentTag>;
+    using Witness = WitnessAnnotation<formalism::PredicateTag>;
 
-    ygg::UnorderedSet<Binding> seen_bindings;
-    std::vector<Binding> bindings;
-    std::vector<PredicateAchiever> achievers;
+    /// The rows seen per relation; only membership is queried, so the order of bindings stays that of their first insertion.
+    std::vector<boost::dynamic_bitset<>> m_seen_rows;
+    std::vector<Binding> m_bindings;
+    std::vector<PredicateAchiever> m_achievers;
+
+public:
+    [[nodiscard]] const std::vector<Binding>& bindings() const noexcept { return m_bindings; }
+    /// Mutable: reducing the updates moves the achievers out.
+    std::vector<PredicateAchiever>& achievers() noexcept { return m_achievers; }
 
     void clear() noexcept
     {
-        seen_bindings.clear();
-        bindings.clear();
-        achievers.clear();
+        for (const auto binding : m_bindings)
+            m_seen_rows[static_cast<ygg::uint_t>(binding.relation)].reset(static_cast<ygg::uint_t>(binding.row));
+        m_bindings.clear();
+        m_achievers.clear();
     }
 
     void insert(Binding binding)
     {
-        if (seen_bindings.emplace(binding).second)
-            bindings.push_back(binding);
+        const auto relation = static_cast<size_t>(static_cast<ygg::uint_t>(binding.relation));
+        const auto row = static_cast<size_t>(static_cast<ygg::uint_t>(binding.row));
+        if (relation >= m_seen_rows.size())
+            m_seen_rows.resize(relation + 1);
+        auto& seen = m_seen_rows[relation];
+        if (ygg::test(row, seen))
+            return;
+        ygg::set(row, true, seen);
+        m_bindings.push_back(binding);
     }
 
-    void insert_achiever(Binding head, Witness witness) { achievers.push_back(PredicateAchiever { head, std::move(witness) }); }
+    void insert_achiever(Binding head, Witness witness) { m_achievers.push_back(PredicateAchiever { head, std::move(witness) }); }
 };
 
 struct FunctionHeadUpdate : ygg::comparison::Mixin<FunctionHeadUpdate>
 {
-    ::tyr::formalism::datalog::FunctionBindingView<::tyr::formalism::FluentTag> binding;
+    formalism::datalog::FunctionBindingIndex<formalism::FluentTag> binding;
     ygg::ClosedInterval<ygg::float_t> interval;
     bool grows_fact;
 
-    FunctionHeadUpdate(::tyr::formalism::datalog::FunctionBindingView<::tyr::formalism::FluentTag> binding,
-                       ygg::ClosedInterval<ygg::float_t> interval,
-                       bool grows_fact) :
-        binding(binding),
-        interval(interval),
-        grows_fact(grows_fact)
+    FunctionHeadUpdate(formalism::datalog::FunctionBindingIndex<formalism::FluentTag> binding_, ygg::ClosedInterval<ygg::float_t> interval_, bool grows_fact_) :
+        binding(binding_),
+        interval(std::move(interval_)),
+        grows_fact(grows_fact_)
     {
     }
 
-    auto identifying_members() const noexcept { return std::tie(binding, interval); }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&FunctionHeadUpdate::binding, &FunctionHeadUpdate::interval> {}; }
 };
 
 struct FunctionHeadUpdates
@@ -142,20 +179,20 @@ struct FunctionHeadUpdates
     }
 };
 
-template<AnnotationPolicyConcept AP>
+template<AnnotationPolicyConcept AP, PredicateAnnotationStore DeltaAnnotations>
 void reduce_predicate_head_updates(PredicateHeadUpdates& head_updates,
                                    [[maybe_unused]] AP& annotation_policy,
-                                   [[maybe_unused]] const PredicateFactSets<::tyr::formalism::FluentTag>& facts,
-                                   [[maybe_unused]] PredicateAnnotations<true>& delta_annotations,
+                                   [[maybe_unused]] const PredicateFactSets<formalism::FluentTag>& facts,
+                                   [[maybe_unused]] DeltaAnnotations& delta_annotations,
                                    [[maybe_unused]] PredicateAnnotations<>& annotations,
                                    CostBuckets& cost_buckets,
                                    [[maybe_unused]] PendingPredicateAchievers& pending_achievers)
 {
     if constexpr (AP::records_propositional_achievers)
-        for (auto& achiever : head_updates.achievers)
+        for (auto& achiever : head_updates.achievers())
             insert_pending_achiever(pending_achievers, std::move(achiever));
 
-    for (const auto head : head_updates.bindings)
+    for (const auto head : head_updates.bindings())
     {
         if constexpr (AP::stores_annotations)
         {
@@ -172,15 +209,15 @@ void reduce_predicate_head_updates(PredicateHeadUpdates& head_updates,
         }
         else if (!facts.contains(head))
         {
-            cost_buckets.insert(Cost(0), head);
+            cost_buckets.insert(static_cast<Cost>(0), head);
         }
     }
 }
 
-template<AnnotationPolicyConcept AP>
+template<AnnotationPolicyConcept AP, FunctionAnnotationStore DeltaAnnotations>
 bool reduce_function_head_update(const FunctionHeadUpdate& update,
                                  [[maybe_unused]] AP& annotation_policy,
-                                 [[maybe_unused]] FunctionAnnotations<true>& delta_numeric_annotations,
+                                 [[maybe_unused]] DeltaAnnotations& delta_numeric_annotations,
                                  [[maybe_unused]] FunctionAnnotations<>& numeric_annotations,
                                  CostBuckets& cost_buckets)
 {
@@ -209,15 +246,15 @@ bool reduce_function_head_update(const FunctionHeadUpdate& update,
     else
     {
         if (update.grows_fact)
-            cost_buckets.insert(Cost(0), update.binding, update.interval);
+            cost_buckets.insert(static_cast<Cost>(0), update.binding, update.interval);
         return false;
     }
 }
 
-template<TaskKind Kind, AnnotationPolicyConcept AP, TerminationPolicyConcept TP, RuleCostPolicyConcept CP>
+template<TaskKind Kind, AnnotationPolicyConcept AP, TerminationPolicyConcept TP, RuleCostPolicyConcept CP, FunctionAnnotationStore DeltaAnnotations>
 bool reduce_function_head_updates(FunctionHeadUpdates& head_updates,
                                   AP& annotation_policy,
-                                  FunctionAnnotations<true>& delta_numeric_annotations,
+                                  DeltaAnnotations& delta_numeric_annotations,
                                   FunctionAnnotations<>& numeric_annotations,
                                   CostBuckets& cost_buckets,
                                   Scheduler<Kind>& scheduler,
@@ -235,21 +272,21 @@ bool reduce_function_head_updates(FunctionHeadUpdates& head_updates,
     return annotation_improved;
 }
 
-template<::tyr::formalism::RelationKind R>
-using RuleHeadUpdatesT = std::conditional_t<std::same_as<R, ::tyr::formalism::PredicateTag>, PredicateHeadUpdates, FunctionHeadUpdates>;
+template<formalism::RelationKind R>
+using RuleHeadUpdatesT = std::conditional_t<std::same_as<R, formalism::PredicateTag>, PredicateHeadUpdates, FunctionHeadUpdates>;
 
-template<TaskKind Kind, ::tyr::formalism::RelationKind R, AnnotationPolicyConcept AP, RuleCostPolicyConcept CP>
+template<TaskKind Kind, formalism::RelationKind R, AnnotationPolicyConcept AP, RuleCostPolicyConcept CP>
 struct RuleUpdateInput
 {
     RuleInstance<Kind, R> rule_instance;
     RuleEvaluationInput evaluation;
-    RuleEvaluationWorkspace& workspace;
-    const FunctionAnnotations<>& numeric_annotations;
-    AP& annotation_policy;
-    const CP& cost_policy;
+    RuleEvaluationWorkspace* workspace = nullptr;
+    const FunctionAnnotations<>* numeric_annotations = nullptr;
+    AP* annotation_policy = nullptr;
+    const CP* cost_policy = nullptr;
 };
 
-template<TaskKind Kind, ::tyr::formalism::RelationKind R, AnnotationPolicyConcept AP, RuleCostPolicyConcept CP>
+template<TaskKind Kind, formalism::RelationKind R, AnnotationPolicyConcept AP, RuleCostPolicyConcept CP>
 RuleUpdateInput<Kind, R, AP, CP> make_rule_update_input(RuleInstance<Kind, R> rule_instance,
                                                         const NumericSupportSelector& numeric_support_selector,
                                                         const PredicateAnnotations<>& predicate_annotations,
@@ -260,13 +297,13 @@ RuleUpdateInput<Kind, R, AP, CP> make_rule_update_input(RuleInstance<Kind, R> ru
 {
     return { std::move(rule_instance),
              RuleEvaluationInput { numeric_support_selector, predicate_annotations },
-             workspace,
-             numeric_annotations,
-             annotation_policy,
-             cost_policy };
+             &workspace,
+             &numeric_annotations,
+             &annotation_policy,
+             &cost_policy };
 }
 
-enum class RuleUpdateStatus
+enum class RuleUpdateStatus : std::uint8_t
 {
     Unavailable,
     Pruned,
@@ -276,10 +313,10 @@ enum class RuleUpdateStatus
 
 struct RuleUpdateResult
 {
-    RuleUpdateStatus status;
+    RuleUpdateStatus status = RuleUpdateStatus::Unavailable;
     std::optional<Cost> queue_label;
 
-    bool is_handled() const noexcept { return status == RuleUpdateStatus::Pruned || status == RuleUpdateStatus::Completed; }
+    [[nodiscard]] bool is_handled() const noexcept { return status == RuleUpdateStatus::Pruned || status == RuleUpdateStatus::Completed; }
 };
 
 namespace rule_evaluation_detail
@@ -293,7 +330,6 @@ struct AlwaysContinue
 struct EvaluationState
 {
     Cost support_cost;
-    ygg::ClosedInterval<ygg::float_t> support_metric;
     Cost raw_edge;
     std::optional<ResolvedNumericEffect> numeric_effect;
     ygg::ClosedInterval<ygg::float_t> raw_interval;
@@ -309,7 +345,7 @@ void aggregate_selection_cost(Cost& cost, const NumericSupportSelectorWorkspace&
 }
 
 template<bool CollectEvidence>
-bool append_selection_evidence(const RuleEvaluationInput& input, RuleEvaluationWorkspace& workspace, ygg::ClosedInterval<ygg::float_t>& metric)
+bool append_selection_evidence(const RuleEvaluationInput& input, RuleEvaluationWorkspace& workspace)
 {
     if constexpr (!CollectEvidence)
     {
@@ -319,12 +355,9 @@ bool append_selection_evidence(const RuleEvaluationInput& input, RuleEvaluationW
     {
         for (const auto& entry : workspace.selector.selection)
         {
-            const auto reported = input.selector.for_each_entry_support(entry,
-                                                                        [&](const auto key, const auto interval, const auto& annotation)
-                                                                        {
-                                                                            metric = aggregate_metric_support(metric, get_metric(annotation));
-                                                                            workspace.exact_supports.emplace_back(key, interval, get_cost(annotation));
-                                                                        });
+            const auto reported = input.selector().for_each_entry_support(entry,
+                                                                          [&](const auto key, const auto& interval, const auto& annotation)
+                                                                          { workspace.exact_supports.emplace_back(key, interval, get_cost(annotation)); });
             if (!reported)
             {
                 assert(false && "annotated rule support has no exact backing certificate");
@@ -335,142 +368,142 @@ bool append_selection_evidence(const RuleEvaluationInput& input, RuleEvaluationW
     }
 }
 
-template<TaskKind Kind, ::tyr::formalism::RelationKind R, typename CP>
+template<TaskKind Kind, formalism::RelationKind R, typename CP>
 Cost get_rule_credit(const CP& policy, RuleInstance<Kind, R>& instance)
 {
     if constexpr (std::same_as<std::remove_cvref_t<CP>, RuleCostPolicy>)
-        return Cost(0);
+        return static_cast<Cost>(0);
     else
         return policy.get_cost(instance.witness_key());
 }
 
-template<TaskKind Kind, ::tyr::formalism::RelationKind R, typename CP>
+template<TaskKind Kind, formalism::RelationKind R, typename CP>
 Cost get_transition_credit(const CP& policy,
                            RuleInstance<Kind, R>& instance,
-                           ::tyr::formalism::datalog::FunctionBindingView<::tyr::formalism::FluentTag> head,
-                           ygg::ClosedInterval<ygg::float_t> interval)
+                           formalism::datalog::FunctionBindingIndex<formalism::FluentTag> head,
+                           const ygg::ClosedInterval<ygg::float_t>& interval)
 {
     if constexpr (std::same_as<std::remove_cvref_t<CP>, RuleCostPolicy>)
-        return Cost(0);
+        return static_cast<Cost>(0);
     else
-        return policy.get_cost(instance.witness_key(), head, interval);
+        return policy.get_cost(instance.witness_key().get_index(), head, interval);
 }
 
-template<bool CollectEvidence, TaskKind Kind, ::tyr::formalism::RelationKind R, typename AP, typename CP, typename CanContinue>
+template<bool CollectEvidence, TaskKind Kind, formalism::RelationKind R, typename AP, typename CP, typename CanContinue>
 std::optional<EvaluationState> evaluate_annotated_rule(RuleInstance<Kind, R>& instance,
                                                        const AP&,
                                                        const CP& cost_policy,
                                                        const RuleEvaluationInput& input,
                                                        RuleEvaluationWorkspace& workspace,
-                                                       CanContinue&& can_continue)
+                                                       CanContinue can_continue)
 {
     using Aggregation = typename AP::Aggregation;
     const auto aggregate = Aggregation {};
-    auto state = EvaluationState { Aggregation::identity(), {}, Cost(0), std::nullopt, {}, {} };
+    auto state = EvaluationState { Aggregation::identity(), static_cast<Cost>(instance.get_rule().get_cost()), std::nullopt, {}, {} };
 
     workspace.exact_supports.clear();
 
     if (!can_continue(state.support_cost, state.raw_edge))
         return std::nullopt;
 
-    const auto evaluate_metric_effects = [&]
-    {
-        return instance.for_each_resolved_metric_effect(
-            [&](const ResolvedNumericEffect& effect)
-            {
+    const auto evaluate_metric_effects = [&] {
+        return instance.for_each_resolved_metric_effect([&](const ResolvedNumericEffect& effect) {
+            if constexpr (requires { cost_policy.is_metric_target(effect.head); })
                 if (!cost_policy.is_metric_target(effect.head))
                     return true;
-                workspace.selector.clear();
-                const auto delta = metric_effect_delta(
-                    effect.operator_kind,
-                    [&] { return input.selector.select_fluent_interval(effect.head, workspace.selector.selection); },
-                    [&] { return input.selector.evaluate_effect_expression(effect.rhs, workspace.selector.selection); });
-                if (!delta)
+            workspace.selector.clear();
+            const auto rhs = input.selector().evaluate_effect_expression(effect.rhs, workspace.selector.selection);
+            if (empty(rhs))
+                return false;
+            ygg::float_t delta = 0;
+            if (effect.operator_kind == formalism::NumericEffectOperatorKind::Increase)
+                delta = lower(rhs);
+            else if (effect.operator_kind != formalism::NumericEffectOperatorKind::Decrease) {
+                const auto lhs = input.selector().select_fluent_interval(effect.head, workspace.selector.selection);
+                if (empty(lhs))
                     return false;
-
-                aggregate_selection_cost<Aggregation>(state.support_cost, workspace.selector);
-                state.raw_edge += *delta;
-                if (!can_continue(state.support_cost, state.raw_edge))
+                const auto next = formalism::apply(effect.operator_kind, lhs, rhs);
+                if (empty(next))
                     return false;
-                return append_selection_evidence<CollectEvidence>(input, workspace, state.support_metric);
-            });
+                delta = lower(next) - upper(lhs);
+            }
+            if (std::isfinite(delta))
+                state.raw_edge += std::max(delta, ygg::float_t(0));
+            aggregate_selection_cost<Aggregation>(state.support_cost, workspace.selector);
+            return can_continue(state.support_cost, state.raw_edge) && append_selection_evidence<CollectEvidence>(input, workspace);
+        });
     };
-
-    // The pruning path evaluates metric effects first to establish an edge-cost lower bound.
     if constexpr (!std::same_as<std::remove_cvref_t<CanContinue>, AlwaysContinue>)
         if (!evaluate_metric_effects())
             return std::nullopt;
 
-    for (const auto literal : instance.get_body().template get_literals<::tyr::formalism::FluentTag>())
+    for (const auto literal : instance.get_body().template get_literals<formalism::FluentTag>())
     {
         if (!literal.get_polarity())
             continue;
 
         const auto binding = instance.resolve(literal.get_atom());
-        const auto* annotation = input.predicate_annotations.find(binding);
+        const auto* annotation = input.predicate_annotations().find(binding.get_index());
         if (!annotation || get_cost(*annotation) == std::numeric_limits<Cost>::max())
             return std::nullopt;
 
         state.support_cost = aggregate(state.support_cost, get_cost(*annotation));
         if (!can_continue(state.support_cost, state.raw_edge))
             return std::nullopt;
-        if constexpr (CollectEvidence)
-            state.support_metric = aggregate_metric_support(state.support_metric, get_metric(*annotation));
     }
 
     for (const auto constraint : instance.get_body().get_numeric_constraints())
     {
         const auto resolved = instance.resolve(constraint);
-        const auto constraint_cost = input.selector.get_constraint_cost(resolved, workspace.selector.selection, Aggregation {});
+        const auto constraint_cost = input.selector().get_constraint_cost(resolved, workspace.selector.selection, Aggregation {});
         if (constraint_cost == std::numeric_limits<Cost>::max())
             return std::nullopt;
 
         state.support_cost = aggregate(state.support_cost, constraint_cost);
         if (!can_continue(state.support_cost, state.raw_edge))
             return std::nullopt;
-        if (!append_selection_evidence<CollectEvidence>(input, workspace, state.support_metric))
+        if (!append_selection_evidence<CollectEvidence>(input, workspace))
             return std::nullopt;
     }
 
-    if constexpr (std::same_as<R, ::tyr::formalism::FunctionTag>)
+    if constexpr (std::same_as<R, formalism::FunctionTag>)
     {
         state.numeric_effect = ygg::visit([&](const auto effect) { return instance.resolve(effect); }, instance.get_head().get_variant());
         const auto& effect = *state.numeric_effect;
         workspace.selector.clear();
 
         auto lhs = ygg::ClosedInterval<ygg::float_t> {};
-        if (effect.operator_kind != ::tyr::formalism::NumericEffectOperatorKind::Assign)
+        if (effect.operator_kind != formalism::NumericEffectOperatorKind::Assign)
         {
-            lhs = input.selector.select_fluent_interval(effect.head, workspace.selector.selection);
+            lhs = input.selector().select_fluent_interval(effect.head, workspace.selector.selection);
             if (empty(lhs))
                 return std::nullopt;
         }
 
-        const auto rhs = input.selector.evaluate_effect_expression(effect.rhs, workspace.selector.selection);
+        const auto rhs = input.selector().evaluate_effect_expression(effect.rhs, workspace.selector.selection);
         if (empty(rhs))
             return std::nullopt;
 
-        state.raw_interval = apply_numeric_effect(effect.operator_kind, lhs, rhs);
+        state.raw_interval = formalism::apply(effect.operator_kind, lhs, rhs);
         if (empty(state.raw_interval))
             return std::nullopt;
 
-        state.current_interval = input.selector.current_interval(effect.head);
+        state.current_interval = input.selector().current_interval(effect.head);
         aggregate_selection_cost<Aggregation>(state.support_cost, workspace.selector);
         if (!can_continue(state.support_cost, state.raw_edge))
             return std::nullopt;
-        if (!append_selection_evidence<CollectEvidence>(input, workspace, state.support_metric))
+        if (!append_selection_evidence<CollectEvidence>(input, workspace))
             return std::nullopt;
     }
 
     if constexpr (std::same_as<std::remove_cvref_t<CanContinue>, AlwaysContinue>)
         if (!evaluate_metric_effects())
             return std::nullopt;
-
     return state;
 }
 
 template<TaskKind Kind, typename AP>
-std::optional<FunctionCandidate> evaluate_unannotated_function(RuleInstance<Kind, ::tyr::formalism::FunctionTag>& instance,
+std::optional<FunctionCandidate> evaluate_unannotated_function(RuleInstance<Kind, formalism::FunctionTag>& instance,
                                                                const AP& policy,
                                                                const RuleEvaluationInput& input,
                                                                RuleEvaluationWorkspace& workspace)
@@ -479,32 +512,32 @@ std::optional<FunctionCandidate> evaluate_unannotated_function(RuleInstance<Kind
     workspace.selector.clear();
 
     auto lhs = ygg::ClosedInterval<ygg::float_t> {};
-    if (effect.operator_kind != ::tyr::formalism::NumericEffectOperatorKind::Assign)
+    if (effect.operator_kind != formalism::NumericEffectOperatorKind::Assign)
     {
-        lhs = input.selector.select_fluent_interval(effect.head, workspace.selector.selection);
+        lhs = input.selector().select_fluent_interval(effect.head, workspace.selector.selection);
         if (empty(lhs))
             return std::nullopt;
     }
 
-    const auto rhs = input.selector.evaluate_effect_expression(effect.rhs, workspace.selector.selection);
+    const auto rhs = input.selector().evaluate_effect_expression(effect.rhs, workspace.selector.selection);
     if (empty(rhs))
         return std::nullopt;
 
-    const auto raw_interval = apply_numeric_effect(effect.operator_kind, lhs, rhs);
+    const auto raw_interval = formalism::apply(effect.operator_kind, lhs, rhs);
     if (empty(raw_interval))
         return std::nullopt;
 
-    const auto current = input.selector.current_interval(effect.head);
+    const auto current = input.selector().current_interval(effect.head);
     auto interval = raw_interval;
-    if (!empty(current) && policy.is_widening_label_preserving(Cost(0), Cost(0)))
+    if (!empty(current) && policy.is_widening_label_preserving(static_cast<Cost>(0), static_cast<Cost>(0)))
         interval = widen_free_growth(raw_interval, current);
 
-    return FunctionCandidate { effect.head, interval, Cost(0), Cost(0), empty(current) || !subset(interval, current), std::nullopt };
+    return FunctionCandidate { effect.head, interval, static_cast<Cost>(0), static_cast<Cost>(0), empty(current) || !subset(interval, current), std::nullopt };
 }
 
 }
 
-template<TaskKind Kind, ::tyr::formalism::RelationKind R, typename AP, typename CP>
+template<TaskKind Kind, formalism::RelationKind R, typename AP, typename CP>
 std::optional<Cost> evaluate_rule_priority(RuleInstance<Kind, R>& instance,
                                            const AP& annotation_policy,
                                            const CP& cost_policy,
@@ -513,8 +546,8 @@ std::optional<Cost> evaluate_rule_priority(RuleInstance<Kind, R>& instance,
 {
     if constexpr (!AP::stores_annotations)
     {
-        if constexpr (std::same_as<R, ::tyr::formalism::PredicateTag>)
-            return Cost(0);
+        if constexpr (std::same_as<R, formalism::PredicateTag>)
+            return static_cast<Cost>(0);
         else
         {
             const auto candidate = rule_evaluation_detail::evaluate_unannotated_function(instance, annotation_policy, input, workspace);
@@ -531,7 +564,7 @@ std::optional<Cost> evaluate_rule_priority(RuleInstance<Kind, R>& instance,
                                                                                   rule_evaluation_detail::AlwaysContinue {});
         if (!state)
             return std::nullopt;
-        if constexpr (std::same_as<R, ::tyr::formalism::PredicateTag>)
+        if constexpr (std::same_as<R, formalism::PredicateTag>)
         {
             const auto edge = reduce_cost(state->raw_edge, rule_evaluation_detail::get_rule_credit(cost_policy, instance));
             return state->support_cost + edge;
@@ -544,8 +577,7 @@ std::optional<Cost> evaluate_rule_priority(RuleInstance<Kind, R>& instance,
 }
 
 template<TaskKind Kind, typename AP, typename CP, typename CanContinue = rule_evaluation_detail::AlwaysContinue>
-std::optional<PredicateCandidate> evaluate_predicate_candidate(::tyr::formalism::datalog::PredicateBindingView<::tyr::formalism::FluentTag> head,
-                                                               RuleInstance<Kind, ::tyr::formalism::PredicateTag>& instance,
+std::optional<PredicateCandidate> evaluate_predicate_candidate(RuleInstance<Kind, formalism::PredicateTag>& instance,
                                                                const AP& annotation_policy,
                                                                const CP& cost_policy,
                                                                const RuleEvaluationInput& input,
@@ -554,7 +586,7 @@ std::optional<PredicateCandidate> evaluate_predicate_candidate(::tyr::formalism:
 {
     if constexpr (!AP::stores_annotations)
     {
-        return PredicateCandidate { head, Cost(0), Cost(0), std::nullopt };
+        return PredicateCandidate { static_cast<Cost>(0), static_cast<Cost>(0), std::nullopt };
     }
     else
     {
@@ -564,13 +596,12 @@ std::optional<PredicateCandidate> evaluate_predicate_candidate(::tyr::formalism:
 
         const auto edge = reduce_cost(state->raw_edge, rule_evaluation_detail::get_rule_credit(cost_policy, instance));
         const auto cost = state->support_cost + edge;
-        return PredicateCandidate { head, cost, cost, CandidateEvidence { add_metric_delta(state->support_metric, edge), workspace.exact_supports } };
+        return PredicateCandidate { cost, cost, CandidateEvidence { workspace.exact_supports } };
     }
 }
 
 template<TaskKind Kind, typename AP, typename CP>
-auto evaluate_propositional_candidate(::tyr::formalism::datalog::PredicateBindingView<::tyr::formalism::FluentTag> head,
-                                      RuleInstance<Kind, ::tyr::formalism::PredicateTag>& rule_instance,
+auto evaluate_propositional_candidate(RuleInstance<Kind, formalism::PredicateTag>& rule_instance,
                                       const AP& annotation_policy,
                                       const CP& cost_policy,
                                       const RuleEvaluationInput& input,
@@ -580,8 +611,7 @@ auto evaluate_propositional_candidate(::tyr::formalism::datalog::PredicateBindin
     auto pruned = false;
     if constexpr (AP::stores_annotations && !AP::records_propositional_achievers && std::same_as<CP, RuleCostPolicy>)
     {
-        auto candidate = evaluate_predicate_candidate(head,
-                                                      rule_instance,
+        auto candidate = evaluate_predicate_candidate(rule_instance,
                                                       annotation_policy,
                                                       cost_policy,
                                                       input,
@@ -595,25 +625,28 @@ auto evaluate_propositional_candidate(::tyr::formalism::datalog::PredicateBindin
     }
     else
     {
-        return std::pair(evaluate_predicate_candidate(head, rule_instance, annotation_policy, cost_policy, input, workspace), false);
+        return std::pair(evaluate_predicate_candidate(rule_instance, annotation_policy, cost_policy, input, workspace), false);
     }
 }
 
-template<TaskKind Kind, typename AP, typename CP>
-auto evaluate_propositional_candidate(::tyr::formalism::datalog::PredicateBindingView<::tyr::formalism::FluentTag> head,
-                                      RuleInstance<Kind, ::tyr::formalism::PredicateTag>& rule_instance,
+/// Prunes only once the instance cannot improve any of its heads.
+template<TaskKind Kind, typename AP, typename CP, PredicateAnnotationStore DeltaAnnotations>
+auto evaluate_propositional_candidate(std::span<const formalism::datalog::PredicateBindingIndex<formalism::FluentTag>> heads,
+                                      RuleInstance<Kind, formalism::PredicateTag>& rule_instance,
                                       const AP& annotation_policy,
                                       const CP& cost_policy,
                                       const RuleEvaluationInput& input,
                                       RuleEvaluationWorkspace& workspace,
-                                      const PredicateAnnotations<true>& delta_annotations)
+                                      const DeltaAnnotations& delta_annotations)
 {
-    const auto best_cost = std::min(input.predicate_annotations.fetch_cost(head), delta_annotations.fetch_cost(head));
-    return evaluate_propositional_candidate(head, rule_instance, annotation_policy, cost_policy, input, workspace, best_cost);
+    auto best_cost = static_cast<Cost>(0);
+    for (const auto head : heads)
+        best_cost = std::max(best_cost, std::min(input.predicate_annotations().fetch_cost(head), delta_annotations.fetch_cost(head)));
+    return evaluate_propositional_candidate(rule_instance, annotation_policy, cost_policy, input, workspace, best_cost);
 }
 
 template<TaskKind Kind, typename AP, typename CP>
-std::optional<FunctionCandidate> evaluate_function_candidate(RuleInstance<Kind, ::tyr::formalism::FunctionTag>& instance,
+std::optional<FunctionCandidate> evaluate_function_candidate(RuleInstance<Kind, formalism::FunctionTag>& instance,
                                                              const AP& annotation_policy,
                                                              const CP& cost_policy,
                                                              const RuleEvaluationInput& input,
@@ -638,9 +671,9 @@ std::optional<FunctionCandidate> evaluate_function_candidate(RuleInstance<Kind, 
         auto edge = reduce_cost(state->raw_edge, rule_evaluation_detail::get_rule_credit(cost_policy, instance));
         const auto pre_transition_label = state->support_cost + edge;
         auto interval = state->raw_interval;
-        if (!empty(state->current_interval) && edge == Cost(0))
+        if (!empty(state->current_interval) && edge == static_cast<Cost>(0))
         {
-            const auto current_label = input.selector.get_current_interval_cost(effect.head, state->current_interval);
+            const auto current_label = input.selector().get_current_interval_cost(effect.head, state->current_interval);
             if (annotation_policy.is_widening_label_preserving(pre_transition_label, current_label))
                 interval = widen_free_growth(state->raw_interval, state->current_interval);
         }
@@ -654,30 +687,32 @@ std::optional<FunctionCandidate> evaluate_function_candidate(RuleInstance<Kind, 
                                    cost,
                                    state->support_cost,
                                    empty(state->current_interval) || !subset(interval, state->current_interval),
-                                   CandidateEvidence { add_metric_delta(state->support_metric, edge), workspace.exact_supports } };
+                                   CandidateEvidence { workspace.exact_supports } };
     }
 }
 
-template<TaskKind Kind, ::tyr::formalism::RelationKind R, typename Candidate>
+template<TaskKind Kind, formalism::RelationKind R, typename Candidate>
 WitnessAnnotation<R> materialize_witness(RuleInstance<Kind, R>& instance, const Candidate& candidate)
 {
     assert(candidate.evidence);
-    return WitnessAnnotation<R>(instance.witness_key(), candidate.evidence->metric, candidate.cost, candidate.evidence->numeric_supports);
+    return WitnessAnnotation<R>(instance.witness_key().get_index(), candidate.cost, candidate.evidence->numeric_supports);
 }
 
-template<TaskKind Kind, AnnotationPolicyConcept AP, RuleCostPolicyConcept CP>
-RuleUpdateResult insert_propositional_update(::tyr::formalism::datalog::PredicateBindingView<::tyr::formalism::FluentTag> head,
-                                             RuleUpdateInput<Kind, ::tyr::formalism::PredicateTag, AP, CP>& input,
+/// Evaluates the rule instance once and updates each of its heads with the shared witness.
+template<TaskKind Kind, AnnotationPolicyConcept AP, RuleCostPolicyConcept CP, PredicateAnnotationStore DeltaAnnotations>
+RuleUpdateResult insert_propositional_update(std::span<const formalism::datalog::PredicateBindingIndex<formalism::FluentTag>> heads,
+                                             RuleUpdateInput<Kind, formalism::PredicateTag, AP, CP>& input,
                                              PredicateHeadUpdates& head_updates,
-                                             PredicateAnnotations<true>& delta_annotations,
+                                             DeltaAnnotations& delta_annotations,
                                              std::optional<Cost> required_queue_label = std::nullopt)
 {
-    auto [candidate, pruned] = evaluate_propositional_candidate(head,
+    assert(!heads.empty());
+    auto [candidate, pruned] = evaluate_propositional_candidate(heads,
                                                                 input.rule_instance,
-                                                                input.annotation_policy,
-                                                                input.cost_policy,
+                                                                *input.annotation_policy,
+                                                                *input.cost_policy,
                                                                 input.evaluation,
-                                                                input.workspace,
+                                                                *input.workspace,
                                                                 delta_annotations);
     if (!candidate)
     {
@@ -685,42 +720,51 @@ RuleUpdateResult insert_propositional_update(::tyr::formalism::datalog::Predicat
             return { RuleUpdateStatus::Unavailable, std::nullopt };
 
         // A staged annotation can still need its head restored to the cost frontier after resume.
-        head_updates.insert(head);
+        for (const auto head : heads)
+            head_updates.insert(head);
         return { RuleUpdateStatus::Pruned, std::nullopt };
     }
 
-    assert(candidate->head == head);
     if (required_queue_label && candidate->queue_label != *required_queue_label)
         return { RuleUpdateStatus::QueueLabelChanged, candidate->queue_label };
 
     if constexpr (AP::stores_annotations)
     {
-        const auto can_update = input.annotation_policy.can_update(head, candidate->cost, input.evaluation.predicate_annotations, delta_annotations);
-        if constexpr (AP::records_propositional_achievers)
+        for (const auto head : heads)
         {
-            auto witness = materialize_witness(input.rule_instance, *candidate);
-            head_updates.insert_achiever(head, witness);
-            if (can_update)
-                input.annotation_policy.try_update_candidate(head, std::move(witness), delta_annotations);
-        }
-        else if (can_update)
-        {
-            auto witness = materialize_witness(input.rule_instance, *candidate);
-            input.annotation_policy.try_update_candidate(head, std::move(witness), delta_annotations);
+            const auto can_update = input.annotation_policy->can_update(head, candidate->cost, input.evaluation.predicate_annotations(), delta_annotations);
+            if constexpr (AP::records_propositional_achievers)
+            {
+                auto witness = materialize_witness(input.rule_instance, *candidate);
+                if (can_update)
+                {
+                    head_updates.insert_achiever(head, witness);
+                    input.annotation_policy->try_update_candidate(head, std::move(witness), delta_annotations);
+                }
+                else
+                {
+                    head_updates.insert_achiever(head, std::move(witness));
+                }
+            }
+            else if (can_update)
+            {
+                input.annotation_policy->try_update_candidate(head, materialize_witness(input.rule_instance, *candidate), delta_annotations);
+            }
         }
     }
     // A previously staged certificate may still need to become an available fact after a resumed solve.
-    head_updates.insert(head);
+    for (const auto head : heads)
+        head_updates.insert(head);
     return { RuleUpdateStatus::Completed, candidate->queue_label };
 }
 
-template<TaskKind Kind, AnnotationPolicyConcept AP, RuleCostPolicyConcept CP>
-RuleUpdateResult insert_numeric_update(RuleUpdateInput<Kind, ::tyr::formalism::FunctionTag, AP, CP>& input,
+template<TaskKind Kind, AnnotationPolicyConcept AP, RuleCostPolicyConcept CP, FunctionAnnotationStore DeltaAnnotations>
+RuleUpdateResult insert_numeric_update(RuleUpdateInput<Kind, formalism::FunctionTag, AP, CP>& input,
                                        FunctionHeadUpdates& head_updates,
-                                       [[maybe_unused]] FunctionAnnotations<true>& delta_numeric_annotations,
+                                       [[maybe_unused]] DeltaAnnotations& delta_numeric_annotations,
                                        std::optional<Cost> required_queue_label = std::nullopt)
 {
-    auto candidate = evaluate_function_candidate(input.rule_instance, input.annotation_policy, input.cost_policy, input.evaluation, input.workspace);
+    auto candidate = evaluate_function_candidate(input.rule_instance, *input.annotation_policy, *input.cost_policy, input.evaluation, *input.workspace);
     if (!candidate)
         return { RuleUpdateStatus::Unavailable, std::nullopt };
 
@@ -735,10 +779,10 @@ RuleUpdateResult insert_numeric_update(RuleUpdateInput<Kind, ::tyr::formalism::F
     else
     {
         auto staged = false;
-        if (input.annotation_policy.can_update(candidate->head, candidate->interval, candidate->cost, input.numeric_annotations, delta_numeric_annotations))
+        if (input.annotation_policy->can_update(candidate->head, candidate->interval, candidate->cost, *input.numeric_annotations, delta_numeric_annotations))
         {
             auto witness = materialize_witness(input.rule_instance, *candidate);
-            staged = input.annotation_policy.try_update_candidate(candidate->head, candidate->interval, std::move(witness), delta_numeric_annotations);
+            staged = input.annotation_policy->try_update_candidate(candidate->head, candidate->interval, std::move(witness), delta_numeric_annotations);
         }
         if (staged || candidate->grows_fact)
             head_updates.insert(FunctionHeadUpdate(candidate->head, candidate->interval, candidate->grows_fact));

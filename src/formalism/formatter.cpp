@@ -32,21 +32,15 @@ namespace
 
 template<FactKind T>
 std::string to_string_impl(const ygg::Data<Predicate<T>>& value)
-{
-    return fmt::format("{}/{}", value.name, value.arity);
-}
+{ return fmt::format("{}/{}", value.name, value.arity); }
 
 template<FactKind T>
 std::string to_string_impl(const ygg::Data<Function<T>>& value)
-{
-    return fmt::format("{}/{}", value.name, value.arity);
-}
+{ return fmt::format("{}/{}", value.name, value.arity); }
 
 template<typename T>
 std::string to_string_impl(const ygg::Data<RelationBinding<T>>& value)
-{
-    return fmt::format("{} {}", value.relation, fmt::join(ygg::to_strings(value.objects), " "));
-}
+{ return fmt::format("{} {}", value.relation, fmt::join(ygg::to_strings(value.objects), " ")); }
 
 }  // namespace
 
@@ -54,7 +48,7 @@ std::string to_string(const ygg::Data<Variable>& value) { return fmt::format("{}
 
 std::string to_string(const ygg::Data<Object>& value) { return fmt::format("{}", value.name); }
 
-std::string to_string(const ygg::Data<Term>& value) { return fmt::format("{}", value.value); }
+std::string to_string(const ygg::Data<Term>& value) { return fmt::format("{}", value.variant); }
 
 std::string to_string(const ygg::Data<Predicate<StaticTag>>& value) { return to_string_impl(value); }
 

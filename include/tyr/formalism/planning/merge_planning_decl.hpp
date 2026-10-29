@@ -25,32 +25,19 @@
 namespace tyr::formalism::planning
 {
 
-struct MergePlanningContext
+/// Where grounding, copying or merging writes: the objects are the caller's and outlive the context.
+class MergePlanningContext
 {
-    Builder& builder;
-    Repository& destination;
-};
+public:
+    MergePlanningContext(Builder& builder, Repository& destination) noexcept : m_builder(&builder), m_destination(&destination) {}
 
-template<typename T>
-struct to_planning_payload
-{
-    using type = T;  // default: unchanged
-};
+    [[nodiscard]] Builder& builder() const noexcept { return *m_builder; }
+    [[nodiscard]] Repository& destination() const noexcept { return *m_destination; }
 
-template<>
-struct to_planning_payload<ygg::Data<::tyr::formalism::datalog::FunctionExpression>>
-{
-    using type = ygg::Data<::tyr::formalism::planning::FunctionExpression>;
+private:
+    Builder* m_builder;
+    Repository* m_destination;
 };
-
-template<>
-struct to_planning_payload<ygg::Data<::tyr::formalism::datalog::GroundFunctionExpression>>
-{
-    using type = ygg::Data<::tyr::formalism::planning::GroundFunctionExpression>;
-};
-
-template<typename T>
-using to_planning_payload_t = typename to_planning_payload<T>::type;
 
 }
 

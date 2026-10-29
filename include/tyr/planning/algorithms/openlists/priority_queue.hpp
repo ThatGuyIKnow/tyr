@@ -28,10 +28,9 @@ namespace tyr::planning
 
 template<typename T>
 concept IsPriorityQueueEntry = requires(const T a) {
-    typename T::KeyType;
     typename T::ItemType;
     { a.get_key() } -> std::totally_ordered;
-    { a.get_item() };
+    { a.get_item() } -> std::convertible_to<typename T::ItemType>;
 };
 
 template<IsPriorityQueueEntry E>
@@ -45,18 +44,17 @@ private:
 
 public:
     using EntryType = E;
-    using KeyType = typename E::KeyType;
     using ItemType = typename E::ItemType;
 
     void insert(E entry) { m_priority_queue.push(std::move(entry)); }
 
-    decltype(auto) top() const
+    [[nodiscard]] decltype(auto) top() const
     {
         assert(!empty());
         return m_priority_queue.top().get_item();
     }
 
-    const auto& top_entry() const
+    [[nodiscard]] const auto& top_entry() const
     {
         assert(!empty());
         return m_priority_queue.top();
@@ -74,9 +72,9 @@ public:
         std::swap(m_priority_queue, tmp);
     }
 
-    bool empty() const { return m_priority_queue.empty(); }
+    [[nodiscard]] bool empty() const { return m_priority_queue.empty(); }
 
-    std::size_t size() const { return m_priority_queue.size(); }
+    [[nodiscard]] std::size_t size() const { return m_priority_queue.size(); }
 
 private:
     std::priority_queue<E, std::vector<E>, EntryComparator> m_priority_queue;

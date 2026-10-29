@@ -19,17 +19,11 @@
 #define TYR_FORMALISM_DATALOG_PROGRAM_DATA_HPP_
 
 #include "tyr/formalism/datalog/declarations.hpp"
-#include "tyr/formalism/datalog/ground_atom_index.hpp"
-#include "tyr/formalism/datalog/ground_conjunctive_condition_index.hpp"
-#include "tyr/formalism/datalog/ground_function_term_value_index.hpp"
-#include "tyr/formalism/datalog/metric_index.hpp"
-#include "tyr/formalism/datalog/program_index.hpp"
-#include "tyr/formalism/datalog/rule_index.hpp"
-#include "tyr/formalism/function_index.hpp"
-#include "tyr/formalism/object_index.hpp"
-#include "tyr/formalism/predicate_index.hpp"
+#include "tyr/formalism/declarations.hpp"
 
 #include <optional>
+#include <tuple>
+#include <utility>
 #include <vector>
 #include <yggdrasil/core/types.hpp>
 #include <yggdrasil/core/types_utils.hpp>
@@ -37,23 +31,22 @@
 namespace ygg
 {
 
-template<>
-struct Data<::tyr::formalism::datalog::Program>
+template<::tyr::TaskKind T>
+struct Data<::tyr::formalism::datalog::Program<T>>
 {
-    ygg::Index<::tyr::formalism::datalog::Program> index;
+    ygg::Index<::tyr::formalism::datalog::Program<T>> index;
     ygg::IndexList<::tyr::formalism::Predicate<::tyr::formalism::StaticTag>> static_predicates;
     ygg::IndexList<::tyr::formalism::Predicate<::tyr::formalism::FluentTag>> fluent_predicates;
     ygg::IndexList<::tyr::formalism::Function<::tyr::formalism::StaticTag>> static_functions;
     ygg::IndexList<::tyr::formalism::Function<::tyr::formalism::FluentTag>> fluent_functions;
     ygg::IndexList<::tyr::formalism::Object> objects;
-    ygg::IndexList<::tyr::formalism::datalog::GroundAtom<::tyr::formalism::StaticTag>> static_atoms;
-    ygg::IndexList<::tyr::formalism::datalog::GroundAtom<::tyr::formalism::FluentTag>> fluent_atoms;
-    ygg::IndexList<::tyr::formalism::datalog::GroundFunctionTermValue<::tyr::formalism::StaticTag>> static_fterm_values;
-    ygg::IndexList<::tyr::formalism::datalog::GroundFunctionTermValue<::tyr::formalism::FluentTag>> fluent_fterm_values;
-    ::cista::optional<ygg::Index<::tyr::formalism::datalog::GroundConjunctiveCondition>> goal;
-    ::cista::optional<ygg::Index<::tyr::formalism::datalog::Metric>> metric;
-    ygg::IndexList<::tyr::formalism::datalog::Rule<::tyr::formalism::PredicateTag>> predicate_rules;
-    ygg::IndexList<::tyr::formalism::datalog::Rule<::tyr::formalism::FunctionTag>> function_rules;
+    ygg::IndexList<::tyr::formalism::datalog::Atom<::tyr::GroundTag, ::tyr::formalism::StaticTag>> static_atoms;
+    ygg::IndexList<::tyr::formalism::datalog::Atom<::tyr::GroundTag, ::tyr::formalism::FluentTag>> fluent_atoms;
+    ygg::IndexList<::tyr::formalism::datalog::FunctionTermValue<::tyr::GroundTag, ::tyr::formalism::StaticTag>> static_fterm_values;
+    ygg::IndexList<::tyr::formalism::datalog::FunctionTermValue<::tyr::GroundTag, ::tyr::formalism::FluentTag>> fluent_fterm_values;
+    ::cista::optional<ygg::Index<::tyr::formalism::datalog::ConjunctiveCondition<::tyr::GroundTag>>> goal;
+    ygg::IndexList<::tyr::formalism::datalog::Rule<T, ::tyr::formalism::PredicateTag>> predicate_rules;
+    ygg::IndexList<::tyr::formalism::datalog::Rule<T, ::tyr::formalism::FunctionTag>> function_rules;
 
     Data() = default;
     Data(ygg::IndexList<::tyr::formalism::Predicate<::tyr::formalism::StaticTag>> static_predicates_,
@@ -61,14 +54,13 @@ struct Data<::tyr::formalism::datalog::Program>
          ygg::IndexList<::tyr::formalism::Function<::tyr::formalism::StaticTag>> static_functions_,
          ygg::IndexList<::tyr::formalism::Function<::tyr::formalism::FluentTag>> fluent_functions_,
          ygg::IndexList<::tyr::formalism::Object> objects_,
-         ygg::IndexList<::tyr::formalism::datalog::GroundAtom<::tyr::formalism::StaticTag>> static_atoms_,
-         ygg::IndexList<::tyr::formalism::datalog::GroundAtom<::tyr::formalism::FluentTag>> fluent_atoms_,
-         ygg::IndexList<::tyr::formalism::datalog::GroundFunctionTermValue<::tyr::formalism::StaticTag>> static_fterm_values_,
-         ygg::IndexList<::tyr::formalism::datalog::GroundFunctionTermValue<::tyr::formalism::FluentTag>> fluent_fterm_values_,
-         ::cista::optional<ygg::Index<::tyr::formalism::datalog::GroundConjunctiveCondition>> goal_,
-         ::cista::optional<ygg::Index<::tyr::formalism::datalog::Metric>> metric_,
-         ygg::IndexList<::tyr::formalism::datalog::Rule<::tyr::formalism::PredicateTag>> predicate_rules_,
-         ygg::IndexList<::tyr::formalism::datalog::Rule<::tyr::formalism::FunctionTag>> function_rules_) :
+         ygg::IndexList<::tyr::formalism::datalog::Atom<::tyr::GroundTag, ::tyr::formalism::StaticTag>> static_atoms_,
+         ygg::IndexList<::tyr::formalism::datalog::Atom<::tyr::GroundTag, ::tyr::formalism::FluentTag>> fluent_atoms_,
+         ygg::IndexList<::tyr::formalism::datalog::FunctionTermValue<::tyr::GroundTag, ::tyr::formalism::StaticTag>> static_fterm_values_,
+         ygg::IndexList<::tyr::formalism::datalog::FunctionTermValue<::tyr::GroundTag, ::tyr::formalism::FluentTag>> fluent_fterm_values_,
+         ::cista::optional<ygg::Index<::tyr::formalism::datalog::ConjunctiveCondition<::tyr::GroundTag>>> goal_,
+         ygg::IndexList<::tyr::formalism::datalog::Rule<T, ::tyr::formalism::PredicateTag>> predicate_rules_,
+         ygg::IndexList<::tyr::formalism::datalog::Rule<T, ::tyr::formalism::FunctionTag>> function_rules_) :
         index(),
         static_predicates(std::move(static_predicates_)),
         fluent_predicates(std::move(fluent_predicates_)),
@@ -79,8 +71,7 @@ struct Data<::tyr::formalism::datalog::Program>
         fluent_atoms(std::move(fluent_atoms_)),
         static_fterm_values(std::move(static_fterm_values_)),
         fluent_fterm_values(std::move(fluent_fterm_values_)),
-        goal(goal_),
-        metric(metric_),
+        goal(std::move(goal_)),
         predicate_rules(std::move(predicate_rules_)),
         function_rules(std::move(function_rules_))
     {
@@ -91,14 +82,15 @@ struct Data<::tyr::formalism::datalog::Program>
          const std::vector<::ygg::View<ygg::Index<::tyr::formalism::Function<::tyr::formalism::StaticTag>>, C>>& static_functions_,
          const std::vector<::ygg::View<ygg::Index<::tyr::formalism::Function<::tyr::formalism::FluentTag>>, C>>& fluent_functions_,
          const std::vector<::ygg::View<ygg::Index<::tyr::formalism::Object>, C>>& objects_,
-         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::datalog::GroundAtom<::tyr::formalism::StaticTag>>, C>>& static_atoms_,
-         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::datalog::GroundAtom<::tyr::formalism::FluentTag>>, C>>& fluent_atoms_,
-         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::datalog::GroundFunctionTermValue<::tyr::formalism::StaticTag>>, C>>& static_fterm_values_,
-         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::datalog::GroundFunctionTermValue<::tyr::formalism::FluentTag>>, C>>& fluent_fterm_values_,
-         const std::optional<::ygg::View<ygg::Index<::tyr::formalism::datalog::GroundConjunctiveCondition>, C>>& goal_,
-         const std::optional<::ygg::View<ygg::Index<::tyr::formalism::datalog::Metric>, C>>& metric_,
-         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::datalog::Rule<::tyr::formalism::PredicateTag>>, C>>& predicate_rules_,
-         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::datalog::Rule<::tyr::formalism::FunctionTag>>, C>>& function_rules_) :
+         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::datalog::Atom<::tyr::GroundTag, ::tyr::formalism::StaticTag>>, C>>& static_atoms_,
+         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::datalog::Atom<::tyr::GroundTag, ::tyr::formalism::FluentTag>>, C>>& fluent_atoms_,
+         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::datalog::FunctionTermValue<::tyr::GroundTag, ::tyr::formalism::StaticTag>>, C>>&
+             static_fterm_values_,
+         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::datalog::FunctionTermValue<::tyr::GroundTag, ::tyr::formalism::FluentTag>>, C>>&
+             fluent_fterm_values_,
+         const std::optional<::ygg::View<ygg::Index<::tyr::formalism::datalog::ConjunctiveCondition<::tyr::GroundTag>>, C>>& goal_,
+         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::datalog::Rule<T, ::tyr::formalism::PredicateTag>>, C>>& predicate_rules_,
+         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::datalog::Rule<T, ::tyr::formalism::FunctionTag>>, C>>& function_rules_) :
         index(),
         static_predicates(),
         fluent_predicates(),
@@ -110,7 +102,6 @@ struct Data<::tyr::formalism::datalog::Program>
         static_fterm_values(),
         fluent_fterm_values(),
         goal(),
-        metric(),
         predicate_rules(),
         function_rules()
     {
@@ -124,7 +115,6 @@ struct Data<::tyr::formalism::datalog::Program>
         set(static_fterm_values_, static_fterm_values);
         set(fluent_fterm_values_, fluent_fterm_values);
         set(goal_, goal);
-        set(metric_, metric);
         set(predicate_rules_, predicate_rules);
         set(function_rules_, function_rules);
     }
@@ -132,8 +122,9 @@ struct Data<::tyr::formalism::datalog::Program>
     Data& operator=(const Data& other) = delete;
     Data(Data&& other) = default;
     Data& operator=(Data&& other) = default;
+    ~Data() = default;
 
-    /// Dispatches on the relation kind, mirroring FactSets::get<T>() and AssignmentSets::get<T>().
+    /// Dispatches on the relation kind, mirroring FactSets::get<F>() and AssignmentSets::get<F>().
     template<::tyr::formalism::RelationKind R>
     auto& get_rules() noexcept
     {
@@ -156,104 +147,86 @@ struct Data<::tyr::formalism::datalog::Program>
             static_assert(ygg::dependent_false<R>::value, "Missing case");
     }
 
-    void clear() noexcept
-    {
-        ygg::clear(index);
-        ygg::clear(static_predicates);
-        ygg::clear(fluent_predicates);
-        ygg::clear(static_functions);
-        ygg::clear(fluent_functions);
-        ygg::clear(objects);
-        ygg::clear(static_atoms);
-        ygg::clear(fluent_atoms);
-        ygg::clear(static_fterm_values);
-        ygg::clear(fluent_fterm_values);
-        ygg::clear(goal);
-        ygg::clear(metric);
-        ygg::clear(predicate_rules);
-        ygg::clear(function_rules);
-    }
-
-    template<::tyr::formalism::FactKind T>
+    template<::tyr::formalism::FactKind F>
     const auto& get_predicates() const
     {
-        if constexpr (std::same_as<T, ::tyr::formalism::StaticTag>)
+        if constexpr (std::same_as<F, ::tyr::formalism::StaticTag>)
             return static_predicates;
-        else if constexpr (std::same_as<T, ::tyr::formalism::FluentTag>)
+        else if constexpr (std::same_as<F, ::tyr::formalism::FluentTag>)
             return fluent_predicates;
         else
-            static_assert(ygg::dependent_false<T>::value, "Missing case");
+            static_assert(ygg::dependent_false<F>::value, "Missing case");
     }
 
-    template<::tyr::formalism::FactKind T>
+    template<::tyr::formalism::FactKind F>
     const auto& get_functions() const
     {
-        if constexpr (std::same_as<T, ::tyr::formalism::StaticTag>)
+        if constexpr (std::same_as<F, ::tyr::formalism::StaticTag>)
             return static_functions;
-        else if constexpr (std::same_as<T, ::tyr::formalism::FluentTag>)
+        else if constexpr (std::same_as<F, ::tyr::formalism::FluentTag>)
             return fluent_functions;
         else
-            static_assert(ygg::dependent_false<T>::value, "Missing case");
+            static_assert(ygg::dependent_false<F>::value, "Missing case");
     }
 
-    template<::tyr::formalism::FactKind T>
+    template<::tyr::formalism::FactKind F>
     const auto& get_atoms() const
     {
-        if constexpr (std::same_as<T, ::tyr::formalism::StaticTag>)
+        if constexpr (std::same_as<F, ::tyr::formalism::StaticTag>)
             return static_atoms;
-        else if constexpr (std::same_as<T, ::tyr::formalism::FluentTag>)
+        else if constexpr (std::same_as<F, ::tyr::formalism::FluentTag>)
             return fluent_atoms;
         else
-            static_assert(ygg::dependent_false<T>::value, "Missing case");
+            static_assert(ygg::dependent_false<F>::value, "Missing case");
     }
 
-    template<::tyr::formalism::FactKind T>
+    template<::tyr::formalism::FactKind F>
     const auto& get_fterm_values() const
     {
-        if constexpr (std::same_as<T, ::tyr::formalism::StaticTag>)
+        if constexpr (std::same_as<F, ::tyr::formalism::StaticTag>)
             return static_fterm_values;
-        else if constexpr (std::same_as<T, ::tyr::formalism::FluentTag>)
+        else if constexpr (std::same_as<F, ::tyr::formalism::FluentTag>)
             return fluent_fterm_values;
         else
-            static_assert(ygg::dependent_false<T>::value, "Missing case");
+            static_assert(ygg::dependent_false<F>::value, "Missing case");
     }
 
-    auto cista_members() const noexcept
+    static constexpr auto cista_members() noexcept
     {
-        return std::tie(index,
-                        static_predicates,
-                        fluent_predicates,
-                        static_functions,
-                        fluent_functions,
-                        objects,
-                        static_atoms,
-                        fluent_atoms,
-                        static_fterm_values,
-                        fluent_fterm_values,
-                        goal,
-                        metric,
-                        predicate_rules,
-                        function_rules);
+        return ygg::Members<&Data::index,
+                            &Data::static_predicates,
+                            &Data::fluent_predicates,
+                            &Data::static_functions,
+                            &Data::fluent_functions,
+                            &Data::objects,
+                            &Data::static_atoms,
+                            &Data::fluent_atoms,
+                            &Data::static_fterm_values,
+                            &Data::fluent_fterm_values,
+                            &Data::goal,
+                            &Data::predicate_rules,
+                            &Data::function_rules> {};
     }
-    auto identifying_members() const noexcept
+    static constexpr auto identifying_members() noexcept
     {
-        return std::tie(static_predicates,
-                        fluent_predicates,
-                        static_functions,
-                        fluent_functions,
-                        objects,
-                        static_atoms,
-                        fluent_atoms,
-                        static_fterm_values,
-                        fluent_fterm_values,
-                        goal,
-                        metric,
-                        predicate_rules,
-                        function_rules);
+        return ygg::Members<&Data::static_predicates,
+                            &Data::fluent_predicates,
+                            &Data::static_functions,
+                            &Data::fluent_functions,
+                            &Data::objects,
+                            &Data::static_atoms,
+                            &Data::fluent_atoms,
+                            &Data::static_fterm_values,
+                            &Data::fluent_fterm_values,
+                            &Data::goal,
+                            &Data::predicate_rules,
+                            &Data::function_rules> {};
     }
+    void clear() noexcept { ygg::clear_members(*this); }
 };
 
-static_assert(!ygg::uses_trivial_storage_v<::tyr::formalism::datalog::Program>);
+static_assert(!ygg::uses_trivial_storage_v<::tyr::formalism::datalog::Program<::tyr::LiftedTag>>);
+static_assert(!ygg::uses_trivial_storage_v<::tyr::formalism::datalog::Program<::tyr::GroundTag>>);
 
 }
 

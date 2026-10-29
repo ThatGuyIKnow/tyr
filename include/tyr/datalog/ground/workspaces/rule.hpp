@@ -19,6 +19,7 @@
 #define TYR_DATALOG_GROUND_WORKSPACES_RULE_HPP_
 
 #include "tyr/datalog/declarations.hpp"
+#include "tyr/datalog/policies/aggregation.hpp"
 #include "tyr/formalism/datalog/repository.hpp"
 
 #include <optional>
@@ -35,12 +36,12 @@ struct RuleState
     std::vector<bool> numeric_constraint_satisfied;
 };
 
-template<::tyr::formalism::RelationKind R>
+template<formalism::RelationKind R>
 struct RuleWorkspace<GroundTag, R>
 {
     std::vector<RuleState> states;
 
-    explicit RuleWorkspace(::tyr::formalism::datalog::ProgramView<GroundTag>) {}
+    explicit RuleWorkspace(formalism::datalog::ProgramView<GroundTag>) {}
 
     void clear() { states.clear(); }
 };

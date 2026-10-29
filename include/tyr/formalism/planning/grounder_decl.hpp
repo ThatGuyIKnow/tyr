@@ -19,7 +19,6 @@
 #define TYR_FORMALISM_PLANNING_GROUNDER_DECL_HPP_
 
 #include "tyr/formalism/planning/declarations.hpp"
-#include "tyr/formalism/planning/repository.hpp"
 
 #include <yggdrasil/containers/associative_containers.hpp>
 #include <yggdrasil/semantics/equal_to.hpp>
@@ -27,22 +26,33 @@
 
 namespace tyr::formalism::planning
 {
-struct GrounderContext
+/// Where grounding, copying or merging writes: the objects are the caller's and outlive the context.
+class GrounderContext
 {
-    Builder& builder;
-    Repository& destination;
-    ygg::IndexList<Object>& binding;
-};
+public:
+    GrounderContext(Builder& builder, Repository& destination, ygg::IndexList<Object>& binding) noexcept :
+        m_builder(&builder),
+        m_destination(&destination),
+        m_binding(&binding)
+    {
+    }
 
+    [[nodiscard]] Builder& builder() const noexcept { return *m_builder; }
+    [[nodiscard]] Repository& destination() const noexcept { return *m_destination; }
+    [[nodiscard]] ygg::IndexList<Object>& binding() const noexcept { return *m_binding; }
+
+private:
+    Builder* m_builder;
+    Repository* m_destination;
+    ygg::IndexList<Object>* m_binding;
+};
 template<typename T>
 struct GrounderCacheEntry;
 
 template<>
-struct GrounderCacheEntry<Axiom>
+struct GrounderCacheEntry<Axiom<LiftedTag>>
 {
-    using container_type = ygg::UnorderedMap<ygg::Index<RelationBinding<Axiom>>, ygg::Index<GroundAxiom>>;
-
-    container_type container;
+    ygg::UnorderedMap<ygg::Index<RelationBinding<Axiom<LiftedTag>>>, ygg::Index<Axiom<GroundTag>>> container;
 };
 
 }

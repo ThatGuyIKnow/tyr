@@ -40,15 +40,15 @@ namespace tyr::formalism::planning::invariant
 
 namespace
 {
-tyr::formalism::unification::SubstitutionFunction<ygg::Data<Term>> make_effect_alpha_renaming(const MutableConditionalEffect& effect, size_t fresh_base)
+unification::SubstitutionFunction<ygg::Data<Term>> make_effect_alpha_renaming(const MutableConditionalEffect& effect, size_t fresh_base)
 {
-    auto sigma =
-        tyr::formalism::unification::SubstitutionFunction<ygg::Data<Term>>::from_range(ParameterIndex { ygg::uint_t(effect.num_parent_variables) }, effect.num_variables);
+    auto sigma = unification::SubstitutionFunction<ygg::Data<Term>>::from_range(ParameterIndex { static_cast<ygg::uint_t>(effect.num_parent_variables) },
+                                                                                effect.num_variables);
 
     for (size_t i = 0; i < effect.num_variables; ++i)
     {
-        [[maybe_unused]] const auto inserted =
-            sigma.assign(ParameterIndex { ygg::uint_t(effect.num_parent_variables + i) }, ygg::Data<Term>(ParameterIndex { ygg::uint_t(fresh_base + i) }));
+        [[maybe_unused]] const auto inserted = sigma.assign(ParameterIndex { static_cast<ygg::uint_t>(effect.num_parent_variables + i) },
+                                                            ygg::Data<Term>(ParameterIndex { static_cast<ygg::uint_t>(fresh_base + i) }));
         assert(inserted);
     }
 
@@ -61,7 +61,7 @@ struct EffectAtomRef
     const MutableAtom<FluentTag>* atom;
 };
 
-std::vector<EffectAtomRef> collect_relevant_effect_atoms(const MutableAction& op, const Invariant& inv, bool polarity)
+std::vector<EffectAtomRef> collect_relevant_effect_atoms(const MutableAction& op, const MutableInvariant& inv, bool polarity)
 {
     std::vector<EffectAtomRef> result;
 
@@ -80,20 +80,56 @@ std::vector<EffectAtomRef> collect_relevant_effect_atoms(const MutableAction& op
     return result;
 }
 
-ygg::Map<PredicateView<FluentTag>, MutableLiteralList<FluentTag>>
-build_add_effect_produced_by_pred(const MutableAction& op, const MutableConditionalEffect& add_effect, const MutableAtom<FluentTag>& add_atom)
+/// Appends the literals of `condition` to `conjunction`; the proofs read only the literal lists.
+void append_condition(MutableConjunctiveCondition& conjunction, const MutableConjunctiveCondition& condition)
 {
-    ygg::Map<PredicateView<FluentTag>, MutableLiteralList<FluentTag>> produced_by_pred;
+    conjunction.static_literals.insert(conjunction.static_literals.end(), condition.static_literals.begin(), condition.static_literals.end());
+    conjunction.fluent_literals.insert(conjunction.fluent_literals.end(), condition.fluent_literals.begin(), condition.fluent_literals.end());
+    conjunction.derived_literals.insert(conjunction.derived_literals.end(), condition.derived_literals.begin(), condition.derived_literals.end());
+}
 
-    for (const auto& lit : op.condition.fluent_literals)
-        produced_by_pred[lit.atom.predicate].push_back(lit);
+/// What holds when the action applies and the add effect adds something new: the precondition, the add effect's condition
+/// and the added atom being false (Helmert 2009, Fig. 7: o'.precond ∧ e.cond ∧ ¬e.atom).
+MutableConjunctiveCondition
+build_add_effect_produced(const MutableAction& op, const MutableConditionalEffect& add_effect, const MutableAtom<FluentTag>& add_atom)
+{
+    auto produced = MutableConjunctiveCondition(0, op.num_variables, {}, {}, {});
+    append_condition(produced, op.condition);
+    append_condition(produced, add_effect.condition);
+    produced.fluent_literals.emplace_back(add_atom, false);
+    return produced;
+}
 
-    for (const auto& lit : add_effect.effect.literals)
-        produced_by_pred[lit.atom.predicate].push_back(lit);
+/// Requires each literal of `required` to equal some literal of the same predicate and sign in `produced`; false if one
+/// has no candidate.
+template<FactKind T>
+bool add_entailment(ConstraintSystem& system, const MutableLiteralList<T>& required, const MutableLiteralList<T>& produced)
+{
+    for (const auto& lit : required)
+    {
+        std::vector<EqualityConjunction> possibilities;
 
-    produced_by_pred[add_atom.predicate].push_back(MutableLiteral<FluentTag>(add_atom, false));
+        for (const auto& match : produced)
+        {
+            if (match.polarity != lit.polarity || match.atom.predicate != lit.atom.predicate)
+                continue;
 
-    return produced_by_pred;
+            std::vector<std::pair<ConstraintTerm, ConstraintTerm>> eqs;
+            eqs.reserve(lit.atom.terms.size());
+
+            for (size_t i = 0; i < lit.atom.terms.size(); ++i)
+                eqs.emplace_back(make_constraint_term(lit.atom.terms[i]), make_constraint_term(match.atom.terms[i]));
+
+            possibilities.emplace_back(std::move(eqs));
+        }
+
+        if (possibilities.empty())
+            return false;
+
+        system.add_equality_DNF(std::move(possibilities));
+    }
+
+    return true;
 }
 
 ConstraintSystem make_param_system(const MutableAction& op, const MutableConditionalEffect& add_effect, const EqualityConjunction& add_cover)
@@ -111,10 +147,10 @@ ConstraintSystem make_param_system(const MutableAction& op, const MutableConditi
     params.reserve(op.num_variables + add_effect.num_variables);
 
     for (size_t i = 0; i < op.num_variables; ++i)
-        params.push_back(ParameterIndex(i));
+        params.emplace_back(i);
 
     for (size_t i = 0; i < add_effect.num_variables; ++i)
-        params.push_back(ParameterIndex(add_effect.num_parent_variables + i));
+        params.emplace_back(add_effect.num_parent_variables + i);
 
     for (const auto param : params)
     {
@@ -145,45 +181,22 @@ ConstraintSystem make_param_system(const MutableAction& op, const MutableConditi
     return param_system;
 }
 
+/// The delete effect balances the add effect if its condition and the deleted atom are entailed by what produced the add:
+/// every required literal equals some literal of the same predicate and sign in `produced`.
 std::optional<ConstraintSystem> make_balance_system(const MutableAtom<FluentTag>& add_atom,
-                                                    const MutableConditionalEffect& del_effect,
+                                                    const MutableConjunctiveCondition& del_condition,
                                                     const MutableAtom<FluentTag>& del_atom,
-                                                    const ygg::Map<PredicateView<FluentTag>, MutableLiteralList<FluentTag>>& produced_by_pred)
+                                                    const MutableConjunctiveCondition& produced)
 {
     ConstraintSystem system;
 
-    MutableLiteralList<FluentTag> del_required = del_effect.condition.fluent_literals;
-    del_required.push_back(MutableLiteral<FluentTag>(del_atom, true));
+    auto del_fluent_required = del_condition.fluent_literals;
+    del_fluent_required.emplace_back(del_atom, true);
 
-    for (const auto& lit : del_required)
-    {
-        std::vector<EqualityConjunction> possibilities;
-
-        const auto it = produced_by_pred.find(lit.atom.predicate);
-        if (it == produced_by_pred.end())
-            return std::nullopt;
-
-        for (const auto& match : it->second)
-        {
-            if (match.polarity != lit.polarity)
-                continue;
-
-            std::vector<std::pair<ConstraintTerm, ConstraintTerm>> eqs;
-            eqs.reserve(lit.atom.terms.size());
-
-            for (size_t i = 0; i < lit.atom.terms.size(); ++i)
-            {
-                eqs.emplace_back(make_constraint_term(lit.atom.terms[i]), make_constraint_term(match.atom.terms[i]));
-            }
-
-            possibilities.emplace_back(std::move(eqs));
-        }
-
-        if (possibilities.empty())
-            return std::nullopt;
-
-        system.add_equality_DNF(std::move(possibilities));
-    }
+    if (!add_entailment(system, del_condition.static_literals, produced.static_literals)
+        || !add_entailment(system, del_fluent_required, produced.fluent_literals)
+        || !add_entailment(system, del_condition.derived_literals, produced.derived_literals))
+        return std::nullopt;
 
     ensure_inequality(system, add_atom, del_atom);
     return system;
@@ -191,12 +204,9 @@ std::optional<ConstraintSystem> make_balance_system(const MutableAtom<FluentTag>
 
 }  // namespace
 
-bool is_operator_too_heavy(const MutableAction& op, const Invariant& inv)
+bool is_operator_too_heavy(const MutableAction& op, const MutableInvariant& inv)
 {
     const auto add_effects = collect_relevant_effect_atoms(op, inv, true);
-
-    if (add_effects.size() <= 1)
-        return false;
 
     size_t max_num_effect_variables = 0;
     for (const auto& eff : op.effects)
@@ -207,7 +217,10 @@ bool is_operator_too_heavy(const MutableAction& op, const Invariant& inv)
 
     for (size_t i = 0; i < add_effects.size(); ++i)
     {
-        for (size_t j = i + 1; j < add_effects.size(); ++j)
+        // An effect with its own variables is also paired with a fresh copy of itself: two of its instantiations can add
+        // two atoms of one instance (Helmert 2009, Fig. 7: duplicate quantified effects).
+        const auto first_partner = (add_effects[i].effect->num_variables > 0) ? i : i + 1;
+        for (size_t j = first_partner; j < add_effects.size(); ++j)
         {
             const auto& eff1 = add_effects[i];
             const auto& eff2 = add_effects[j];
@@ -215,11 +228,11 @@ bool is_operator_too_heavy(const MutableAction& op, const Invariant& inv)
             const auto lhs_sigma = make_effect_alpha_renaming(*eff1.effect, fresh_base_lhs);
             const auto rhs_sigma = make_effect_alpha_renaming(*eff2.effect, fresh_base_rhs);
 
-            const auto lhs_atom = tyr::formalism::unification::apply_substitution(*eff1.atom, lhs_sigma);
-            const auto rhs_atom = tyr::formalism::unification::apply_substitution(*eff2.atom, rhs_sigma);
+            const auto lhs_atom = unification::apply_substitution(*eff1.atom, lhs_sigma);
+            const auto rhs_atom = unification::apply_substitution(*eff2.atom, rhs_sigma);
 
-            const auto lhs_cond = tyr::formalism::unification::apply_substitution(eff1.effect->condition, lhs_sigma);
-            const auto rhs_cond = tyr::formalism::unification::apply_substitution(eff2.effect->condition, rhs_sigma);
+            const auto lhs_cond = unification::apply_substitution(eff1.effect->condition, lhs_sigma);
+            const auto rhs_cond = unification::apply_substitution(eff2.effect->condition, rhs_sigma);
 
             const auto* lhs_pattern = find_part(inv, lhs_atom.predicate);
             const auto* rhs_pattern = find_part(inv, rhs_atom.predicate);
@@ -232,11 +245,12 @@ bool is_operator_too_heavy(const MutableAction& op, const Invariant& inv)
             ensure_cover(system, *lhs_pattern, lhs_atom, inv);
             ensure_cover(system, *rhs_pattern, rhs_atom, inv);
 
-            MutableLiteralList<FluentTag> conjunction = op.condition.fluent_literals;
-            conjunction.insert(conjunction.end(), lhs_cond.fluent_literals.begin(), lhs_cond.fluent_literals.end());
-            conjunction.insert(conjunction.end(), rhs_cond.fluent_literals.begin(), rhs_cond.fluent_literals.end());
-            conjunction.push_back(MutableLiteral<FluentTag>(lhs_atom, false));
-            conjunction.push_back(MutableLiteral<FluentTag>(rhs_atom, false));
+            auto conjunction = MutableConjunctiveCondition(0, op.num_variables, {}, {}, {});
+            append_condition(conjunction, op.condition);
+            append_condition(conjunction, lhs_cond);
+            append_condition(conjunction, rhs_cond);
+            conjunction.fluent_literals.emplace_back(lhs_atom, false);
+            conjunction.fluent_literals.emplace_back(rhs_atom, false);
 
             ensure_conjunction_sat(system, conjunction);
 
@@ -248,7 +262,10 @@ bool is_operator_too_heavy(const MutableAction& op, const Invariant& inv)
     return false;
 }
 
-bool is_add_effect_unbalanced(const MutableAction& op, const MutableConditionalEffect& add_effect, const MutableAtom<FluentTag>& add_atom, const Invariant& inv)
+bool is_add_effect_unbalanced(const MutableAction& op,
+                              const MutableConditionalEffect& add_effect,
+                              const MutableAtom<FluentTag>& add_atom,
+                              const MutableInvariant& inv)
 {
     const auto* add_pattern = find_part(inv, add_atom.predicate);
     if (add_pattern == nullptr)
@@ -257,9 +274,17 @@ bool is_add_effect_unbalanced(const MutableAction& op, const MutableConditionalE
     const auto add_cover = make_cover_equality_conjunction(*add_pattern, add_atom, inv);
 
     auto param_system = make_param_system(op, add_effect, add_cover);
-    const auto produced_by_pred = build_add_effect_produced_by_pred(op, add_effect, add_atom);
+    const auto produced = build_add_effect_produced(op, add_effect, add_atom);
 
     const auto del_effects = collect_relevant_effect_atoms(op, inv, false);
+
+    // A delete effect's own variables are renamed past every effect's local range, also within the add's effect, and stay
+    // free in the constraint system: Fast Downward flattens effects into one per literal, each with its own variables,
+    // and a universal delete balances the add if some instantiation of it is entailed.
+    size_t max_num_effect_variables = 0;
+    for (const auto& eff : op.effects)
+        max_num_effect_variables = std::max(max_num_effect_variables, eff.num_variables);
+    const size_t fresh_base = op.num_variables + max_num_effect_variables;
 
     for (const auto& del_ref : del_effects)
     {
@@ -267,13 +292,17 @@ bool is_add_effect_unbalanced(const MutableAction& op, const MutableConditionalE
         if (del_pattern == nullptr)
             continue;
 
-        auto balance_system = make_balance_system(add_atom, *del_ref.effect, *del_ref.atom, produced_by_pred);
+        const auto sigma = make_effect_alpha_renaming(*del_ref.effect, fresh_base);
+        const auto del_atom = unification::apply_substitution(*del_ref.atom, sigma);
+        const auto del_condition = unification::apply_substitution(del_ref.effect->condition, sigma);
+
+        auto balance_system = make_balance_system(add_atom, del_condition, del_atom, produced);
         if (!balance_system.has_value())
             continue;
 
         ConstraintSystem system;
         system.add_equality_conjunction(add_cover);
-        ensure_cover(system, *del_pattern, *del_ref.atom, inv);
+        ensure_cover(system, *del_pattern, del_atom, inv);
         system.extend(*balance_system);
         system.extend(param_system);
 
@@ -284,7 +313,7 @@ bool is_add_effect_unbalanced(const MutableAction& op, const MutableConditionalE
     return true;
 }
 
-ProofResult prove_invariant(const Invariant& inv, const MutableActionList& ops)
+ProofResult prove_invariant(const MutableInvariant& inv, const MutableActionList& ops)
 {
     for (size_t op_index = 0; op_index < ops.size(); ++op_index)
     {

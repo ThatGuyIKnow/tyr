@@ -19,12 +19,11 @@
 
 #include "tyr/formalism/planning/formatter.hpp"
 #include "tyr/planning/formatter.hpp"
-#include "tyr/planning/ground/state_view.hpp"
 #include "tyr/planning/ground/task.hpp"
-#include "tyr/planning/lifted/state_view.hpp"
 #include "tyr/planning/lifted/task.hpp"
 #include "tyr/planning/node.hpp"
 #include "tyr/planning/plan.hpp"
+#include "tyr/planning/state_repository.hpp"
 
 #include <fmt/ostream.h>
 
@@ -42,8 +41,8 @@ public:
     void on_expand_node(const Node<Kind>& node) override
     {
         fmt::print("[GBFS][Worker {}] ----------------------------------------\n[GBFS][Worker {}] Expanding node: {}\n\n",
-                   ygg::uint_t(m_index),
-                   ygg::uint_t(m_index),
+                   static_cast<ygg::uint_t>(m_index),
+                   static_cast<ygg::uint_t>(m_index),
                    node);
     }
 
@@ -52,9 +51,9 @@ public:
         if (outcome != TransitionOutcome::OPENED && outcome != TransitionOutcome::GOAL)
             return;
         fmt::print("[GBFS][Worker {}] Action: {}\n[GBFS][Worker {}] Successor node: {}\n\n",
-                   ygg::uint_t(m_index),
+                   static_cast<ygg::uint_t>(m_index),
                    labeled_succ_node.label,
-                   ygg::uint_t(m_index),
+                   static_cast<ygg::uint_t>(m_index),
                    labeled_succ_node.node);
     }
 
@@ -111,9 +110,7 @@ WorkerEventHandlerPtr<Kind> DefaultEventHandler<Kind>::make_worker(ygg::Index<Wo
 
 template<TaskKind Kind>
 DefaultEventHandlerPtr<Kind> DefaultEventHandler<Kind>::create(size_t verbosity)
-{
-    return std::make_shared<DefaultEventHandler<Kind>>(verbosity);
-}
+{ return std::make_shared<DefaultEventHandler<Kind>>(verbosity); }
 
 template class DefaultEventHandler<LiftedTag>;
 template class DefaultEventHandler<GroundTag>;

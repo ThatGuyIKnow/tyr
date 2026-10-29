@@ -33,17 +33,17 @@ namespace tyr::datalog
 /// Zero-cost conservative reachability: solvers ignore annotation-only metric effects and cost credits.
 class NoAnnotationPolicy
 {
-public:
-    using PredicateHead = ::tyr::formalism::datalog::PredicateBindingView<::tyr::formalism::FluentTag>;
-    using FunctionBinding = ::tyr::formalism::datalog::FunctionBindingView<::tyr::formalism::FluentTag>;
+    using PredicateHead = formalism::datalog::PredicateBindingIndex<formalism::FluentTag>;
+    using FunctionBinding = formalism::datalog::FunctionBindingIndex<formalism::FluentTag>;
 
+public:
     static constexpr bool stores_annotations = false;
     static constexpr bool records_propositional_achievers = false;
 
-    bool is_widening_label_preserving(Cost, Cost) const noexcept { return true; }
+    [[nodiscard]] bool is_widening_label_preserving(Cost, Cost) const noexcept { return true; }
 
     void initialize_annotation(PredicateHead, PredicateAnnotations<>&) const noexcept {}
-    void initialize_annotation(FunctionBinding, ygg::ClosedInterval<ygg::float_t>, FunctionAnnotations<>&) const noexcept {}
+    void initialize_annotation(FunctionBinding, const ygg::ClosedInterval<ygg::float_t>&, FunctionAnnotations<>&) const noexcept {}
 
     void clear_achievers() noexcept {}
 };
@@ -53,15 +53,18 @@ class MinCostAnnotationPolicy
 {
 public:
     using Aggregation = AggregationFunction;
-    using PredicateHead = ::tyr::formalism::datalog::PredicateBindingView<::tyr::formalism::FluentTag>;
-    using FunctionBinding = ::tyr::formalism::datalog::FunctionBindingView<::tyr::formalism::FluentTag>;
-    using PredicateWitness = WitnessAnnotation<::tyr::formalism::PredicateTag>;
-    using FunctionWitness = WitnessAnnotation<::tyr::formalism::FunctionTag>;
 
+private:
+    using PredicateHead = formalism::datalog::PredicateBindingIndex<formalism::FluentTag>;
+    using FunctionBinding = formalism::datalog::FunctionBindingIndex<formalism::FluentTag>;
+    using PredicateWitness = WitnessAnnotation<formalism::PredicateTag>;
+    using FunctionWitness = WitnessAnnotation<formalism::FunctionTag>;
+
+public:
     static constexpr bool stores_annotations = true;
     static constexpr bool records_propositional_achievers = false;
 
-    bool is_widening_label_preserving(Cost candidate_label, Cost current_target_label) const noexcept
+    [[nodiscard]] bool is_widening_label_preserving(Cost candidate_label, Cost current_target_label) const noexcept
     {
         if constexpr (std::same_as<AggregationFunction, MaxAggregation>)
             return true;
@@ -70,56 +73,71 @@ public:
 
     void initialize_annotation(PredicateHead head, PredicateAnnotations<>& annotations) const;
 
-    void initialize_annotation(FunctionBinding head, ygg::ClosedInterval<ygg::float_t> interval, FunctionAnnotations<>& numeric_annotations) const;
+    void initialize_annotation(FunctionBinding head, const ygg::ClosedInterval<ygg::float_t>& interval, FunctionAnnotations<>& numeric_annotations) const;
 
     void clear_achievers() noexcept {}
 
-    void record_achiever(PredicateHead, PredicateWitness) const noexcept {}
+    void record_achiever(PredicateHead, const PredicateWitness&) const noexcept {}
 
-    template<bool ThreadSafe>
-    std::optional<CostUpdate> publish_annotation(PredicateHead head, PredicateWitness witness, PredicateAnnotations<ThreadSafe>& annotations) const
-    {
-        return annotations.insert_if_better(head, Annotation<>(std::move(witness)));
-    }
+    template<PredicateAnnotationStore Annotations>
+    std::optional<CostUpdate> publish_annotation(PredicateHead head, PredicateWitness witness, Annotations& annotations) const
+    { return annotations.insert_if_better(head, Annotation<>(std::move(witness))); }
 
-    template<bool ThreadSafe>
-    bool try_update_candidate(PredicateHead head, PredicateWitness&& witness, PredicateAnnotations<ThreadSafe>& annotations) const
-    {
-        return publish_annotation(head, std::move(witness), annotations).has_value();
-    }
+    template<PredicateAnnotationStore Annotations>
+    bool try_update_candidate(PredicateHead head, PredicateWitness&& witness, Annotations& annotations) const
+    { return publish_annotation(head, std::move(witness), annotations).has_value(); }
 
-    template<bool ThreadSafe>
+    template<FunctionAnnotationStore Annotations>
     bool try_update_candidate(FunctionBinding head,
-                              ygg::ClosedInterval<ygg::float_t> interval,
+                              const ygg::ClosedInterval<ygg::float_t>& interval,
                               FunctionWitness&& witness,
-                              FunctionAnnotations<ThreadSafe>& numeric_annotations) const
+                              Annotations& numeric_annotations) const
+    { return numeric_annotations.insert(head, interval, Annotation<formalism::FunctionTag>(std::move(witness))); }
+
+    template<PredicateAnnotationStore DeltaAnnotations>
+    [[nodiscard]] bool
+    can_update(PredicateHead head, Cost cost, const PredicateAnnotations<>& annotations, const DeltaAnnotations& delta_annotations) const noexcept
+    { return cost < std::min(annotations.fetch_cost(head), delta_annotations.fetch_cost(head)); }
+
+    template<FunctionAnnotationStore DeltaAnnotations>
+    [[nodiscard]] bool can_update(FunctionBinding head,
+                                  const ygg::ClosedInterval<ygg::float_t>& interval,
+                                  Cost cost,
+                                  const FunctionAnnotations<>& numeric_annotations,
+                                  const DeltaAnnotations& delta_numeric_annotations) const noexcept
+    { return cost < std::min(numeric_annotations.fetch_cost(head, interval), delta_numeric_annotations.fetch_cost(head, interval)); }
+
+    template<PredicateAnnotationStore DeltaAnnotations>
+    CostUpdate commit_annotation(PredicateHead head, const DeltaAnnotations& delta_annotations, PredicateAnnotations<>& annotations) const
     {
-        return numeric_annotations.insert(head, interval, Annotation<::tyr::formalism::FunctionTag>(std::move(witness)));
+        const auto old_cost = annotations.fetch_cost(head);
+        if (const auto* delta_annotation = delta_annotations.find(head))
+            if (auto update = annotations.insert_if_better(head, *delta_annotation))
+                return *update;
+        return CostUpdate(old_cost, old_cost);
     }
 
-    bool
-    can_update(PredicateHead head, Cost cost, const PredicateAnnotations<>& annotations, const PredicateAnnotations<true>& delta_annotations) const noexcept;
-
-    bool can_update(FunctionBinding head,
-                    ygg::ClosedInterval<ygg::float_t> interval,
-                    Cost cost,
-                    const FunctionAnnotations<>& numeric_annotations,
-                    const FunctionAnnotations<true>& delta_numeric_annotations) const noexcept;
-
-    CostUpdate commit_annotation(PredicateHead head, const PredicateAnnotations<true>& delta_annotations, PredicateAnnotations<>& annotations) const;
-
+    template<FunctionAnnotationStore DeltaAnnotations>
     CostUpdate commit_annotation(FunctionBinding head,
-                                 ygg::ClosedInterval<ygg::float_t> interval,
-                                 const FunctionAnnotations<true>& delta_numeric_annotations,
-                                 FunctionAnnotations<>& numeric_annotations) const;
+                                 const ygg::ClosedInterval<ygg::float_t>& interval,
+                                 const DeltaAnnotations& delta_numeric_annotations,
+                                 FunctionAnnotations<>& numeric_annotations) const
+    {
+        const auto old_cost = numeric_annotations.fetch_cost(head, interval);
+        const auto* delta_annotation = delta_numeric_annotations.find(head, interval);
+        if (delta_annotation && numeric_annotations.insert(head, interval, *delta_annotation))
+            return CostUpdate(old_cost, get_cost(*delta_annotation));
+        return CostUpdate(old_cost, old_cost);
+    }
 };
 
 template<typename AggregationFunction>
 class MinCostAnnotationWithAchieversPolicy : public MinCostAnnotationPolicy<AggregationFunction>
 {
+    using PredicateHead = formalism::datalog::PredicateBindingIndex<formalism::FluentTag>;
+    using PredicateWitness = WitnessAnnotation<formalism::PredicateTag>;
+
 public:
-    using PredicateHead = ::tyr::formalism::datalog::PredicateBindingView<::tyr::formalism::FluentTag>;
-    using PredicateWitness = WitnessAnnotation<::tyr::formalism::PredicateTag>;
     using Achievers = std::vector<PredicateWitness>;
 
     static constexpr bool records_propositional_achievers = true;
@@ -128,12 +146,12 @@ public:
 
     void clear_achievers() noexcept;
 
-    const Achievers* find_achievers(PredicateHead head) const noexcept;
+    [[nodiscard]] const Achievers* find_achievers(PredicateHead head) const noexcept;
 
     void record_achiever(PredicateHead head, PredicateWitness witness);
 
 private:
-    using RuleBinding = ::tyr::formalism::datalog::RuleBindingView<::tyr::formalism::PredicateTag>;
+    using RuleBinding = formalism::datalog::RuleBindingIndex<formalism::PredicateTag>;
 
     struct IndexedAchievers
     {
@@ -141,9 +159,8 @@ private:
         ygg::UnorderedMap<RuleBinding, size_t> indices;
     };
 
-    DenseRelationMap<::tyr::formalism::PredicateTag, IndexedAchievers> m_achievers;
+    DenseRelationMap<formalism::PredicateTag, IndexedAchievers> m_achievers;
 };
-
 }
 
 #endif

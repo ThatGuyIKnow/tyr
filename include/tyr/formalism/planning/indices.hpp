@@ -15,39 +15,12 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
-
 #ifndef TYR_FORMALISM_PLANNING_INDICES_HPP_
 #define TYR_FORMALISM_PLANNING_INDICES_HPP_
 
 #include "tyr/formalism/indices.hpp"
 #include "tyr/formalism/planning/action_index.hpp"
-#include "tyr/formalism/planning/atom_index.hpp"
-#include "tyr/formalism/planning/axiom_index.hpp"
-#include "tyr/formalism/planning/binary_operator_index.hpp"
-#include "tyr/formalism/planning/conditional_effect_index.hpp"
-#include "tyr/formalism/planning/conjunctive_condition_index.hpp"
-#include "tyr/formalism/planning/conjunctive_effect_index.hpp"
-#include "tyr/formalism/planning/domain_index.hpp"
+#include "tyr/formalism/planning/declarations.hpp"
 #include "tyr/formalism/planning/fdr_fact_data.hpp"
-#include "tyr/formalism/planning/fdr_task_index.hpp"
-#include "tyr/formalism/planning/fdr_variable_index.hpp"
-#include "tyr/formalism/planning/function_term_index.hpp"
-#include "tyr/formalism/planning/ground_action_index.hpp"
-#include "tyr/formalism/planning/ground_atom_index.hpp"
-#include "tyr/formalism/planning/ground_axiom_index.hpp"
-#include "tyr/formalism/planning/ground_conditional_effect_index.hpp"
-#include "tyr/formalism/planning/ground_conjunctive_condition_index.hpp"
-#include "tyr/formalism/planning/ground_conjunctive_effect_index.hpp"
-#include "tyr/formalism/planning/ground_function_term_index.hpp"
-#include "tyr/formalism/planning/ground_function_term_value_index.hpp"
-#include "tyr/formalism/planning/ground_literal_index.hpp"
-#include "tyr/formalism/planning/ground_numeric_effect_index.hpp"
-#include "tyr/formalism/planning/literal_index.hpp"
-#include "tyr/formalism/planning/metric_index.hpp"
-#include "tyr/formalism/planning/multi_operator_index.hpp"
-#include "tyr/formalism/planning/numeric_effect_index.hpp"
-#include "tyr/formalism/planning/task_index.hpp"
-#include "tyr/formalism/planning/unary_operator_index.hpp"
 
 #endif

@@ -26,10 +26,8 @@ namespace
 bool uses_parameter(const ygg::Data<Term>& term, ParameterIndex parameter)
 {
     return std::visit(
-        [&](auto&& arg) -> bool
+        [&]<typename T>(const T& arg) -> bool
         {
-            using T = std::decay_t<decltype(arg)>;
-
             if constexpr (std::is_same_v<T, ParameterIndex>)
                 return arg == parameter;
             else if constexpr (std::is_same_v<T, ygg::Index<Object>>)
@@ -37,7 +35,7 @@ bool uses_parameter(const ygg::Data<Term>& term, ParameterIndex parameter)
             else
                 static_assert(ygg::dependent_false<T>::value, "Missing case");
         },
-        term.value);
+        term.variant);
 }
 
 bool uses_parameter(const MutableAtom<FluentTag>& atom, ParameterIndex parameter)
@@ -45,12 +43,12 @@ bool uses_parameter(const MutableAtom<FluentTag>& atom, ParameterIndex parameter
     return std::ranges::any_of(atom.terms, [&](const auto& term) { return uses_parameter(term, parameter); });
 }
 
-bool uses_parameter(const Invariant& inv, ParameterIndex parameter)
+bool uses_parameter(const MutableInvariant& inv, ParameterIndex parameter)
 {
     return std::ranges::any_of(inv.atoms, [&](const auto& atom) { return uses_parameter(atom, parameter); });
 }
 
-void remove_covered_atoms(Invariant& inv)
+void remove_covered_atoms(MutableInvariant& inv)
 {
     MutableAtomList<FluentTag> kept;
     kept.reserve(inv.atoms.size());
@@ -64,7 +62,7 @@ void remove_covered_atoms(Invariant& inv)
             if (i == j)
                 continue;
 
-            const auto singleton = Invariant(inv.num_rigid_variables, inv.num_counted_variables, MutableAtomList<FluentTag> { inv.atoms[j] });
+            const auto singleton = MutableInvariant(inv.num_rigid_variables, inv.num_counted_variables, MutableAtomList<FluentTag> { inv.atoms[j] });
 
             if (covers(singleton, inv.atoms[i]))
             {
@@ -80,7 +78,7 @@ void remove_covered_atoms(Invariant& inv)
     inv.atoms = std::move(kept);
 }
 
-void remove_unused_parameters(Invariant& inv)
+void remove_unused_parameters(MutableInvariant& inv)
 {
     const size_t total = inv.num_rigid_variables + inv.num_counted_variables;
     std::vector<bool> used(total, false);
@@ -108,10 +106,8 @@ void remove_unused_parameters(Invariant& inv)
         for (auto& term : atom.terms)
         {
             term = std::visit(
-                [&](auto&& arg) -> ygg::Data<Term>
+                [&]<typename T>(const T& arg) -> ygg::Data<Term>
                 {
-                    using T = std::decay_t<decltype(arg)>;
-
                     if constexpr (std::is_same_v<T, ParameterIndex>)
                         return ygg::Data<Term>(*remap[static_cast<ygg::uint_t>(arg)]);
                     else if constexpr (std::is_same_v<T, ygg::Index<Object>>)
@@ -119,7 +115,7 @@ void remove_unused_parameters(Invariant& inv)
                     else
                         static_assert(ygg::dependent_false<T>::value, "Missing case");
                 },
-                term.value);
+                term.variant);
         }
     }
 
@@ -129,7 +125,7 @@ void remove_unused_parameters(Invariant& inv)
 
 }
 
-void normalize_invariant(Invariant& inv)
+void normalize_invariant(MutableInvariant& inv)
 {
     remove_covered_atoms(inv);
     remove_unused_parameters(inv);

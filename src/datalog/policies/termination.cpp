@@ -31,9 +31,9 @@ static_assert(TerminationPolicyConcept<TerminationPolicy<SumAggregation>>);
 static_assert(TerminationPolicyConcept<TerminationPolicy<MaxAggregation>>);
 
 template<typename AggregationFunction>
-void TerminationPolicy<AggregationFunction>::set_goals(::tyr::formalism::datalog::GroundConjunctiveConditionView goals_)
+void TerminationPolicy<AggregationFunction>::set_goals(formalism::datalog::ConjunctiveConditionView<GroundTag> goals_)
 {
-    for (const auto literal : goals_.template get_literals<::tyr::formalism::FluentTag>())
+    for (const auto literal : goals_.template get_literals<formalism::FluentTag>())
         if (!literal.get_polarity())
             throw std::invalid_argument("TerminationPolicy requires positive fluent goals");
 
@@ -42,7 +42,7 @@ void TerminationPolicy<AggregationFunction>::set_goals(::tyr::formalism::datalog
 }
 
 template<typename AggregationFunction>
-bool TerminationPolicy<AggregationFunction>::check(const FactSets& fact_sets) const noexcept
+bool TerminationPolicy<AggregationFunction>::check(const FactSets& fact_sets) const
 {
     if (!goals)
         return false;
@@ -51,24 +51,22 @@ bool TerminationPolicy<AggregationFunction>::check(const FactSets& fact_sets) co
 }
 
 template<typename AggregationFunction>
-bool TerminationPolicy<AggregationFunction>::should_terminate(const FactSets& fact_sets) const noexcept
-{
-    return early_termination && check(fact_sets);
-}
+bool TerminationPolicy<AggregationFunction>::should_terminate(const FactSets& fact_sets) const
+{ return early_termination && check(fact_sets); }
 
 template<typename AggregationFunction>
 Cost TerminationPolicy<AggregationFunction>::get_total_cost(const FactSets&,
                                                             const PredicateAnnotations<>& annotations,
                                                             const FunctionAnnotations<>&,
-                                                            const NumericSupportSelector& numeric_support_selector) const noexcept
+                                                            const NumericSupportSelector& numeric_support_selector) const
 {
     if (!goals)
         return AggregationFunction::identity();
 
     auto total = AggregationFunction::identity();
-    for (const auto literal : goals->template get_literals<::tyr::formalism::FluentTag>())
+    for (const auto literal : goals->template get_literals<formalism::FluentTag>())
     {
-        const auto* annotation = annotations.find(literal.get_atom().get_row());
+        const auto* annotation = annotations.find(literal.get_atom().get_row().get_index());
         assert(annotation);
         if (!annotation)
             return std::numeric_limits<Cost>::max();
@@ -92,9 +90,7 @@ Cost TerminationPolicy<AggregationFunction>::get_total_cost(const FactSets&,
 
 template<typename AggregationFunction>
 void TerminationPolicy<AggregationFunction>::reset() noexcept
-{
-    numeric_support_selector_workspace.clear();
-}
+{ numeric_support_selector_workspace.clear(); }
 
 template<typename AggregationFunction>
 void TerminationPolicy<AggregationFunction>::clear() noexcept

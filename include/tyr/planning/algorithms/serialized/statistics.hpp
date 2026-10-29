@@ -18,21 +18,20 @@
 #ifndef TYR_PLANNING_ALGORITHMS_SERIALIZED_STATISTICS_HPP_
 #define TYR_PLANNING_ALGORITHMS_SERIALIZED_STATISTICS_HPP_
 
-#include "tyr/planning/algorithms/concepts.hpp"
 #include "tyr/planning/algorithms/utils.hpp"
 
+#include <concepts>
 #include <vector>
 #include <yggdrasil/core/types.hpp>
 
 namespace tyr::planning::serialized
 {
 
-template<TaskKind Kind, SolverConcept<Kind> Subsolver>
+template<std::copy_constructible Stats = tyr::planning::Statistics>
 class Statistics
 {
-public:
     using SearchStatistics = tyr::planning::Statistics;
-    using SolverStatistics = typename Subsolver::EventHandlerType::StatisticsType;
+    using SolverStatistics = Stats;
 
 private:
     std::vector<SearchStatistics> m_search_statistics;
@@ -48,9 +47,9 @@ public:
     void add_search_statistics(const SearchStatistics& statistics) { m_search_statistics.push_back(statistics); }
     void add_solver_statistics(const SolverStatistics& statistics) { m_solver_statistics.push_back(statistics); }
 
-    ygg::uint_t get_num_subsearches() const { return static_cast<ygg::uint_t>(m_search_statistics.size()); }
-    const std::vector<SearchStatistics>& get_search_statistics() const { return m_search_statistics; }
-    const std::vector<SolverStatistics>& get_solver_statistics() const { return m_solver_statistics; }
+    [[nodiscard]] ygg::uint_t get_num_subsearches() const { return static_cast<ygg::uint_t>(m_search_statistics.size()); }
+    [[nodiscard]] const std::vector<SearchStatistics>& get_search_statistics() const { return m_search_statistics; }
+    [[nodiscard]] const std::vector<SolverStatistics>& get_solver_statistics() const { return m_solver_statistics; }
 };
 
 }  // namespace tyr::planning::serialized

@@ -30,7 +30,7 @@ template<TaskKind Kind>
 class AddRPGHeuristic : public Heuristic<Kind>
 {
 public:
-    AddRPGHeuristic(TaskPtr<Kind> task, ygg::ExecutionContextPtr execution_context, CostMode cost_mode = CostMode::GENERAL);
+    AddRPGHeuristic(TaskPtr<Kind> task, ygg::ExecutionContextPtr execution_context, CostMode cost_mode = CostMode::UNIT);
     ~AddRPGHeuristic() override;
 
     AddRPGHeuristic(const AddRPGHeuristic&) = delete;
@@ -38,11 +38,11 @@ public:
     AddRPGHeuristic(AddRPGHeuristic&&) noexcept;
     AddRPGHeuristic& operator=(AddRPGHeuristic&&) noexcept;
 
-    static AddRPGHeuristicPtr<Kind> create(TaskPtr<Kind> task, ygg::ExecutionContextPtr execution_context, CostMode cost_mode = CostMode::GENERAL);
+    static AddRPGHeuristicPtr<Kind> create(TaskPtr<Kind> task, ygg::ExecutionContextPtr execution_context, CostMode cost_mode = CostMode::UNIT);
 
     using Heuristic<Kind>::evaluate;
 
-    void set_goal(::tyr::formalism::planning::GroundConjunctiveConditionView goal) override;
+    void set_goal(formalism::planning::ConjunctiveConditionView<GroundTag> goal) override;
     ygg::float_t evaluate(const ygg::Builder<State<Kind>>& state) override;
     [[nodiscard]] HeuristicPtr<Kind> make_worker(ygg::ExecutionContextPtr execution_context) const override;
     void print_summary(size_t verbosity) const override;

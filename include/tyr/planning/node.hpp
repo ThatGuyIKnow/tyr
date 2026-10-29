@@ -18,15 +18,18 @@
 #ifndef TYR_PLANNING_NODE_HPP_
 #define TYR_PLANNING_NODE_HPP_
 
+#include "tyr/formalism/binding_view.hpp"
 #include "tyr/formalism/declarations.hpp"
 #include "tyr/formalism/planning/repository.hpp"
-#include "tyr/planning/state_index.hpp"
-#include "tyr/planning/state_view.hpp"
+#include "tyr/planning/declarations.hpp"
+#include "tyr/planning/node_concepts.hpp"
+#include "tyr/planning/state_repository.hpp"
 #include "tyr/planning/task.hpp"
 
 #include <concepts>
 #include <ranges>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <vector>
 #include <yggdrasil/core/config.hpp>
@@ -34,44 +37,73 @@
 
 namespace tyr::planning
 {
-template<TaskKind Kind>
-class Node : public ygg::comparison::Mixin<Node<Kind>>
+template<TaskKind Kind, StateViewConcept<Kind> State>
+class Node : public ygg::comparison::Mixin<Node<Kind, State>>
 {
 public:
-    using TaskType = Task<Kind>;
+    using StateType = State;
 
-    Node(StateView<Kind> state, ygg::float_t metric) noexcept : m_state(std::move(state)), m_metric(metric) {}
+    Node(State state, ygg::float_t metric) noexcept(std::is_nothrow_move_constructible_v<State>) : m_state(std::move(state)), m_metric(metric) {}
 
-    const StateView<Kind>& get_state() const noexcept { return m_state; }
-    ygg::float_t get_metric() const noexcept { return m_metric; }
+    [[nodiscard]] const State& get_state() const noexcept { return m_state; }
+    [[nodiscard]] ygg::float_t get_metric() const noexcept { return m_metric; }
 
-    auto identifying_members() const noexcept { return std::tie(m_state, m_metric); }
+    [[nodiscard]] auto pack() const noexcept(noexcept(m_state.pack()))
+        requires requires(const State& state) {
+            { state.pack() } -> std::same_as<PackedStateView<Kind>>;
+        }
+    { return PackedNode<Kind>(m_state.pack(), m_metric); }
+
+    [[nodiscard]] auto identifying_members() const noexcept
+        requires ygg::Identifiable<State>
+    { return std::tie(m_state, m_metric); }
 
 private:
-    StateView<Kind> m_state;
+    State m_state;
     ygg::float_t m_metric;
 };
 
 template<TaskKind Kind>
-using NodeList = std::vector<Node<Kind>>;
+class PackedNode : public ygg::comparison::Mixin<PackedNode<Kind>>
+{
+public:
+    PackedNode(PackedStateView<Kind> state, ygg::float_t metric) noexcept : m_state(std::move(state)), m_metric(metric) {}
 
-template<TaskKind Kind>
+    [[nodiscard]] const PackedStateView<Kind>& get_state() const noexcept { return m_state; }
+    [[nodiscard]] ygg::float_t get_metric() const noexcept { return m_metric; }
+
+    [[nodiscard]] Node<Kind> unpack() const { return Node<Kind>(m_state.unpack(), m_metric); }
+
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&PackedNode::m_state, &PackedNode::m_metric> {}; }
+
+private:
+    PackedStateView<Kind> m_state;
+    ygg::float_t m_metric;
+};
+
+template<TaskKind Kind,
+         StateViewConcept<Kind> State,
+         ygg::formalism::RelationBindingViewConcept<formalism::planning::Action<LiftedTag>, formalism::ObjectTag> Binding>
 struct LabeledNode
 {
-    ::tyr::formalism::planning::ActionBindingView label;
-    Node<Kind> node;
+    using StateType = State;
+
+    Binding label;
+    Node<Kind, State> node;
+
+    [[nodiscard]] auto pack() const noexcept(noexcept(node.pack()))
+        requires std::same_as<Binding, formalism::planning::ActionBindingView> && requires(const Node<Kind, State>& value) { value.pack(); }
+    { return PackedLabeledNode<Kind> { label, node.pack() }; }
 };
 
 template<TaskKind Kind>
-using LabeledNodeList = std::vector<LabeledNode<Kind>>;
+struct PackedLabeledNode
+{
+    formalism::planning::ActionBindingView label;
+    PackedNode<Kind> node;
 
-template<typename T, typename Kind>
-concept NodeConcept = requires(const T& cn) {
-    requires TaskKind<Kind>;
-    { cn.get_state() } -> std::same_as<const StateView<Kind>&>;
-    { cn.get_metric() } -> std::same_as<ygg::float_t>;
+    [[nodiscard]] LabeledNode<Kind> unpack() const { return { label, node.unpack() }; }
 };
-
 }
 
 #endif

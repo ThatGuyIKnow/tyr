@@ -1,0 +1,62 @@
+/*
+ * Copyright (C) 2025-2026 Dominik Drexler
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#ifndef TYR_FORMALISM_PLANNING_FUNCTION_TERM_VALUE_DATA_HPP_
+#define TYR_FORMALISM_PLANNING_FUNCTION_TERM_VALUE_DATA_HPP_
+
+#include "tyr/formalism/planning/declarations.hpp"
+#include "tyr/formalism/term_data.hpp"
+
+#include <tuple>
+#include <utility>
+#include <yggdrasil/core/types.hpp>
+#include <yggdrasil/core/types_utils.hpp>
+
+namespace ygg
+{
+
+template<::tyr::formalism::FactKind F>
+struct Data<::tyr::formalism::planning::FunctionTermValue<::tyr::GroundTag, F>>
+{
+    ygg::Index<::tyr::formalism::planning::FunctionTermValue<::tyr::GroundTag, F>> index;
+    ygg::Index<::tyr::formalism::planning::FunctionTerm<::tyr::GroundTag, F>> fterm;
+    ygg::float_t value = 0.0;
+
+    Data() = default;
+    Data(ygg::Index<::tyr::formalism::planning::FunctionTerm<::tyr::GroundTag, F>> fterm_, ygg::float_t value_) : index(), fterm(fterm_), value(value_) {}
+    // Python constructor
+    template<typename C>
+    Data(::ygg::View<ygg::Index<::tyr::formalism::planning::FunctionTerm<::tyr::GroundTag, F>>, C> fterm_, ygg::float_t value_) :
+        index(),
+        fterm(),
+        value(value_)
+    { ygg::set(fterm_, fterm); }
+    Data(const Data& other) = default;
+    Data& operator=(const Data& other) = default;
+    Data(Data&& other) = default;
+    Data& operator=(Data&& other) = default;
+    ~Data() = default;
+
+    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::fterm, &Data::value> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::fterm, &Data::value> {}; }
+    void clear() noexcept { ygg::clear_members(*this); }
+};
+
+static_assert(ygg::uses_trivial_storage_v<::tyr::formalism::planning::FunctionTermValue<::tyr::GroundTag, ::tyr::formalism::StaticTag>>);
+}
+
+#endif

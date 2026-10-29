@@ -22,8 +22,7 @@
 #include "tyr/formalism/planning/repository.hpp"
 #include "tyr/planning/applicability.hpp"
 #include "tyr/planning/declarations.hpp"
-#include "tyr/planning/ground/state_builder.hpp"
-#include "tyr/planning/lifted/state_builder.hpp"
+#include "tyr/planning/state_builder.hpp"
 #include "tyr/planning/task.hpp"
 
 #include <cmath>
@@ -36,9 +35,9 @@ namespace tyr::planning
 {
 
 template<TaskKind Kind>
-ygg::float_t evaluate_metric(ygg::View<::cista::optional<ygg::Index<::tyr::formalism::planning::Metric>>, ::tyr::formalism::planning::Repository> metric,
-                             ygg::View<::cista::optional<ygg::Index<::tyr::formalism::planning::GroundFunctionTermValue<::tyr::formalism::AuxiliaryTag>>>,
-                                       ::tyr::formalism::planning::Repository> auxiliary_fterm_value,
+ygg::float_t evaluate_metric(ygg::View<::cista::optional<ygg::Index<formalism::planning::Metric>>, formalism::planning::Repository> metric,
+                             ygg::View<::cista::optional<ygg::Index<formalism::planning::FunctionTermValue<GroundTag, formalism::AuxiliaryTag>>>,
+                                       formalism::planning::Repository> auxiliary_fterm_value,
                              const StateContext<Kind>& state_context)
 {
     if (auxiliary_fterm_value)
@@ -54,23 +53,16 @@ ygg::float_t evaluate_successor_metric(const Task<Kind>& task, const ygg::Builde
 {
     auto context = StateContext<Kind> { task, state, auxiliary_value };
     if (const auto metric = task.get_task().get_metric())
-        context.auxiliary_value = evaluate(metric.value().get_fexpr(), context);
+        context.auxiliary_value() = evaluate(metric.value().get_fexpr(), context);
     else
-        ++context.auxiliary_value;  // Assume unit cost if no metric is given.
+        ++context.auxiliary_value();  // Assume unit cost if no metric is given.
 
-    const auto result = ygg::FloatTolerance<ygg::float_t>::canonicalize(context.auxiliary_value);
+    const auto result = ygg::FloatTolerance<ygg::float_t>::canonicalize(context.auxiliary_value());
     if (!std::isfinite(result))
         throw std::runtime_error("Successor metric value is not finite.");
     return result;
 }
 
-template<TaskKind Kind>
-ygg::float_t
-complete_successor_state(const Task<Kind>& task, AxiomEvaluator<Kind>& axiom_evaluator, ygg::Builder<State<Kind>>& state, ygg::float_t auxiliary_value)
-{
-    axiom_evaluator.compute_extended_state(state);
-    return evaluate_successor_metric(task, state, auxiliary_value);
-}
 }
 
 #endif

@@ -19,22 +19,25 @@
 #define TYR_DECLARATIONS_HPP_
 
 #include <concepts>
+#include <cstdint>
 
 namespace tyr
 {
 
 struct GroundTag
 {
+    static constexpr auto name = "Ground";
 };
 
 struct LiftedTag
 {
+    static constexpr auto name = "Lifted";
 };
 
 template<typename Tag>
 concept TaskKind = std::same_as<Tag, GroundTag> || std::same_as<Tag, LiftedTag>;
 
-enum class CostMode
+enum class CostMode : std::uint8_t
 {
     UNIT,
     GENERAL

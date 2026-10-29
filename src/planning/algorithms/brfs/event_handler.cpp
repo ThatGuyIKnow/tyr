@@ -19,12 +19,11 @@
 
 #include "tyr/formalism/planning/formatter.hpp"
 #include "tyr/planning/formatter.hpp"
-#include "tyr/planning/ground/state_view.hpp"
 #include "tyr/planning/ground/task.hpp"
-#include "tyr/planning/lifted/state_view.hpp"
 #include "tyr/planning/lifted/task.hpp"
 #include "tyr/planning/node.hpp"
 #include "tyr/planning/plan.hpp"
+#include "tyr/planning/state_repository.hpp"
 
 #include <fmt/ostream.h>
 #include <yggdrasil/core/chrono.hpp>
@@ -43,8 +42,8 @@ public:
     void on_expand_node(const Node<Kind>& node) override
     {
         fmt::print("[BRFS][Worker {}] ----------------------------------------\n[BRFS][Worker {}] Expanding node: {}\n\n",
-                   ygg::uint_t(m_index),
-                   ygg::uint_t(m_index),
+                   static_cast<ygg::uint_t>(m_index),
+                   static_cast<ygg::uint_t>(m_index),
                    node);
     }
 
@@ -54,9 +53,9 @@ public:
             return;
 
         fmt::print("[BRFS][Worker {}] Action: {}\n[BRFS][Worker {}] Successor node: {}\n\n",
-                   ygg::uint_t(m_index),
+                   static_cast<ygg::uint_t>(m_index),
                    labeled_succ_node.label,
-                   ygg::uint_t(m_index),
+                   static_cast<ygg::uint_t>(m_index),
                    labeled_succ_node.node);
     }
 
@@ -86,10 +85,10 @@ void DefaultEventHandler<Kind>::on_finish_layer(ygg::uint_t layer, const tyr::pl
     m_progress_statistics.add_snapshot(statistics);
     if (m_verbosity < 1)
         return;
-    fmt::print("[BRFS] Finished layer: {} with num expanded states {} and num accepted successors {} ({} ms)\n",
+    fmt::print("[BRFS] Finished layer: {} with num expanded states {} and num generated successors {} ({} ms)\n",
                layer,
                statistics.get_num_expanded(),
-               statistics.get_num_accepted_successors(),
+               statistics.get_num_generated_successors(),
                ygg::to_ms(statistics.get_current_search_time()));
 }
 
@@ -120,9 +119,7 @@ WorkerEventHandlerPtr<Kind> DefaultEventHandler<Kind>::make_worker(ygg::Index<Wo
 
 template<TaskKind Kind>
 DefaultEventHandlerPtr<Kind> DefaultEventHandler<Kind>::create(size_t verbosity)
-{
-    return std::make_shared<DefaultEventHandler<Kind>>(verbosity);
-}
+{ return std::make_shared<DefaultEventHandler<Kind>>(verbosity); }
 
 template class DefaultEventHandler<LiftedTag>;
 template class DefaultEventHandler<GroundTag>;

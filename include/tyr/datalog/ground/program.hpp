@@ -28,25 +28,25 @@ template<>
 class Program<GroundTag>
 {
 public:
-    Program(::tyr::formalism::datalog::ProgramView<GroundTag> program,
-            ::tyr::formalism::datalog::RepositoryPtr program_repository,
-            ::tyr::formalism::datalog::RepositoryFactoryPtr repository_factory);
+    Program(formalism::datalog::ProgramView<GroundTag> program,
+            formalism::datalog::RepositoryPtr program_repository,
+            formalism::datalog::RepositoryFactoryPtr repository_factory);
 
-    auto get_program() const noexcept { return m_const_program_workspace.program; }
+    [[nodiscard]] auto get_program() const noexcept { return m_const_program_workspace.program; }
     auto& get_program_repository() noexcept { return *m_program_repository; }
-    const auto& get_program_repository() const noexcept { return *m_program_repository; }
+    [[nodiscard]] const auto& get_program_repository() const noexcept { return *m_program_repository; }
     auto& get_repository_factory() noexcept { return *m_repository_factory; }
-    const auto& get_const_program_workspace() const noexcept { return m_const_program_workspace; }
+    [[nodiscard]] const auto& get_const_program_workspace() const noexcept { return m_const_program_workspace; }
 
 private:
-    ::tyr::formalism::datalog::RepositoryPtr m_program_repository;
-    ::tyr::formalism::datalog::RepositoryFactoryPtr m_repository_factory;
+    formalism::datalog::RepositoryPtr m_program_repository;
+    formalism::datalog::RepositoryFactoryPtr m_repository_factory;
     ConstProgramWorkspace<GroundTag> m_const_program_workspace;
 };
 
 template<AnnotationPolicyConcept AP, TerminationPolicyConcept TP, RuleCostPolicyConcept CP>
-ProgramWorkspace<GroundTag, AP, TP, CP>::ProgramWorkspace(Program<GroundTag>& program, AP annotation_policy, TP tp, CP cost_policy) :
-    ProgramWorkspace(program.get_const_program_workspace(), std::move(annotation_policy), std::move(tp), std::move(cost_policy))
+ProgramWorkspace<GroundTag, AP, TP, CP>::ProgramWorkspace(Program<GroundTag>& program, AP annotation_policy_, TP tp_, CP cost_policy_) :
+    ProgramWorkspace(program.get_const_program_workspace(), std::move(annotation_policy_), std::move(tp_), std::move(cost_policy_))
 {
 }
 

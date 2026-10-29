@@ -18,12 +18,14 @@
 #ifndef TYR_FORMALISM_FDR_FACT_DATA_HPP_
 #define TYR_FORMALISM_FDR_FACT_DATA_HPP_
 
-#include <yggdrasil/core/types.hpp>
-#include <yggdrasil/core/types_utils.hpp>
-#include <yggdrasil/containers/variant.hpp>
 #include "tyr/formalism/planning/declarations.hpp"
 #include "tyr/formalism/planning/fdr_value.hpp"
-#include "tyr/formalism/planning/fdr_variable_index.hpp"
+
+#include <tuple>
+#include <utility>
+#include <yggdrasil/containers/variant.hpp>
+#include <yggdrasil/core/types.hpp>
+#include <yggdrasil/core/types_utils.hpp>
 
 namespace ygg
 {
@@ -38,23 +40,19 @@ struct Data<::tyr::formalism::planning::FDRFact<T>>
     Data(ygg::Index<::tyr::formalism::planning::FDRVariable<T>> variable_, ::tyr::formalism::planning::FDRValue value_) : variable(variable_), value(value_) {}
     // Python constructor
     template<typename C>
-    Data(::ygg::View<ygg::Index<::tyr::formalism::planning::FDRVariable<T>>, C> variable_, ::tyr::formalism::planning::FDRValue value_) : variable(), value(value_)
-    {
-        set(variable_, variable);
-    }
+    Data(::ygg::View<ygg::Index<::tyr::formalism::planning::FDRVariable<T>>, C> variable_, ::tyr::formalism::planning::FDRValue value_) :
+        variable(),
+        value(value_)
+    { set(variable_, variable); }
     Data(const Data& other) = default;
     Data& operator=(const Data& other) = default;
     Data(Data&& other) = default;
     Data& operator=(Data&& other) = default;
+    ~Data() = default;
 
-    void clear() noexcept
-    {
-        ygg::clear(variable);
-        ygg::clear(value);
-    }
-
-    auto cista_members() const noexcept { return std::tie(variable, value); }
-    auto identifying_members() const noexcept { return std::tie(variable, value); }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::variable, &Data::value> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::variable, &Data::value> {}; }
+    void clear() noexcept { ygg::clear_members(*this); }
 };
 
 static_assert(ygg::uses_trivial_storage_v<::tyr::formalism::planning::FDRFact<::tyr::formalism::FluentTag>>);

@@ -20,33 +20,35 @@
 
 #include "tyr/formalism/datalog/declarations.hpp"
 #include "tyr/formalism/datalog/function_expression_data.hpp"
-#include "tyr/formalism/datalog/ground_function_expression_data.hpp"
-#include "tyr/formalism/datalog/multi_operator_index.hpp"
 
 #include <stdexcept>
+#include <tuple>
+#include <utility>
+#include <vector>
 #include <yggdrasil/core/types.hpp>
 #include <yggdrasil/core/types_utils.hpp>
 
 namespace ygg
 {
 
-template<typename T>
+template<::tyr::TaskKind T>
 struct Data<::tyr::formalism::datalog::MultiOperator<T>>
 {
+    using Operand = ygg::Data<::tyr::formalism::datalog::FunctionExpression<T>>;
     using OperatorType = ::tyr::formalism::ArithmeticOperatorKind;
 
     ygg::Index<::tyr::formalism::datalog::MultiOperator<T>> index;
     OperatorType operator_kind = OperatorType::Add;
-    ::cista::offset::vector<T> args;
+    ::cista::offset::vector<Operand> args;
 
     Data() = default;
-    Data(OperatorType operator_kind_, ::cista::offset::vector<T> args_) : index(), operator_kind(operator_kind_), args(std::move(args_))
+    Data(OperatorType operator_kind_, ::cista::offset::vector<Operand> args_) : index(), operator_kind(operator_kind_), args(std::move(args_))
     {
         if (!is_multi(operator_kind))
             throw std::invalid_argument("multi operator must be Add or Mul");
     }
     template<typename C>
-    Data(OperatorType operator_kind_, const std::vector<::ygg::View<T, C>>& args_) : index(), operator_kind(operator_kind_), args()
+    Data(OperatorType operator_kind_, const std::vector<::ygg::View<Operand, C>>& args_) : index(), operator_kind(operator_kind_), args()
     {
         if (!is_multi(operator_kind))
             throw std::invalid_argument("multi operator must be Add or Mul");
@@ -56,19 +58,14 @@ struct Data<::tyr::formalism::datalog::MultiOperator<T>>
     Data& operator=(const Data& other) = delete;
     Data(Data&& other) = default;
     Data& operator=(Data&& other) = default;
+    ~Data() = default;
 
-    void clear() noexcept
-    {
-        ygg::clear(index);
-        operator_kind = OperatorType::Add;
-        ygg::clear(args);
-    }
-
-    auto cista_members() const noexcept { return std::tie(index, operator_kind, args); }
-    auto identifying_members() const noexcept { return std::tie(operator_kind, args); }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::operator_kind, &Data::args> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::operator_kind, &Data::args> {}; }
+    void clear() noexcept { ygg::clear_members(*this); }
 };
 
-static_assert(!ygg::uses_trivial_storage_v<::tyr::formalism::datalog::MultiOperator<ygg::Data<::tyr::formalism::datalog::FunctionExpression>>>);
+static_assert(!ygg::uses_trivial_storage_v<::tyr::formalism::datalog::MultiOperator<::tyr::LiftedTag>>);
 
 }
 

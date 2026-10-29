@@ -17,9 +17,9 @@
 
 #include "binding_utils.hpp"
 #include "bindings.hpp"
+#include "tyr/formalism/planning/declarations.hpp"
 
 #include <tyr/formalism/planning/fdr_variable_data.hpp>
-#include <tyr/formalism/planning/fdr_variable_index.hpp>
 #include <tyr/formalism/planning/fdr_variable_view.hpp>
 
 namespace tyr::formalism::planning
@@ -30,8 +30,10 @@ namespace
 template<FactKind T>
 void bind_fdr_variable_data(nb::module_& m, const char* name)
 {
+    using namespace nb::literals;
     using V = ygg::Data<FDRVariable<T>>;
-    auto cls = nb::class_<V>(m, name).def(nb::init<const GroundAtomViewList<T>>(), "atoms"_a);
+    auto cls = nb::class_<V>(m, name).def(nb::init<const AtomViewList<GroundTag, T>>(), "atoms"_a);
+    cls.def(nb::init<ygg::IndexList<Atom<GroundTag, T>>>(), "atoms"_a);
     ygg::add_print(cls);
     ygg::add_comparison(cls);
     ygg::add_hash(cls);
@@ -56,7 +58,7 @@ void bind_fdr_variable(nb::module_& m, RepositoryBinding& repository)
 
     bind_fdr_variable_view<FluentTag>(m, "FluentFDRVariable");
 
-    repository.def("get_or_create", &get_or_create_data<FDRVariable<FluentTag>>, "data"_a, nb::keep_alive<0, 1>());
+    bind_insert<FDRVariable<FluentTag>>(repository);
 }
 
 }  // namespace tyr::formalism::planning

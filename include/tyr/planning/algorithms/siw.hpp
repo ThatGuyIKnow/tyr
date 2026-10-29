@@ -59,26 +59,28 @@ SearchResult<Kind> find_solution(iw::Solver<Kind>& iw_solver, const Options<Kind
     if (!iw_solver.brfs_solver.successor_generator)
         throw std::invalid_argument("siw::find_solution(...): IW BRFS successor generator is required.");
 
-    auto serialized_options = serialized::Options<Kind, iw::Solver<Kind>> {};
+    auto serialized_options = serialized::Options<Kind, iw::Statistics<Kind>> {};
     serialized_options.start_node = options.start_node;
     serialized_options.event_handler = options.event_handler ? options.event_handler : DefaultEventHandler<Kind>::create();
     serialized_options.subgoal_strategy =
         options.subgoal_strategy ? options.subgoal_strategy : SerializedGoalStrategy<Kind>::create(*iw_solver.brfs_solver.task);
     serialized_options.goal_strategy = options.goal_strategy ? options.goal_strategy : ConjunctiveGoalStrategy<Kind>::create(*iw_solver.brfs_solver.task);
     serialized_options.max_num_subsearches = options.max_num_subsearches;
-    serialized_options.max_time = iw_solver.options.max_time ? iw_solver.options.max_time : iw_solver.brfs_solver.options.max_time;
+    serialized_options.max_time =
+        iw_solver.options.search_budget.max_time ? iw_solver.options.search_budget.max_time : iw_solver.brfs_solver.options.search_budget.max_time;
 
     if (!iw_solver.options.event_handler)
         iw_solver.options.event_handler = iw::DefaultEventHandler<Kind>::create();
 
-    return serialized::find_solution(iw_solver, serialized_options);
+    return serialized::find_solution(iw_solver,
+                                     serialized_options,
+                                     [](const iw::Solver<Kind>& local_solver, const SearchResult<Kind>&) -> const iw::Statistics<Kind>*
+                                     { return local_solver.options.event_handler ? &local_solver.options.event_handler->get_statistics() : nullptr; });
 }
 
 template<TaskKind Kind>
 struct Solver
 {
-    using EventHandlerType = EventHandler<Kind>;
-
     iw::Solver<Kind> iw_solver;
     Options<Kind> options;
 

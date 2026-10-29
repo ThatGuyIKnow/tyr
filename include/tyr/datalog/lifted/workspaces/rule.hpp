@@ -24,10 +24,10 @@
 #include "tyr/datalog/rule_evaluation.hpp"
 #include "tyr/datalog/statistics/rule.hpp"
 #include "tyr/formalism/binding_index.hpp"
-#include "tyr/formalism/datalog/ground_atom_index.hpp"
+#include "tyr/formalism/datalog/declarations.hpp"
 #include "tyr/formalism/datalog/repository.hpp"
 #include "tyr/formalism/datalog/views.hpp"
-#include "tyr/formalism/object_index.hpp"
+#include "tyr/formalism/declarations.hpp"
 
 #include <cassert>
 #include <deque>
@@ -53,19 +53,19 @@ struct ApplicabilityCache
     }
 };
 
-template<::tyr::formalism::RelationKind R>
+template<formalism::RelationKind R>
 struct RuleWorkspace<LiftedTag, R>
 {
     struct Common
     {
-        explicit Common(const StaticConsistencyGraph& static_consistency_graph);
+        explicit Common(const StaticConsistencyGraph& static_consistency_graph_);
 
         void initialize_iteration(const AssignmentSets& assignment_sets);
 
         void clear() noexcept;
 
         /// KCKP
-        const StaticConsistencyGraph& static_consistency_graph;
+        const StaticConsistencyGraph* static_consistency_graph;
         kckp::DeltaKCKP kckp;
 
         /// Statistics
@@ -87,6 +87,12 @@ struct RuleWorkspace<LiftedTag, R>
 
         /// KCKP
         kckp::Workspace kckp_workspace;
+
+        /// Hyperedge anchors
+        std::vector<kckp::Vertex> anchor_vertices;
+
+        /// Heads of the current binding that the rule updates
+        std::vector<formalism::datalog::PredicateBindingIndex<formalism::FluentTag>> head_bindings;
     };
 
     struct Solve
@@ -97,13 +103,8 @@ struct RuleWorkspace<LiftedTag, R>
 
 #ifndef NDEBUG
         /// In debug mode, we accumulate all bindings to verify the correctness of delta-kckp
-        ygg::UnorderedSet<ygg::IndexList<::tyr::formalism::Object>> seen_bindings;
+        ygg::UnorderedSet<ygg::IndexList<formalism::Object>> seen_bindings;
 #endif
-
-#ifndef TYR_ENABLE_SEMI_NAIVE
-        ygg::UnorderedSet<::tyr::formalism::datalog::RuleBindingView<R>> seen_pending_rule_bindings;
-#endif
-        std::vector<::tyr::formalism::datalog::RuleBindingView<R>> pending_rule_bindings;
 
         RuleEvaluationWorkspace rule_evaluation_workspace;
         ApplicabilityCache applicability_cache;
@@ -118,8 +119,8 @@ struct RuleWorkspace<LiftedTag, R>
 
         void clear() noexcept;
 
-        ::tyr::formalism::datalog::Builder builder;
-        ygg::IndexList<::tyr::formalism::Object> binding;
+        formalism::datalog::Builder builder;
+        ygg::IndexList<formalism::Object> binding;
 
         Iteration iteration;
         Solve solve;
@@ -130,6 +131,7 @@ struct RuleWorkspace<LiftedTag, R>
     RuleWorkspace& operator=(const RuleWorkspace& other) = delete;
     RuleWorkspace(RuleWorkspace&& other) = delete;
     RuleWorkspace& operator=(RuleWorkspace&& other) = delete;
+    ~RuleWorkspace() = default;
 
     void clear() noexcept;
 
@@ -138,27 +140,28 @@ struct RuleWorkspace<LiftedTag, R>
     std::deque<Worker> worker;
 };
 
-template<::tyr::formalism::RelationKind R>
+template<formalism::RelationKind R>
+using LiftedRuleWorkerT = typename RuleWorkspace<LiftedTag, R>::Worker;
+
+template<formalism::RelationKind R>
 struct ConstRuleWorkspace<LiftedTag, R>
 {
 public:
-    auto get_rule() const noexcept { return rule; }
-    auto get_nullary_condition() const noexcept { return nullary_condition; }
-    const auto& get_lifted_effects() const noexcept { return lifted_effects; }
-    const auto& get_nullary_effects() const noexcept { return nullary_effects; }
-    auto get_conflicting_overapproximation_condition() const noexcept { return conflicting_overapproximation_condition; }
-    const auto& get_static_consistency_graph() const noexcept { return static_consistency_graph; }
+    [[nodiscard]] auto get_rule() const noexcept { return rule; }
+    [[nodiscard]] auto get_nullary_condition() const noexcept { return nullary_condition; }
+    [[nodiscard]] auto get_conflicting_overapproximation_condition() const noexcept { return conflicting_overapproximation_condition; }
+    [[nodiscard]] auto get_hyperedge_condition() const noexcept { return hyperedge_condition; }
+    [[nodiscard]] const auto& get_static_consistency_graph() const noexcept { return static_consistency_graph; }
 
-    ConstRuleWorkspace(::tyr::formalism::datalog::RuleView<R> rule, ::tyr::formalism::datalog::Repository& repository, kckp::Graph compatibility_graph);
+    ConstRuleWorkspace(formalism::datalog::RuleView<LiftedTag, R> rule_, formalism::datalog::Repository& repository, kckp::Graph compatibility_graph);
 
 private:
-    ::tyr::formalism::datalog::RuleView<R> rule;
-    ::tyr::formalism::datalog::GroundConjunctiveConditionView nullary_condition;
-    ::tyr::formalism::datalog::NumericEffectOperatorViewList<::tyr::formalism::FluentTag> lifted_effects;
-    ::tyr::formalism::datalog::GroundNumericEffectOperatorViewList<::tyr::formalism::FluentTag> nullary_effects;
-    ::tyr::formalism::datalog::ConjunctiveConditionView unary_overapproximation_condition;
-    ::tyr::formalism::datalog::ConjunctiveConditionView binary_overapproximation_condition;
-    ::tyr::formalism::datalog::ConjunctiveConditionView conflicting_overapproximation_condition;
+    formalism::datalog::RuleView<LiftedTag, R> rule;
+    formalism::datalog::ConjunctiveConditionView<GroundTag> nullary_condition;
+    formalism::datalog::ConjunctiveConditionView<LiftedTag> unary_overapproximation_condition;
+    formalism::datalog::ConjunctiveConditionView<LiftedTag> binary_overapproximation_condition;
+    formalism::datalog::ConjunctiveConditionView<LiftedTag> conflicting_overapproximation_condition;
+    formalism::datalog::ConjunctiveConditionView<LiftedTag> hyperedge_condition;
 
     StaticConsistencyGraph static_consistency_graph;
 };
@@ -167,78 +170,66 @@ private:
  * Implementations
  */
 
-inline PredicateHeadUpdates make_head_updates(::tyr::formalism::datalog::AtomView<::tyr::formalism::FluentTag>) { return {}; }
+inline PredicateHeadUpdates make_head_updates(formalism::PredicateTag) { return {}; }
 
-inline FunctionHeadUpdates make_head_updates(::tyr::formalism::datalog::NumericEffectOperatorView<::tyr::formalism::FluentTag>) { return {}; }
+inline FunctionHeadUpdates make_head_updates(formalism::FunctionTag) { return {}; }
 
-inline bool supports_inner_parallelism(::tyr::formalism::datalog::AtomView<::tyr::formalism::FluentTag>) noexcept { return true; }
-inline bool supports_inner_parallelism(::tyr::formalism::datalog::NumericEffectOperatorView<::tyr::formalism::FluentTag>) noexcept { return false; }
+inline bool supports_inner_parallelism(formalism::PredicateTag) noexcept { return true; }
+inline bool supports_inner_parallelism(formalism::FunctionTag) noexcept { return false; }
 
-template<::tyr::formalism::RelationKind R>
-RuleWorkspace<LiftedTag, R>::Common::Common(const StaticConsistencyGraph& static_consistency_graph) :
-    static_consistency_graph(static_consistency_graph),
-    kckp(static_consistency_graph.get_graph(), static_consistency_graph.get_partitioned_adjacency_layout()),
+template<formalism::RelationKind R>
+RuleWorkspace<LiftedTag, R>::Common::Common(const StaticConsistencyGraph& static_consistency_graph_) :
+    static_consistency_graph(&static_consistency_graph_),
+    kckp(static_consistency_graph_.get_graph(), static_consistency_graph_.get_partitioned_adjacency_layout()),
     statistics()
 {
 }
 
-template<::tyr::formalism::RelationKind R>
+template<formalism::RelationKind R>
 void RuleWorkspace<LiftedTag, R>::Common::clear() noexcept
-{
-    kckp.reset();
-}
+{ kckp.reset(); }
 
-template<::tyr::formalism::RelationKind R>
+template<formalism::RelationKind R>
 void RuleWorkspace<LiftedTag, R>::Common::initialize_iteration(const AssignmentSets& assignment_sets)
 {
     kckp.update([&](auto& delta_graph, auto& full_graph)
-                { static_consistency_graph.initialize_dynamic_consistency_graphs(assignment_sets, kckp.get_graph_layout(), delta_graph, full_graph); });
+                { static_consistency_graph->initialize_dynamic_consistency_graphs(assignment_sets, kckp.get_graph_layout(), delta_graph, full_graph); });
 }
 
-template<::tyr::formalism::RelationKind R>
-RuleWorkspace<LiftedTag, R>::Iteration::Iteration(const ConstRuleWorkspace<LiftedTag, R>& cws, const Common& common) :
-    head_updates(make_head_updates(cws.get_rule().get_head())),
+template<formalism::RelationKind R>
+RuleWorkspace<LiftedTag, R>::Iteration::Iteration(const ConstRuleWorkspace<LiftedTag, R>&, const Common& common) :
+    head_updates(make_head_updates(R {})),
     kckp_workspace(common.kckp.get_graph_layout())
 {
 }
 
-template<::tyr::formalism::RelationKind R>
+template<formalism::RelationKind R>
 void RuleWorkspace<LiftedTag, R>::Iteration::clear() noexcept
-{
-    head_updates.clear();
-}
+{ head_updates.clear(); }
 
-template<::tyr::formalism::RelationKind R>
+template<formalism::RelationKind R>
 RuleWorkspace<LiftedTag, R>::Solve::Solve() :
 #ifndef NDEBUG
     seen_bindings(),
 #endif
-#ifndef TYR_ENABLE_SEMI_NAIVE
-    seen_pending_rule_bindings(),
-#endif
-    pending_rule_bindings(),
     rule_evaluation_workspace(),
     applicability_cache(),
     statistics()
 {
 }
 
-template<::tyr::formalism::RelationKind R>
+template<formalism::RelationKind R>
 void RuleWorkspace<LiftedTag, R>::Solve::clear() noexcept
 {
 #ifndef NDEBUG
     seen_bindings.clear();
 #endif
-#ifndef TYR_ENABLE_SEMI_NAIVE
-    seen_pending_rule_bindings.clear();
-#endif
-    pending_rule_bindings.clear();
     rule_evaluation_workspace.selector.clear();
     rule_evaluation_workspace.exact_supports.clear();
     applicability_cache.clear();
 }
 
-template<::tyr::formalism::RelationKind R>
+template<formalism::RelationKind R>
 RuleWorkspace<LiftedTag, R>::Worker::Worker(const ConstRuleWorkspace<LiftedTag, R>& cws, const Common& common) :
     builder(),
     binding(),
@@ -247,26 +238,26 @@ RuleWorkspace<LiftedTag, R>::Worker::Worker(const ConstRuleWorkspace<LiftedTag, 
 {
 }
 
-template<::tyr::formalism::RelationKind R>
+template<formalism::RelationKind R>
 void RuleWorkspace<LiftedTag, R>::Worker::clear() noexcept
 {
     iteration.clear();
     solve.clear();
 }
 
-template<::tyr::formalism::RelationKind R>
+template<formalism::RelationKind R>
 RuleWorkspace<LiftedTag, R>::RuleWorkspace(const ConstRuleWorkspace<LiftedTag, R>& cws_) : common(cws_.get_static_consistency_graph()), worker()
 {
     worker.emplace_back(cws_, common);
 
 #if defined(TYR_ENABLE_INNER_PARALLELISM) && defined(TYR_ENABLE_SEMI_NAIVE)
     // Only propositional heads use partitionable delta KCKP; numeric effects require full KCKP enumeration.
-    if (supports_inner_parallelism(cws_.get_rule().get_head()) && cws_.get_rule().get_arity() > 2)
+    if (supports_inner_parallelism(R {}) && cws_.get_rule().get_arity() > 2)
         worker.emplace_back(cws_, common);
 #endif
 }
 
-template<::tyr::formalism::RelationKind R>
+template<formalism::RelationKind R>
 void RuleWorkspace<LiftedTag, R>::clear() noexcept
 {
     common.clear();

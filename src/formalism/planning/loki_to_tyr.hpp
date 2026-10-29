@@ -22,6 +22,7 @@
 #include "tyr/formalism/planning/repository.hpp"
 
 #include <algorithm>
+#include <filesystem>
 #include <iterator>
 #include <loki/formalism/declarations.hpp>
 #include <optional>
@@ -40,28 +41,31 @@ namespace tyr::formalism::planning
 
 using PredicateViewVariant = std::variant<PredicateView<StaticTag>, PredicateView<FluentTag>, PredicateView<DerivedTag>>;
 
-using AtomViewVariant = std::variant<AtomView<StaticTag>, AtomView<FluentTag>, AtomView<DerivedTag>>;
+using AtomViewVariant = std::variant<AtomView<LiftedTag, StaticTag>, AtomView<LiftedTag, FluentTag>, AtomView<LiftedTag, DerivedTag>>;
 
-using LiteralViewVariant = std::variant<LiteralView<StaticTag>, LiteralView<FluentTag>, LiteralView<DerivedTag>>;
+using LiteralViewVariant = std::variant<LiteralView<LiftedTag, StaticTag>, LiteralView<LiftedTag, FluentTag>, LiteralView<LiftedTag, DerivedTag>>;
 
-using GroundAtomViewVariant = std::variant<GroundAtomView<StaticTag>, GroundAtomView<FluentTag>, GroundAtomView<DerivedTag>>;
+using GroundAtomViewVariant = std::variant<AtomView<GroundTag, StaticTag>, AtomView<GroundTag, FluentTag>, AtomView<GroundTag, DerivedTag>>;
 
-using GroundAtomOrFactViewVariant = std::variant<GroundAtomView<StaticTag>, GroundAtomView<DerivedTag>, FDRFactView<FluentTag>>;
+using GroundAtomOrFactViewVariant = std::variant<AtomView<GroundTag, StaticTag>, AtomView<GroundTag, DerivedTag>, FDRFactView<FluentTag>>;
 
-using GroundLiteralViewVariant = std::variant<GroundLiteralView<StaticTag>, GroundLiteralView<FluentTag>, GroundLiteralView<DerivedTag>>;
+using GroundLiteralViewVariant = std::variant<LiteralView<GroundTag, StaticTag>, LiteralView<GroundTag, FluentTag>, LiteralView<GroundTag, DerivedTag>>;
 
-using GroundLiteralOrFactViewVariant = std::variant<GroundLiteralView<StaticTag>, GroundLiteralView<DerivedTag>, std::pair<FDRFactView<FluentTag>, bool>>;
+using GroundLiteralOrFactViewVariant =
+    std::variant<LiteralView<GroundTag, StaticTag>, LiteralView<GroundTag, DerivedTag>, std::pair<FDRFactView<FluentTag>, bool>>;
 
 using FunctionViewVariant = std::variant<FunctionView<StaticTag>, FunctionView<FluentTag>, FunctionView<AuxiliaryTag>>;
 
-using FunctionTermViewVariant = std::variant<FunctionTermView<StaticTag>, FunctionTermView<FluentTag>, FunctionTermView<AuxiliaryTag>>;
+using FunctionTermViewVariant =
+    std::variant<FunctionTermView<LiftedTag, StaticTag>, FunctionTermView<LiftedTag, FluentTag>, FunctionTermView<LiftedTag, AuxiliaryTag>>;
 
-using GroundFunctionTermViewVariant = std::variant<GroundFunctionTermView<StaticTag>, GroundFunctionTermView<FluentTag>, GroundFunctionTermView<AuxiliaryTag>>;
+using GroundFunctionTermViewVariant =
+    std::variant<FunctionTermView<GroundTag, StaticTag>, FunctionTermView<GroundTag, FluentTag>, FunctionTermView<GroundTag, AuxiliaryTag>>;
 
 using GroundFunctionTermValueViewVariant =
-    std::variant<GroundFunctionTermValueView<StaticTag>, GroundFunctionTermValueView<FluentTag>, GroundFunctionTermValueView<AuxiliaryTag>>;
+    std::variant<FunctionTermValueView<GroundTag, StaticTag>, FunctionTermValueView<GroundTag, FluentTag>, FunctionTermValueView<GroundTag, AuxiliaryTag>>;
 
-using NumericEffectViewVariant = std::variant<NumericEffectView<FluentTag>, NumericEffectView<AuxiliaryTag>>;
+using NumericEffectViewVariant = std::variant<NumericEffectView<LiftedTag, FluentTag>, NumericEffectView<LiftedTag, AuxiliaryTag>>;
 
 class LokiToTyrTranslator
 {
@@ -97,30 +101,30 @@ private:
             this->prepare(element.value());
         }
     }
-    void prepare(loki::formalism::FunctionSkeletonView element);
-    void prepare(loki::formalism::ObjectView element);
-    void prepare(loki::formalism::ParameterView element);
-    void prepare(loki::formalism::PredicateView element);
+    void prepare(loki::formalism::FunctionSkeletonView function_skeleton);
+    void prepare(loki::formalism::ObjectView object);
+    void prepare(loki::formalism::ParameterView parameter);
+    void prepare(loki::formalism::PredicateView predicate);
     void prepare(loki::formalism::RequirementView element);
-    void prepare(loki::formalism::TypeView element);
+    void prepare(loki::formalism::TypeView type);
     void prepare(loki::formalism::VariableView element);
-    void prepare(loki::formalism::TermView element);
-    void prepare(loki::formalism::AtomView element);
-    void prepare(loki::formalism::LiteralView element);
-    void prepare(loki::formalism::FunctionExpressionNumberView element);
-    void prepare(loki::formalism::BinaryFunctionExpressionView element);
-    void prepare(loki::formalism::MultiFunctionExpressionView element);
-    void prepare(loki::formalism::UnaryFunctionExpressionView element);
-    void prepare(loki::formalism::FunctionTermView element);
-    void prepare(loki::formalism::FunctionExpressionView element);
-    void prepare(loki::formalism::ConditionView element);
-    void prepare(loki::formalism::EffectView element);
-    void prepare(loki::formalism::ActionView element);
-    void prepare(loki::formalism::AxiomView element);
-    void prepare(loki::formalism::DomainView element);
-    void prepare(loki::formalism::InitialFunctionValueView element);
-    void prepare(loki::formalism::MetricView element);
-    void prepare(loki::formalism::TaskView element);
+    void prepare(loki::formalism::TermView term);
+    void prepare(loki::formalism::AtomView atom);
+    void prepare(loki::formalism::LiteralView literal);
+    void prepare(loki::formalism::EntityView<loki::formalism::FunctionExpression<loki::formalism::NumberTag>> element);
+    void prepare(loki::formalism::EntityView<loki::formalism::FunctionExpression<loki::formalism::BinaryTag>> function_expression);
+    void prepare(loki::formalism::EntityView<loki::formalism::FunctionExpression<loki::formalism::MultiTag>> function_expression);
+    void prepare(loki::formalism::EntityView<loki::formalism::FunctionExpression<loki::formalism::UnaryTag>> function_expression);
+    void prepare(loki::formalism::FunctionTermView function_expression);
+    void prepare(loki::formalism::FunctionExpressionView function_expression);
+    void prepare(loki::formalism::ConditionView condition);
+    void prepare(loki::formalism::EffectView effect);
+    void prepare(loki::formalism::ActionView action);
+    void prepare(loki::formalism::AxiomView axiom);
+    void prepare(loki::formalism::DomainView domain);
+    void prepare(loki::formalism::InitialFunctionValueView function_value);
+    void prepare(loki::formalism::MetricView metric);
+    void prepare(loki::formalism::TaskView problem);
 
     /**
      * Common translations.
@@ -179,35 +183,50 @@ private:
 
     LiteralViewVariant translate_lifted(loki::formalism::LiteralView element, Builder& builder, Repository& context);
 
-    ygg::Data<FunctionExpression> translate_lifted(loki::formalism::FunctionExpressionNumberView element, Builder& builder, Repository& context);
+    ygg::Data<FunctionExpression<LiftedTag>>
+    translate_lifted(loki::formalism::EntityView<loki::formalism::FunctionExpression<loki::formalism::NumberTag>> element,
+                     Builder& builder,
+                     Repository& context);
 
-    ygg::Data<FunctionExpression> translate_lifted(loki::formalism::BinaryFunctionExpressionView element, Builder& builder, Repository& context);
+    ygg::Data<FunctionExpression<LiftedTag>>
+    translate_lifted(loki::formalism::EntityView<loki::formalism::FunctionExpression<loki::formalism::BinaryTag>> element,
+                     Builder& builder,
+                     Repository& context);
 
-    ygg::Data<FunctionExpression> translate_lifted(loki::formalism::MultiFunctionExpressionView element, Builder& builder, Repository& context);
+    ygg::Data<FunctionExpression<LiftedTag>>
+    translate_lifted(loki::formalism::EntityView<loki::formalism::FunctionExpression<loki::formalism::MultiTag>> element,
+                     Builder& builder,
+                     Repository& context);
 
-    ygg::Data<FunctionExpression> translate_lifted(loki::formalism::UnaryFunctionExpressionView element, Builder& builder, Repository& context);
+    ygg::Data<FunctionExpression<LiftedTag>>
+    translate_lifted(loki::formalism::EntityView<loki::formalism::FunctionExpression<loki::formalism::UnaryTag>> element,
+                     Builder& builder,
+                     Repository& context);
 
-    ygg::Data<FunctionExpression> translate_lifted(loki::formalism::FunctionExpressionView element, Builder& builder, Repository& context);
+    ygg::Data<FunctionExpression<LiftedTag>> translate_lifted(loki::formalism::FunctionExpressionView element, Builder& builder, Repository& context);
 
     FunctionTermViewVariant translate_lifted(loki::formalism::FunctionTermView element, Builder& builder, Repository& context);
 
-    ygg::Data<BooleanOperator<ygg::Data<FunctionExpression>>>
-    translate_lifted(loki::formalism::ConditionNumericConstraintView element, Builder& builder, Repository& context);
+    ygg::Data<BooleanOperator<LiftedTag>>
+    translate_lifted(loki::formalism::EntityView<loki::formalism::Condition<loki::formalism::NumericConstraintTag>> element,
+                     Builder& builder,
+                     Repository& context);
 
-    ygg::Index<ConjunctiveCondition>
+    ygg::Index<ConjunctiveCondition<LiftedTag>>
     translate_lifted(loki::formalism::ConditionView element, const ygg::IndexList<Variable>& parameters, Builder& builder, Repository& context);
 
-    NumericEffectViewVariant translate_lifted(loki::formalism::EffectNumericView element, Builder& builder, Repository& context);
+    NumericEffectViewVariant
+    translate_lifted(loki::formalism::EntityView<loki::formalism::Effect<loki::formalism::NumericTag>> element, Builder& builder, Repository& context);
 
     void translate_lifted(loki::formalism::EffectView element,
                           const ygg::IndexList<Variable>& parameters,
                           Builder& builder,
                           Repository& context,
-                          ygg::IndexList<ConditionalEffect>& output);
+                          ygg::IndexList<ConditionalEffect<LiftedTag>>& output);
 
-    ygg::Index<Action> translate_lifted(loki::formalism::ActionView element, Builder& builder, Repository& context);
+    ygg::Index<Action<LiftedTag>> translate_lifted(loki::formalism::ActionView element, Builder& builder, Repository& context);
 
-    ygg::Index<Axiom> translate_lifted(loki::formalism::AxiomView element, Builder& builder, Repository& context);
+    ygg::Index<Axiom<LiftedTag>> translate_lifted(loki::formalism::AxiomView element, Builder& builder, Repository& context);
 
     /**
      * Grounded translation
@@ -232,24 +251,38 @@ private:
 
     GroundLiteralOrFactViewVariant translate_grounded(loki::formalism::LiteralView element, Builder& builder, Repository& context, FDRContext& fdr_context);
 
-    ygg::Data<GroundFunctionExpression> translate_grounded(loki::formalism::FunctionExpressionNumberView element, Builder& builder, Repository& context);
+    ygg::Data<FunctionExpression<GroundTag>>
+    translate_grounded(loki::formalism::EntityView<loki::formalism::FunctionExpression<loki::formalism::NumberTag>> element,
+                       Builder& builder,
+                       Repository& context);
 
-    ygg::Data<GroundFunctionExpression> translate_grounded(loki::formalism::BinaryFunctionExpressionView element, Builder& builder, Repository& context);
+    ygg::Data<FunctionExpression<GroundTag>>
+    translate_grounded(loki::formalism::EntityView<loki::formalism::FunctionExpression<loki::formalism::BinaryTag>> element,
+                       Builder& builder,
+                       Repository& context);
 
-    ygg::Data<GroundFunctionExpression> translate_grounded(loki::formalism::MultiFunctionExpressionView element, Builder& builder, Repository& context);
+    ygg::Data<FunctionExpression<GroundTag>>
+    translate_grounded(loki::formalism::EntityView<loki::formalism::FunctionExpression<loki::formalism::MultiTag>> element,
+                       Builder& builder,
+                       Repository& context);
 
-    ygg::Data<GroundFunctionExpression> translate_grounded(loki::formalism::UnaryFunctionExpressionView element, Builder& builder, Repository& context);
+    ygg::Data<FunctionExpression<GroundTag>>
+    translate_grounded(loki::formalism::EntityView<loki::formalism::FunctionExpression<loki::formalism::UnaryTag>> element,
+                       Builder& builder,
+                       Repository& context);
 
-    ygg::Data<GroundFunctionExpression> translate_grounded(loki::formalism::FunctionExpressionView element, Builder& builder, Repository& context);
+    ygg::Data<FunctionExpression<GroundTag>> translate_grounded(loki::formalism::FunctionExpressionView element, Builder& builder, Repository& context);
 
     GroundFunctionTermViewVariant translate_grounded(loki::formalism::FunctionTermView element, Builder& builder, Repository& context);
 
     GroundFunctionTermValueViewVariant translate_grounded(loki::formalism::InitialFunctionValueView element, Builder& builder, Repository& context);
 
-    ygg::Data<BooleanOperator<ygg::Data<GroundFunctionExpression>>>
-    translate_grounded(loki::formalism::ConditionNumericConstraintView element, Builder& builder, Repository& context);
+    ygg::Data<BooleanOperator<GroundTag>>
+    translate_grounded(loki::formalism::EntityView<loki::formalism::Condition<loki::formalism::NumericConstraintTag>> element,
+                       Builder& builder,
+                       Repository& context);
 
-    ygg::Index<GroundConjunctiveCondition>
+    ygg::Index<ConjunctiveCondition<GroundTag>>
     translate_grounded(loki::formalism::ConditionView element, Builder& builder, Repository& context, FDRContext& fdr_context);
 
     ygg::Index<Metric> translate_grounded(loki::formalism::MetricView element, Builder& builder, Repository& context);
@@ -257,9 +290,10 @@ private:
 public:
     LokiToTyrTranslator() = default;
 
-    PlanningDomain translate(const loki::formalism::DomainView& domain);
+    PlanningDomain translate(const loki::formalism::DomainView& element, std::optional<std::filesystem::path> path = std::nullopt);
 
-    PlanningTask translate(const loki::formalism::TaskView& problem, PlanningDomain domain);
+    PlanningTask<LiftedTag>
+    translate(const loki::formalism::TaskView& element, PlanningDomain domain, std::optional<std::filesystem::path> path = std::nullopt);
 };
 
 }

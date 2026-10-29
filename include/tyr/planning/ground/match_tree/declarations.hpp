@@ -23,6 +23,7 @@
 #include <concepts>
 #include <variant>
 #include <vector>
+#include <yggdrasil/core/config.hpp>
 #include <yggdrasil/core/type_list.hpp>
 
 namespace tyr::planning::match_tree
@@ -61,9 +62,13 @@ struct Node
 {
 };
 
+/// The node kinds of a match tree, in the order of the Node variant.
 template<typename Tag>
-using RepositoryTypes = ygg::
-    TypeList<AtomSelectorNode<Tag>, VariableSelectorNode<Tag>, NegativeFactSelectorNode<Tag>, NumericConstraintSelectorNode<Tag>, ElementGeneratorNode<Tag>>;
+using NodeTypes = ygg::
+    TypeList<AtomSelectorNode<Tag>, NumericConstraintSelectorNode<Tag>, VariableSelectorNode<Tag>, NegativeFactSelectorNode<Tag>, ElementGeneratorNode<Tag>>;
+
+template<typename Tag>
+using RepositoryTypes = NodeTypes<Tag>;
 
 /**
  * MatchTree
@@ -83,20 +88,13 @@ class Repository;
 template<typename Tag>
 using RepositoryPtr = std::unique_ptr<Repository<Tag>>;
 
-template<typename Repo, typename Tag>
-concept RepositoryAccess = requires(const Repo& r, ygg::Index<Tag> idx) {
-    { r[idx] } -> std::same_as<const ygg::Data<Tag>&>;
-};
-
 template<typename Repo, typename... Tags>
 constexpr bool match_tree_repository_access_for_types(ygg::TypeList<Tags...>) noexcept
-{
-    return (RepositoryAccess<Repo, Tags> && ...);
-}
+{ return (ygg::formalism::SymbolRepositoryFor<Repo, Tags> && ...); }
 
 template<typename T>
 concept HasFormalismRepository = requires(const T& r) {
-    { r.get_formalism_repository() } -> ::tyr::formalism::planning::Context;
+    { r.get_formalism_repository() } -> formalism::planning::Context;
 };
 
 template<typename T, typename Tag>
@@ -106,10 +104,8 @@ concept RepositoryConcept = HasFormalismRepository<T> && match_tree_repository_a
 /// @param context
 /// @return
 template<typename Tag>
-inline const Repository<Tag>& get_repository(const Repository<Tag>& context) noexcept
-{
-    return context;
-}
+inline const Repository<Tag>& get_repository(const Repository<Tag>& context YGG_LIFETIMEBOUND) noexcept
+{ return context; }
 
 template<typename T, typename Tag>
 concept Context = requires(const T& a) {

@@ -1,21 +1,19 @@
+#include "tyr/formalism/planning/declarations.hpp"
 #include "tyr/formalism/planning/metric_data.hpp"
-#include "tyr/formalism/planning/metric_index.hpp"
 #include "tyr/formalism/planning/metric_view.hpp"
 #include "tyr/formalism/planning/repository.hpp"
 
 #include <concepts>
 
-namespace fp = tyr::formalism::planning;
-
-using MetricIndex = ygg::Index<fp::Metric>;
-using MetricData = ygg::Data<fp::Metric>;
-using MetricView = ygg::View<MetricIndex, fp::Repository>;
+using MetricIndex = ygg::Index<tyr::formalism::planning::Metric>;
+using MetricData = ygg::Data<tyr::formalism::planning::Metric>;
+using MetricView = ygg::View<MetricIndex, tyr::formalism::planning::Repository>;
 
 static_assert(std::constructible_from<MetricIndex, ygg::uint_t>);
 static_assert(std::totally_ordered<MetricIndex>);
 static_assert(std::totally_ordered<MetricData>);
 static_assert(std::totally_ordered<MetricView>);
-static_assert(std::same_as<MetricView, fp::MetricView>);
+static_assert(std::same_as<MetricView, tyr::formalism::planning::MetricView>);
 static_assert(requires(MetricData& data) {
     data.index;
     data.optimization_direction;

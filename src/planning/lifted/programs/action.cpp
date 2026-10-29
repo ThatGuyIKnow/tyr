@@ -18,101 +18,130 @@
 #include "tyr/planning/lifted/programs/action.hpp"
 
 #include "../../programs/common.hpp"
+#include "../../programs/translated_program.hpp"
+#include "tyr/formalism/datalog/copy.hpp"
+#include "tyr/formalism/datalog/expression_properties.hpp"
+#include "tyr/formalism/datalog/interning.hpp"
 #include "tyr/formalism/datalog/repository.hpp"
 #include "tyr/formalism/datalog/views.hpp"
 #include "tyr/formalism/planning/merge_datalog.hpp"
 #include "tyr/formalism/planning/repository.hpp"
 #include "tyr/formalism/planning/views.hpp"
 
-namespace f = tyr::formalism;
-namespace fp = tyr::formalism::planning;
-namespace fd = tyr::formalism::datalog;
+#include <algorithm>
 
 namespace tyr::planning
 {
 namespace
 {
 
-auto create_applicability_predicate(fp::ActionView action, fp::MergeDatalogContext& context)
+auto create_applicability_predicate(formalism::planning::ActionView<LiftedTag> action, formalism::planning::MergeDatalogContext& context)
 {
-    auto predicate = fd::checkout<f::Predicate<f::FluentTag>>(context.builder);
+    auto predicate = formalism::datalog::checkout<formalism::Predicate<formalism::FluentTag>>(context.builder());
 
     predicate->name = create_applicability_name(action);
     predicate->arity = action.get_arity();
 
-    return fd::get_or_create(context.destination, *predicate);
+    return formalism::datalog::insert(context.destination(), *predicate);
 }
 
-auto create_applicability_atom(fp::ActionView action, fp::MergeDatalogContext& context)
+auto create_applicability_atom(formalism::planning::ActionView<LiftedTag> action, formalism::planning::MergeDatalogContext& context)
 {
-    auto atom = fd::checkout<f::datalog::Atom<f::FluentTag>>(context.builder);
+    auto atom = formalism::datalog::checkout<formalism::datalog::Atom<LiftedTag, formalism::FluentTag>>(context.builder());
 
     const auto applicability_predicate = create_applicability_predicate(action, context).first;
 
     atom->predicate = applicability_predicate.get_index();
     for (ygg::uint_t i = 0; i < applicability_predicate.get_arity(); ++i)
-        atom->terms.push_back(ygg::Data<f::Term>(f::ParameterIndex(i)));
+        atom->terms.push_back(ygg::Data<formalism::Term>(formalism::ParameterIndex(i)));
 
-    return fd::get_or_create(context.destination, *atom);
+    return formalism::datalog::insert(context.destination(), *atom);
 }
 
-auto create_program(fp::TaskView task,
+auto create_program(formalism::planning::TaskView<LiftedTag> task,
                     TranslationContext<LiftedTag>& translation_context,
                     ApplicableActionProgram<LiftedTag>::AppPredicateToActionMapping& predicate_to_actions,
-                    fd::Repository& repository)
+                    ApplicableActionProgram<LiftedTag>::ConditionalEffectToPredicateMapping& effect_to_predicate,
+                    formalism::datalog::Repository& repository)
 {
-    auto builder = fd::Builder();
-    auto context = fp::MergeDatalogContext(builder, repository);
-    auto program = fd::checkout<fd::Program>(builder);
+    auto builder = formalism::datalog::Builder();
+    auto context = formalism::planning::MergeDatalogContext(builder, repository);
+    auto program = formalism::datalog::checkout<formalism::datalog::Program<LiftedTag>>(builder);
 
-    for (const auto predicate : task.get_domain().get_predicates<f::StaticTag>())
+    for (const auto predicate : task.get_domain().get_predicates<formalism::StaticTag>())
     {
-        const auto new_predicate = fp::merge_p2d(predicate, context).first;
+        const auto new_predicate = formalism::planning::merge_p2d(predicate, context).first;
         translation_context.d2p.static_to_static_predicate.emplace(new_predicate, predicate);
         translation_context.p2d.static_to_static_predicate.emplace(predicate, new_predicate);
         program->static_predicates.push_back(new_predicate.get_index());
     }
-    for (const auto predicate : task.get_domain().get_predicates<f::FluentTag>())
+    for (const auto predicate : task.get_domain().get_predicates<formalism::FluentTag>())
     {
-        const auto new_predicate = fp::merge_p2d(predicate, context).first;
+        const auto new_predicate = formalism::planning::merge_p2d(predicate, context).first;
         translation_context.d2p.fluent_to_fluent_predicate.emplace(new_predicate, predicate);
         translation_context.p2d.fluent_to_fluent_predicate.emplace(predicate, new_predicate);
         program->fluent_predicates.push_back(new_predicate.get_index());
     }
-    for (const auto predicate : task.get_domain().get_predicates<f::DerivedTag>())
+    for (const auto predicate : task.get_domain().get_predicates<formalism::DerivedTag>())
     {
-        const auto new_predicate = fp::merge_p2d<f::DerivedTag, f::FluentTag>(predicate, context).first;
+        const auto new_predicate = formalism::planning::merge_p2d<formalism::DerivedTag, formalism::FluentTag>(predicate, context).first;
         translation_context.d2p.fluent_to_derived_predicate.emplace(new_predicate, predicate);
         translation_context.p2d.derived_to_fluent_predicate.emplace(predicate, new_predicate);
         program->fluent_predicates.push_back(new_predicate.get_index());
     }
     for (const auto predicate : task.get_derived_predicates())
     {
-        const auto new_predicate = fp::merge_p2d<f::DerivedTag, f::FluentTag>(predicate, context).first;
+        const auto new_predicate = formalism::planning::merge_p2d<formalism::DerivedTag, formalism::FluentTag>(predicate, context).first;
         translation_context.d2p.fluent_to_derived_predicate.emplace(new_predicate, predicate);
         translation_context.p2d.derived_to_fluent_predicate.emplace(predicate, new_predicate);
         program->fluent_predicates.push_back(new_predicate.get_index());
     }
 
-    for (const auto function : task.get_domain().get_functions<f::StaticTag>())
-        program->static_functions.push_back(fp::merge_p2d(function, context).first.get_index());
-    for (const auto function : task.get_domain().get_functions<f::FluentTag>())
-        program->fluent_functions.push_back(fp::merge_p2d(function, context).first.get_index());
+    for (const auto function : task.get_domain().get_functions<formalism::StaticTag>())
+        program->static_functions.push_back(formalism::planning::merge_p2d(function, context).first.get_index());
+    for (const auto function : task.get_domain().get_functions<formalism::FluentTag>())
+    {
+        const auto new_function = formalism::planning::merge_p2d(function, context).first;
+        translation_context.p2d.fluent_to_fluent_function.emplace(function, new_function);
+        program->fluent_functions.push_back(new_function.get_index());
+    }
 
     for (const auto object : task.get_domain().get_constants())
-        program->objects.push_back(fp::merge_p2d(object, context).first.get_index());
+        program->objects.push_back(formalism::planning::merge_p2d(object, context).first.get_index());
     for (const auto object : task.get_objects())
-        program->objects.push_back(fp::merge_p2d(object, context).first.get_index());
+        program->objects.push_back(formalism::planning::merge_p2d(object, context).first.get_index());
 
-    for (const auto atom : task.get_atoms<f::StaticTag>())
-        program->static_atoms.push_back(fp::merge_p2d(atom, translation_context.p2d.static_to_static_predicate, context).first.get_index());
-    for (const auto atom : task.get_atoms<f::FluentTag>())
-        program->fluent_atoms.push_back(fp::merge_p2d(atom, translation_context.p2d.fluent_to_fluent_predicate, context).first.get_index());
+    for (const auto atom : task.get_atoms<formalism::StaticTag>())
+        program->static_atoms.push_back(formalism::planning::merge_p2d(atom, translation_context.p2d.static_to_static_predicate, context).first.get_index());
+    for (const auto atom : task.get_atoms<formalism::FluentTag>())
+        program->fluent_atoms.push_back(formalism::planning::merge_p2d(atom, translation_context.p2d.fluent_to_fluent_predicate, context).first.get_index());
 
-    for (const auto fterm_value : task.get_fterm_values<f::StaticTag>())
-        program->static_fterm_values.push_back(fp::merge_p2d(fterm_value, context).first.get_index());
-    for (const auto fterm_value : task.get_fterm_values<f::FluentTag>())
-        program->fluent_fterm_values.push_back(fp::merge_p2d(fterm_value, context).first.get_index());
+    for (const auto fterm_value : task.get_fterm_values<formalism::StaticTag>())
+        program->static_fterm_values.push_back(formalism::planning::merge_p2d(fterm_value, context).first.get_index());
+    for (const auto fterm_value : task.get_fterm_values<formalism::FluentTag>())
+        program->fluent_fterm_values.push_back(formalism::planning::merge_p2d(fterm_value, context).first.get_index());
+
+    // Appends the literals and numeric constraints of a planning condition to a Datalog condition.
+    const auto append_condition = [&](auto condition, auto& conj_cond)
+    {
+        for (const auto literal : condition.template get_literals<formalism::StaticTag>())
+            conj_cond.static_literals.push_back(
+                formalism::planning::merge_p2d(literal, translation_context.p2d.static_to_static_predicate, context).first.get_index());
+
+        for (const auto literal : condition.template get_literals<formalism::FluentTag>())
+            conj_cond.fluent_literals.push_back(
+                formalism::planning::merge_p2d(literal, translation_context.p2d.fluent_to_fluent_predicate, context).first.get_index());
+
+        for (const auto literal : condition.template get_literals<formalism::DerivedTag>())
+            conj_cond.fluent_literals.push_back(
+                formalism::planning::merge_p2d<formalism::DerivedTag, formalism::FluentTag>(literal,
+                                                                                            translation_context.p2d.derived_to_fluent_predicate,
+                                                                                            context)
+                    .first.get_index());
+
+        for (const auto numeric_constraint : condition.get_numeric_constraints())
+            conj_cond.numeric_constraints.push_back(formalism::planning::merge_p2d(numeric_constraint, context));
+    };
 
     for (const auto action : task.get_domain().get_actions())
     {
@@ -123,60 +152,168 @@ auto create_program(fp::TaskView task,
 
         program->fluent_predicates.push_back(applicability_predicate.get_index());
 
-        auto rule = fd::checkout<fd::Rule<f::PredicateTag>>(builder);
+        auto rule = formalism::datalog::checkout<formalism::datalog::Rule<LiftedTag, formalism::PredicateTag>>(builder);
 
-        auto conj_cond = fd::checkout<fd::ConjunctiveCondition>(builder);
+        auto conj_cond = formalism::datalog::checkout<formalism::datalog::ConjunctiveCondition<LiftedTag>>(builder);
 
         for (const auto variable : action.get_variables())
-            rule->variables.push_back(fp::merge_p2d(variable, context).first.get_index());
+            rule->variables.push_back(formalism::planning::merge_p2d(variable, context).first.get_index());
 
         for (const auto variable : action.get_condition().get_variables())
-            conj_cond->variables.push_back(fp::merge_p2d(variable, context).first.get_index());
+            conj_cond->variables.push_back(formalism::planning::merge_p2d(variable, context).first.get_index());
 
-        for (const auto literal : action.get_condition().get_literals<f::StaticTag>())
-            conj_cond->static_literals.push_back(fp::merge_p2d(literal, translation_context.p2d.static_to_static_predicate, context).first.get_index());
+        append_condition(action.get_condition(), *conj_cond);
 
-        for (const auto literal : action.get_condition().get_literals<f::FluentTag>())
-            conj_cond->fluent_literals.push_back(fp::merge_p2d(literal, translation_context.p2d.fluent_to_fluent_predicate, context).first.get_index());
-
-        for (const auto literal : action.get_condition().get_literals<f::DerivedTag>())
-            conj_cond->fluent_literals.push_back(
-                fp::merge_p2d<f::DerivedTag, f::FluentTag>(literal, translation_context.p2d.derived_to_fluent_predicate, context).first.get_index());
-
-        for (const auto numeric_constraint : action.get_condition().get_numeric_constraints())
-            conj_cond->numeric_constraints.push_back(fp::merge_p2d(numeric_constraint, context));
-
-        const auto new_conj_cond = fd::get_or_create(repository, *conj_cond).first.get_index();
+        const auto new_conj_cond = formalism::datalog::insert(repository, *conj_cond).first.get_index();
 
         rule->body = new_conj_cond;
 
         const auto applicability_atom = create_applicability_atom(action, context).first.get_index();
 
-        rule->head = applicability_atom;
+        rule->heads.push_back(applicability_atom);
 
-        const auto new_rule = fd::get_or_create(repository, *rule).first.get_index();
+        const auto new_rule = formalism::datalog::insert(repository, *rule).first.get_index();
 
         program->predicate_rules.push_back(new_rule);
+
+        // A rule per conditional effect with variables or a condition: its atoms are the bindings for which the effect fires.
+        for (const auto cond_eff : action.get_effects())
+        {
+            // An effect without variables and condition fires with its action.
+            if (cond_eff.get_variables().empty() && cond_eff.get_condition().empty())
+                continue;
+            const auto condition = cond_eff.get_condition();
+
+            auto effect_predicate = formalism::datalog::checkout<formalism::Predicate<formalism::FluentTag>>(builder);
+            effect_predicate->name = create_triggered_name(action, cond_eff);
+            effect_predicate->arity = action.get_arity() + cond_eff.get_arity();
+            const auto new_effect_predicate = formalism::datalog::insert(repository, *effect_predicate).first;
+            program->fluent_predicates.push_back(new_effect_predicate.get_index());
+
+            auto effect_rule = formalism::datalog::checkout<formalism::datalog::Rule<LiftedTag, formalism::PredicateTag>>(builder);
+            auto effect_condition = formalism::datalog::checkout<formalism::datalog::ConjunctiveCondition<LiftedTag>>(builder);
+            for (const auto variable : action.get_variables())
+                effect_condition->variables.push_back(formalism::planning::merge_p2d(variable, context).first.get_index());
+            for (const auto variable : cond_eff.get_variables())
+                effect_condition->variables.push_back(formalism::planning::merge_p2d(variable, context).first.get_index());
+            effect_rule->variables = effect_condition->variables;
+            append_condition(action.get_condition(), *effect_condition);
+            append_condition(condition, *effect_condition);
+            effect_rule->body = formalism::datalog::insert(repository, *effect_condition).first.get_index();
+
+            auto effect_atom = formalism::datalog::checkout<formalism::datalog::Atom<LiftedTag, formalism::FluentTag>>(builder);
+            effect_atom->predicate = new_effect_predicate.get_index();
+            for (ygg::uint_t i = 0; i < new_effect_predicate.get_arity(); ++i)
+                effect_atom->terms.push_back(ygg::Data<formalism::Term>(formalism::ParameterIndex(i)));
+            effect_rule->heads.push_back(formalism::datalog::insert(repository, *effect_atom).first.get_index());
+
+            program->predicate_rules.push_back(formalism::datalog::insert(repository, *effect_rule).first.get_index());
+            effect_to_predicate.emplace(std::pair(action, cond_eff), new_effect_predicate);
+        }
     }
 
-    return fd::get_or_create(repository, *program).first;
+    return formalism::datalog::insert(repository, *program).first;
 }
 
-auto create_datalog_program(fp::TaskView task,
-                            TranslationContext<LiftedTag>& translation_context,
-                            ApplicableActionProgram<LiftedTag>::AppPredicateToActionMapping& mapping)
+struct ActionTables
 {
-    auto factory = std::make_shared<fd::RepositoryFactory>();
-    auto repository = factory->create_shared(task.get_domain().get_constants().size() + task.get_objects().size());
-    auto program = create_program(task, translation_context, mapping, *repository);
+    TranslationContext<LiftedTag> translation_context;
+    ApplicableActionProgram<LiftedTag>::AppPredicateToActionMapping predicate_to_actions;
+    ApplicableActionProgram<LiftedTag>::ConditionalEffectToPredicateMapping effect_to_predicate;
+
+    ActionTables remap(SymbolRemapper& remapper) const
+    {
+        auto result = ActionTables { remapper.translation_context(translation_context), {}, {} };
+        for (const auto& [predicate, action] : predicate_to_actions)
+            result.predicate_to_actions.emplace(remapper.symbol(predicate), action);
+        for (const auto& [effect, predicate] : effect_to_predicate)
+            result.effect_to_predicate.emplace(effect, remapper.symbol(predicate));
+        return result;
+    }
+};
+
+auto create_datalog_program(formalism::planning::TaskView<LiftedTag> task,
+                            TranslationContext<LiftedTag>& translation_context,
+                            ApplicableActionProgram<LiftedTag>::AppPredicateToActionMapping& mapping,
+                            ApplicableActionProgram<LiftedTag>::SchemaPrograms& schema_programs,
+                            ApplicableActionProgram<LiftedTag>::ConditionalEffectToPredicateMapping& effect_to_predicate)
+{
+    auto factory = std::make_shared<formalism::datalog::RepositoryFactory>();
+    const auto num_objects = task.get_num_objects();
+    auto source_repository = factory->create_shared(num_objects);
+    auto tables = ActionTables {};
+    const auto source_program = create_program(task, tables.translation_context, tables.predicate_to_actions, tables.effect_to_predicate, *source_repository);
+    auto source = TranslatedProgram<ActionTables> { source_program, std::move(source_repository), std::move(tables) };
+
+    auto result = transform(source, *factory, num_objects, decompose_static_literals_pass());
+    const auto program = result.program;
+    auto repository = std::move(result.repository);
+    translation_context = std::move(result.tables.translation_context);
+    mapping = std::move(result.tables.predicate_to_actions);
+    effect_to_predicate = std::move(result.tables.effect_to_predicate);
+    auto builder = formalism::datalog::Builder {};
+    auto context = formalism::datalog::CopyContext { builder, *repository };
+
+    // A program per action schema with the rules that derive its applicability predicate and the predicates of its effects.
+    auto rule_of =
+        ygg::UnorderedMap<formalism::datalog::PredicateView<formalism::FluentTag>, ygg::Index<formalism::datalog::Rule<LiftedTag, formalism::PredicateTag>>> {};
+    for (const auto rule : program.get_rules<formalism::PredicateTag>())
+        rule_of.emplace(rule.get_heads().front().get_predicate(), rule.get_index());
+    auto schema = formalism::datalog::checkout<formalism::datalog::Program<LiftedTag>>(builder);
+    formalism::datalog::copy_except_rules(program, *schema, context);
+    for (const auto& [predicate, action] : mapping)
+    {
+        schema->predicate_rules.clear();
+        schema->predicate_rules.push_back(rule_of.at(predicate));
+        for (const auto effect : action.get_effects())
+            if (const auto it = effect_to_predicate.find(std::pair(action, effect)); it != effect_to_predicate.end())
+                schema->predicate_rules.push_back(rule_of.at(it->second));
+        schema_programs.try_emplace(action, formalism::datalog::insert(*repository, *schema).first, translation_context.p2d);
+    }
     return datalog::Program<LiftedTag>(program, std::move(repository), std::move(factory));
 }
 }
 
-ApplicableActionProgram<LiftedTag>::ApplicableActionProgram(fp::TaskView task) :
+ApplicableActionProgram<LiftedTag>::SchemaProgram::SchemaProgram(formalism::datalog::ProgramView<LiftedTag> program_,
+                                                                 const P2DTranslationContext<LiftedTag>& translation_context) :
+    program(program_),
+    input_translation(),
+    strata(analysis::compute_rule_stratification(program)),
+    listeners(analysis::compute_listeners(strata, program.get_context()))
+{
+    const auto rules = program.get_rules<formalism::PredicateTag>();
+    const auto reads_predicate = [&](auto predicate)
+    {
+        // Negative literals also need the complete relation to check absence.
+        return std::ranges::any_of(rules,
+                                   [&](auto rule)
+                                   {
+                                       return std::ranges::any_of(rule.get_body().template get_literals<formalism::FluentTag>(),
+                                                                  [&](auto literal) { return literal.get_atom().get_predicate() == predicate; });
+                                   });
+    };
+    for (const auto& [source, target] : translation_context.fluent_to_fluent_predicate)
+        if (reads_predicate(target))
+            input_translation.fluent_to_fluent_predicate.emplace(source, target);
+    for (const auto& [source, target] : translation_context.derived_to_fluent_predicate)
+        if (reads_predicate(target))
+            input_translation.derived_to_fluent_predicate.emplace(source, target);
+
+    for (const auto rule : rules)
+    {
+        const auto function_reads = formalism::datalog::collect_fluent_reads(rule);
+        for (const auto& [source, target] : translation_context.fluent_to_fluent_function)
+            if (std::ranges::any_of(function_reads, [&](auto term) { return term.get_function() == target; }))
+                input_translation.fluent_to_fluent_function.emplace(source, target);
+    }
+}
+
+ApplicableActionProgram<LiftedTag>::ApplicableActionProgram(formalism::planning::TaskView<LiftedTag> task) :
     m_translation_context(),
     m_predicate_to_actions(),
-    m_datalog_program(create_datalog_program(task, m_translation_context, m_predicate_to_actions))
+    m_schema_programs(),
+    m_conditional_effect_to_predicate(),
+    m_datalog_program(create_datalog_program(task, m_translation_context, m_predicate_to_actions, m_schema_programs, m_conditional_effect_to_predicate))
 {
     // std::cout << m_datalog_program.get_program() << std::endl;
 }
@@ -184,16 +321,18 @@ ApplicableActionProgram<LiftedTag>::ApplicableActionProgram(fp::TaskView task) :
 const TranslationContext<LiftedTag>& ApplicableActionProgram<LiftedTag>::get_translation_context() const noexcept { return m_translation_context; }
 
 const ApplicableActionProgram<LiftedTag>::AppPredicateToActionMapping& ApplicableActionProgram<LiftedTag>::get_predicate_to_action_mapping() const noexcept
-{
-    return m_predicate_to_actions;
-}
+{ return m_predicate_to_actions; }
+
+const ApplicableActionProgram<LiftedTag>::SchemaPrograms& ApplicableActionProgram<LiftedTag>::get_schema_programs() const noexcept { return m_schema_programs; }
+
+const ApplicableActionProgram<LiftedTag>::ConditionalEffectToPredicateMapping&
+ApplicableActionProgram<LiftedTag>::get_conditional_effect_to_predicate_mapping() const noexcept
+{ return m_conditional_effect_to_predicate; }
 
 datalog::Program<LiftedTag>& ApplicableActionProgram<LiftedTag>::get_datalog_program() noexcept { return m_datalog_program; }
 
 const datalog::Program<LiftedTag>& ApplicableActionProgram<LiftedTag>::get_datalog_program() const noexcept { return m_datalog_program; }
 
 const datalog::ConstProgramWorkspace<LiftedTag>& ApplicableActionProgram<LiftedTag>::get_const_program_workspace() const noexcept
-{
-    return m_datalog_program.get_const_program_workspace();
-}
+{ return m_datalog_program.get_const_program_workspace(); }
 }

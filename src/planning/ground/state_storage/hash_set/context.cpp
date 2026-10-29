@@ -19,6 +19,8 @@
 
 #include "tyr/planning/ground/task.hpp"
 
+#include <utility>
+
 namespace tyr::planning
 {
 namespace
@@ -51,7 +53,7 @@ auto compute_layout_data(const Task<GroundTag>& task) -> typename StateStorageCo
     }
 
     layout.fluent_array_size = ygg::bit::ceil_div(current_bit, bits_per_block);
-    layout.derived_num_bits = static_cast<ygg::uint_t>(task.get_formalism_task().get_task().get_atoms<::tyr::formalism::DerivedTag>().size());
+    layout.derived_num_bits = static_cast<ygg::uint_t>(task.get_formalism_task().get_task().get_atoms<formalism::DerivedTag>().size());
     layout.derived_array_size = ygg::bit::ceil_div(layout.derived_num_bits, bits_per_block);
 
     return layout;
@@ -66,11 +68,11 @@ StateStorageContext<GroundTag, HashSet, ThreadSafe>::StateStorageContext(const T
 }
 
 template<bool ThreadSafe>
-StateStorageContext<GroundTag, HashSet, ThreadSafe>::StateStorageContext(LayoutData&& layout_data) :
-    fluent_infos(layout_data.fluent_infos),
+StateStorageContext<GroundTag, HashSet, ThreadSafe>::StateStorageContext(LayoutData layout_data) :
     fluent_array_set(layout_data.fluent_array_size),
-    derived_num_bits(layout_data.derived_num_bits),
-    derived_array_set(layout_data.derived_array_size)
+    derived_array_set(layout_data.derived_array_size),
+    fluent_infos(std::move(layout_data.fluent_infos)),
+    derived_num_bits(layout_data.derived_num_bits)
 {
 }
 

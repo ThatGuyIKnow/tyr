@@ -15,46 +15,45 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#ifndef TYR_TESTS_UNIT_PLANNING_ALGORITHMS_STATISTICS_BRFS_HPP_
+#define TYR_TESTS_UNIT_PLANNING_ALGORITHMS_STATISTICS_BRFS_HPP_
+
 #include "statistics.hpp"
 
-namespace p = tyr::planning;
+#include <tyr/planning/algorithms/brfs.hpp>
+#include <tyr/planning/algorithms/brfs/event_handler.hpp>
 
 namespace tyr::tests
 {
 namespace
 {
+template<TaskKind Kind>
 void check_statistics(const SearchStatistics& expected, const SearchCase& test_case)
 {
-    auto context = create_search_context<StatisticsTaskKind>(test_case.domain_file, test_case.task_file);
-    auto event_handler = p::brfs::DefaultEventHandler<StatisticsTaskKind>::create();
+    auto context = create_search_context<Kind>(test_case.domain_file, test_case.task_file);
+    auto event_handler = tyr::planning::brfs::DefaultEventHandler<Kind>::create();
 
-    auto options = p::brfs::Options<StatisticsTaskKind>();
+    auto options = tyr::planning::brfs::Options<Kind>();
     options.event_handler = event_handler;
-    const auto result = p::brfs::find_solution(*context.task, *context.state_repository, *context.axiom_evaluator, *context.successor_generator, options);
+    const auto result =
+        tyr::planning::brfs::find_solution(*context.task, *context.state_repository, *context.axiom_evaluator, *context.successor_generator, options);
 
     expect_statistics(expected, result.statistics, result);
     expect_repository_statistics(context, result.statistics);
 }
 }
 
-class BrfsStatisticsTest : public ::testing::TestWithParam<SearchCase>
+/// Checks every configuration of one fixture case.
+template<TaskKind Kind>
+void check_brfs_case(const SearchCase& test_case)
 {
-};
-
-TEST_P(BrfsStatisticsTest, StatisticsMatchFixture)
-{
-    const auto& test_case = GetParam();
-
     for (const auto& [key, expected] : test_case.configs)
     {
         SCOPED_TRACE(key);
-        check_statistics(expected, test_case);
+        check_statistics<Kind>(expected, test_case);
     }
 }
 
-INSTANTIATE_TEST_SUITE_P(TyrPlanningBrfsStatistics,
-                         BrfsStatisticsTest,
-                         ::testing::ValuesIn(load_search_cases(kStatisticsFixture)),
-                         [](const testing::TestParamInfo<SearchCase>& info) { return info.param.name; });
-
 }
+
+#endif

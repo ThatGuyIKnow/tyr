@@ -33,118 +33,90 @@ namespace tyr::formalism::planning
  * Datalog
  */
 
-template<typename T>
+template<TaskKind T>
 bool is_canonical(const ygg::Data<UnaryOperator<T>>&)
-{
-    return true;
-}
+{ return true; }
 
-template<BinaryOperatorKind Operator, typename T>
-bool is_canonical(const ygg::Data<BinaryOperator<Operator, T>>& data)
+template<TaskKind T, BinaryOperatorKind Operator>
+bool is_canonical(const ygg::Data<BinaryOperator<T, Operator>>& data)
 {
     if constexpr (std::same_as<Operator, ArithmeticOperatorKind>)
         return (data.operator_kind != ArithmeticOperatorKind::Add && data.operator_kind != ArithmeticOperatorKind::Mul) || data.lhs <= data.rhs;
     return true;
 }
 
-template<typename T>
+template<TaskKind T>
 bool is_canonical(const ygg::Data<MultiOperator<T>>& data)
-{
-    return std::is_sorted(data.args.begin(), data.args.end());
-}
+{ return std::is_sorted(data.args.begin(), data.args.end()); }
 
-template<typename T>
+template<TaskKind T>
 bool is_canonical(const ygg::Data<BooleanOperator<T>>&)
-{
-    return true;
-}
+{ return true; }
 
-template<typename T>
+template<TaskKind T>
 bool is_canonical(const ygg::Data<ArithmeticOperator<T>>&)
-{
-    return true;
-}
+{ return true; }
 
 template<FactKind T>
-bool is_canonical(const ygg::Data<Atom<T>>&)
-{
-    return true;
-}
+bool is_canonical(const ygg::Data<Atom<LiftedTag, T>>&)
+{ return true; }
 
 template<FactKind T>
-bool is_canonical(const ygg::Data<Literal<T>>&)
-{
-    return true;
-}
+bool is_canonical(const ygg::Data<Literal<LiftedTag, T>>&)
+{ return true; }
 
 template<FactKind T>
-bool is_canonical(const ygg::Data<GroundAtom<T>>&)
-{
-    return true;
-}
+bool is_canonical(const ygg::Data<Atom<GroundTag, T>>&)
+{ return true; }
 
 template<FactKind T>
-bool is_canonical(const ygg::Data<GroundLiteral<T>>&)
-{
-    return true;
-}
+bool is_canonical(const ygg::Data<Literal<GroundTag, T>>&)
+{ return true; }
 
 template<FactKind T>
-bool is_canonical(const ygg::Data<FunctionTerm<T>>&)
-{
-    return true;
-}
+bool is_canonical(const ygg::Data<FunctionTerm<LiftedTag, T>>&)
+{ return true; }
 
-inline bool is_canonical(const ygg::Data<FunctionExpression>&) { return true; }
+inline bool is_canonical(const ygg::Data<FunctionExpression<LiftedTag>>&) { return true; }
 
 template<FactKind T>
-bool is_canonical(const ygg::Data<GroundFunctionTerm<T>>&)
-{
-    return true;
-}
+bool is_canonical(const ygg::Data<FunctionTerm<GroundTag, T>>&)
+{ return true; }
 
-inline bool is_canonical(const ygg::Data<GroundFunctionExpression>&) { return true; }
+inline bool is_canonical(const ygg::Data<FunctionExpression<GroundTag>>&) { return true; }
 
 template<FactKind T>
-bool is_canonical(const ygg::Data<GroundFunctionTermValue<T>>&)
-{
-    return true;
-}
+bool is_canonical(const ygg::Data<FunctionTermValue<GroundTag, T>>&)
+{ return true; }
 
 template<FactKind T>
-bool is_canonical(const ygg::Data<NumericEffect<T>>&)
-{
-    return true;
-}
+bool is_canonical(const ygg::Data<NumericEffect<LiftedTag, T>>&)
+{ return true; }
 
 template<FactKind T>
-bool is_canonical(const ygg::Data<GroundNumericEffect<T>>&)
-{
-    return true;
-}
+bool is_canonical(const ygg::Data<NumericEffect<GroundTag, T>>&)
+{ return true; }
 
-inline bool is_canonical(const ygg::Data<ConditionalEffect>&) { return true; }
+inline bool is_canonical(const ygg::Data<ConditionalEffect<LiftedTag>>&) { return true; }
 
-inline bool is_canonical(const ygg::Data<GroundConditionalEffect>&) { return true; }
+inline bool is_canonical(const ygg::Data<ConditionalEffect<GroundTag>>&) { return true; }
 
-inline bool is_canonical(const ygg::Data<ConjunctiveEffect>& data) { return is_canonical(data.literals) && is_canonical(data.numeric_effects); }
+inline bool is_canonical(const ygg::Data<ConjunctiveEffect<LiftedTag>>& data) { return is_canonical(data.literals) && is_canonical(data.numeric_effects); }
 
-inline bool is_canonical(const ygg::Data<GroundConjunctiveEffect>& data)
-{
-    return is_canonical(data.add_facts) && is_canonical(data.del_facts) && is_canonical(data.numeric_effects);
-}
+inline bool is_canonical(const ygg::Data<ConjunctiveEffect<GroundTag>>& data)
+{ return is_canonical(data.add_facts) && is_canonical(data.del_facts) && is_canonical(data.numeric_effects); }
 
-inline bool is_canonical(const ygg::Data<Action>&) { return true; }
+inline bool is_canonical(const ygg::Data<Action<LiftedTag>>&) { return true; }
 
-inline bool is_canonical(const ygg::Data<GroundAction>&) { return true; }
+inline bool is_canonical(const ygg::Data<Action<GroundTag>>&) { return true; }
 
-inline bool is_canonical(const ygg::Data<Axiom>&) { return true; }
+inline bool is_canonical(const ygg::Data<Axiom<LiftedTag>>&) { return true; }
 
-inline bool is_canonical(const ygg::Data<GroundAxiom>&) { return true; }
+inline bool is_canonical(const ygg::Data<Axiom<GroundTag>>&) { return true; }
 
 inline bool is_canonical(const ygg::Data<Metric>&) { return true; }
 
-inline bool is_canonical(const ygg::Data<Task>& data)
+inline bool is_canonical(const ygg::Data<Task<LiftedTag>>& data)
 {
     return is_canonical(data.derived_predicates) && is_canonical(data.objects) && is_canonical(data.static_atoms) && is_canonical(data.fluent_atoms)
            && is_canonical(data.static_fterm_values) && is_canonical(data.fluent_fterm_values) && is_canonical(data.axioms);
@@ -159,29 +131,27 @@ inline bool is_canonical(const ygg::Data<Domain>& data)
 
 template<FactKind T>
 bool is_canonical(const ygg::Data<FDRVariable<T>>&)
-{
-    return true;
-}
+{ return true; }
+
+inline bool is_canonical(const ygg::Data<Invariant>& data) { return is_canonical(data.atoms); }
 
 template<FactKind T>
 bool is_canonical(const ygg::Data<FDRFact<T>>&)
-{
-    return true;
-}
+{ return true; }
 
-inline bool is_canonical(const ygg::Data<ConjunctiveCondition>& data)
+inline bool is_canonical(const ygg::Data<ConjunctiveCondition<LiftedTag>>& data)
 {
     return is_canonical(data.static_literals) && is_canonical(data.fluent_literals) && is_canonical(data.derived_literals)
            && is_canonical(data.numeric_constraints);
 }
 
-inline bool is_canonical(const ygg::Data<GroundConjunctiveCondition>& data)
+inline bool is_canonical(const ygg::Data<ConjunctiveCondition<GroundTag>>& data)
 {
     return is_canonical(data.static_literals) && is_canonical(data.derived_literals) && is_canonical(data.positive_facts) && is_canonical(data.negative_facts)
            && is_canonical(data.numeric_constraints);
 }
 
-inline bool is_canonical(const ygg::Data<FDRTask>& data)
+inline bool is_canonical(const ygg::Data<Task<GroundTag>>& data)
 {
     return is_canonical(data.derived_predicates) && is_canonical(data.objects) && is_canonical(data.static_atoms) && is_canonical(data.fluent_atoms)
            && is_canonical(data.derived_atoms) && is_canonical(data.static_fterm_values) && is_canonical(data.fluent_fterm_values) && is_canonical(data.axioms)
@@ -192,14 +162,14 @@ inline bool is_canonical(const ygg::Data<FDRTask>& data)
  * Datalog
  */
 
-template<typename T>
+template<TaskKind T>
 void canonicalize(ygg::Data<UnaryOperator<T>>&)
 {
     // Trivially canonical
 }
 
-template<BinaryOperatorKind Operator, typename T>
-void canonicalize(ygg::Data<BinaryOperator<Operator, T>>& data)
+template<TaskKind T, BinaryOperatorKind Operator>
+void canonicalize(ygg::Data<BinaryOperator<T, Operator>>& data)
 {
     if constexpr (std::same_as<Operator, ArithmeticOperatorKind>)
     {
@@ -208,7 +178,7 @@ void canonicalize(ygg::Data<BinaryOperator<Operator, T>>& data)
     }
 }
 
-template<typename T>
+template<TaskKind T>
 void canonicalize(ygg::Data<MultiOperator<T>>& data)
 {
     if (!is_canonical(data))
@@ -216,75 +186,75 @@ void canonicalize(ygg::Data<MultiOperator<T>>& data)
 }
 
 template<FactKind T>
-void canonicalize(ygg::Data<NumericEffect<T>>&)
+void canonicalize(ygg::Data<NumericEffect<LiftedTag, T>>&)
 {
 }
 
 template<FactKind T>
-void canonicalize(ygg::Data<GroundNumericEffect<T>>&)
+void canonicalize(ygg::Data<NumericEffect<GroundTag, T>>&)
 {
 }
 
-template<typename T>
+template<TaskKind T>
 void canonicalize(ygg::Data<BooleanOperator<T>>&)
 {
     // Trivially canonical
 }
 
-template<typename T>
+template<TaskKind T>
 void canonicalize(ygg::Data<ArithmeticOperator<T>>&)
 {
     // Trivially canonical
 }
 
 template<FactKind T>
-void canonicalize(ygg::Data<Atom<T>>&)
+void canonicalize(ygg::Data<Atom<LiftedTag, T>>&)
 {
     // Trivially canonical
 }
 
 template<FactKind T>
-void canonicalize(ygg::Data<Literal<T>>&)
+void canonicalize(ygg::Data<Literal<LiftedTag, T>>&)
 {
     // Trivially canonical
 }
 
 template<FactKind T>
-void canonicalize(ygg::Data<GroundAtom<T>>&)
+void canonicalize(ygg::Data<Atom<GroundTag, T>>&)
 {
     // Trivially canonical
 }
 
 template<FactKind T>
-void canonicalize(ygg::Data<GroundLiteral<T>>&)
+void canonicalize(ygg::Data<Literal<GroundTag, T>>&)
 {
     // Trivially canonical
 }
 
 template<FactKind T>
-void canonicalize(ygg::Data<FunctionTerm<T>>&)
+void canonicalize(ygg::Data<FunctionTerm<LiftedTag, T>>&)
 {
     // Trivially canonical
 }
 
-inline void canonicalize(ygg::Data<FunctionExpression>&)
-{
-    // Trivially canonical
-}
-
-template<FactKind T>
-void canonicalize(ygg::Data<GroundFunctionTerm<T>>&)
-{
-    // Trivially canonical
-}
-
-inline void canonicalize(ygg::Data<GroundFunctionExpression>&)
+inline void canonicalize(ygg::Data<FunctionExpression<LiftedTag>>&)
 {
     // Trivially canonical
 }
 
 template<FactKind T>
-void canonicalize(ygg::Data<GroundFunctionTermValue<T>>&)
+void canonicalize(ygg::Data<FunctionTerm<GroundTag, T>>&)
+{
+    // Trivially canonical
+}
+
+inline void canonicalize(ygg::Data<FunctionExpression<GroundTag>>&)
+{
+    // Trivially canonical
+}
+
+template<FactKind T>
+void canonicalize(ygg::Data<FunctionTermValue<GroundTag, T>>&)
 {
     // Trivially canonical
 }
@@ -293,34 +263,34 @@ void canonicalize(ygg::Data<GroundFunctionTermValue<T>>&)
  * Planning
  */
 
-inline void canonicalize(ygg::Data<ConditionalEffect>&) {}
+inline void canonicalize(ygg::Data<ConditionalEffect<LiftedTag>>&) {}
 
-inline void canonicalize(ygg::Data<GroundConditionalEffect>&) {}
+inline void canonicalize(ygg::Data<ConditionalEffect<GroundTag>>&) {}
 
-inline void canonicalize(ygg::Data<ConjunctiveEffect>& data)
+inline void canonicalize(ygg::Data<ConjunctiveEffect<LiftedTag>>& data)
 {
     canonicalize(data.literals);
     canonicalize(data.numeric_effects);
 }
 
-inline void canonicalize(ygg::Data<GroundConjunctiveEffect>& data)
+inline void canonicalize(ygg::Data<ConjunctiveEffect<GroundTag>>& data)
 {
     canonicalize(data.add_facts);
     canonicalize(data.del_facts);
     canonicalize(data.numeric_effects);
 }
 
-inline void canonicalize(ygg::Data<Action>& data) { canonicalize(data.effects); }
+inline void canonicalize(ygg::Data<Action<LiftedTag>>& data) { canonicalize(data.effects); }
 
-inline void canonicalize(ygg::Data<GroundAction>& data) { canonicalize(data.effects); }
+inline void canonicalize(ygg::Data<Action<GroundTag>>& data) { canonicalize(data.effects); }
 
-inline void canonicalize(ygg::Data<Axiom>&) {}
+inline void canonicalize(ygg::Data<Axiom<LiftedTag>>&) {}
 
-inline void canonicalize(ygg::Data<GroundAxiom>&) {}
+inline void canonicalize(ygg::Data<Axiom<GroundTag>>&) {}
 
 inline void canonicalize(ygg::Data<Metric>&) {}
 
-inline void canonicalize(ygg::Data<Task>& data)
+inline void canonicalize(ygg::Data<Task<LiftedTag>>& data)
 {
     canonicalize(data.derived_predicates);
     canonicalize(data.objects);
@@ -349,13 +319,15 @@ void canonicalize(ygg::Data<FDRVariable<T>>&)
     // Trivially canonical
 }
 
+inline void canonicalize(ygg::Data<Invariant>& data) { canonicalize(data.atoms); }
+
 template<FactKind T>
 void canonicalize(ygg::Data<FDRFact<T>>&)
 {
     // Trivially canonical
 }
 
-inline void canonicalize(ygg::Data<ConjunctiveCondition>& data)
+inline void canonicalize(ygg::Data<ConjunctiveCondition<LiftedTag>>& data)
 {
     canonicalize(data.static_literals);
     canonicalize(data.fluent_literals);
@@ -363,7 +335,7 @@ inline void canonicalize(ygg::Data<ConjunctiveCondition>& data)
     canonicalize(data.numeric_constraints);
 }
 
-inline void canonicalize(ygg::Data<GroundConjunctiveCondition>& data)
+inline void canonicalize(ygg::Data<ConjunctiveCondition<GroundTag>>& data)
 {
     canonicalize(data.static_literals);
     canonicalize(data.derived_literals);
@@ -372,7 +344,7 @@ inline void canonicalize(ygg::Data<GroundConjunctiveCondition>& data)
     canonicalize(data.numeric_constraints);
 }
 
-inline void canonicalize(ygg::Data<FDRTask>& data)
+inline void canonicalize(ygg::Data<Task<GroundTag>>& data)
 {
     canonicalize(data.derived_predicates);
     canonicalize(data.objects);

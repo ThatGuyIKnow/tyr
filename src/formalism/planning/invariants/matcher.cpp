@@ -18,8 +18,8 @@
 #include "tyr/formalism/planning/invariants/matcher.hpp"
 
 #include "matching.hpp"
-#include "tyr/formalism/planning/invariants/invariant.hpp"
 #include "tyr/formalism/planning/mutable/atom.hpp"
+#include "tyr/formalism/planning/mutable/invariant.hpp"
 #include "tyr/formalism/planning/repository.hpp"
 #include "tyr/formalism/unification/match.hpp"
 #include "tyr/formalism/unification/structure_traits_impl.hpp"
@@ -28,17 +28,29 @@
 
 #include <boost/dynamic_bitset.hpp>
 #include <cassert>
+#include <yggdrasil/core/config.hpp>
 
 namespace tyr::formalism::planning::invariant
 {
 
-InvariantMatchData::InvariantMatchData(Invariant inv, std::vector<unification::SubstitutionFunction<ygg::Index<Object>>> rigid_variable_bindings) :
-    m_inv(std::move(inv)),
+namespace
+{
+/// The matcher's queries take MutableAtoms, so it matches against a mutable copy of the invariant.
+MutableInvariant to_mutable(InvariantView invariant)
+{
+    auto atoms = MutableAtomList<FluentTag> {};
+    for (const auto atom : invariant.get_atoms())
+        atoms.emplace_back(atom);
+    return MutableInvariant(invariant.get_num_rigid_variables(), invariant.get_num_counted_variables(), std::move(atoms));
+}
+}
+
+InvariantMatchData::InvariantMatchData(InvariantView invariant, std::vector<unification::SubstitutionFunction<ygg::Index<Object>>> rigid_variable_bindings) :
+    m_invariant(invariant),
+    m_inv(to_mutable(invariant)),
     m_rigid_variable_bindings(std::move(rigid_variable_bindings)),
     m_postings()
-{
-    build_postings();
-}
+{ build_postings(); }
 
 void InvariantMatchData::build_postings()
 {
@@ -62,7 +74,9 @@ void InvariantMatchData::build_postings()
             if (!binding.is_bound(parameter))
                 continue;
 
-            const auto object = *binding[parameter];
+            const auto& bound = binding[parameter];
+            YGG_ASSUME(bound.has_value());
+            const auto object = *bound;
 
             auto& bitset = m_postings[p][object];
             if (bitset.size() == 0)
@@ -77,7 +91,7 @@ namespace
 {
 bool intersect_matching_bindings(const InvariantMatchData& data, const InvariantSubstitution& sigma, boost::dynamic_bitset<>& candidates)
 {
-    const auto& inv = data.invariant();
+    const auto& inv = data.mutable_invariant();
     const auto& postings = data.postings();
     const auto num_bindings = data.rigid_variable_bindings().size();
 
@@ -91,7 +105,9 @@ bool intersect_matching_bindings(const InvariantMatchData& data, const Invariant
         if (!sigma.is_bound(parameter))
             continue;
 
-        const auto& value = *sigma[parameter];
+        const auto& bound = sigma[parameter];
+        YGG_ASSUME(bound.has_value());
+        const auto& value = *bound;
         const auto object = unification::get_object(value);
 
         const auto it = postings[p].find(object);
@@ -119,7 +135,7 @@ void Matcher::query(const MutableAtom<FluentTag>& atom, QueryResult& result, Que
     for (size_t invariant_index = 0; invariant_index < m_invariant_match_data.size(); ++invariant_index)
     {
         const auto& data = m_invariant_match_data[invariant_index];
-        const auto& inv = data.invariant();
+        const auto& inv = data.mutable_invariant();
         const auto num_bindings = data.rigid_variable_bindings().size();
 
         if (num_bindings == 0)
@@ -152,10 +168,8 @@ void Matcher::query(const MutableAtom<FluentTag>& atom, QueryResult& result, Que
     }
 }
 
-void Matcher::query(GroundAtomView<FluentTag> atom, QueryResult& result, QueryWorkspace& workspace) const
-{
-    query(MutableAtom<FluentTag>(atom), result, workspace);
-}
+void Matcher::query(AtomView<GroundTag, FluentTag> atom, QueryResult& result, QueryWorkspace& workspace) const
+{ query(MutableAtom<FluentTag>(atom), result, workspace); }
 
 QueryResult Matcher::query(const MutableAtom<FluentTag>& atom) const
 {
@@ -165,7 +179,7 @@ QueryResult Matcher::query(const MutableAtom<FluentTag>& atom) const
     return result;
 }
 
-QueryResult Matcher::query(GroundAtomView<FluentTag> atom) const
+QueryResult Matcher::query(AtomView<GroundTag, FluentTag> atom) const
 {
     QueryResult result;
     QueryWorkspace workspace;

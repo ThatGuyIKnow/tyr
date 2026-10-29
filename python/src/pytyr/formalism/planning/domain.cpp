@@ -23,6 +23,7 @@ namespace tyr::formalism::planning
 
 void bind_domain(nb::module_& m, RepositoryBinding& repository)
 {
+    using namespace nb::literals;
     ygg::bind_index<ygg::Index<Domain>>(m, "DomainIndex");
 
     {
@@ -37,8 +38,8 @@ void bind_domain(nb::module_& m, RepositoryBinding& repository)
                                      const FunctionViewList<FluentTag>&,
                                      const std::optional<FunctionView<AuxiliaryTag>>&,
                                      const ObjectViewList&,
-                                     const ActionViewList&,
-                                     const AxiomViewList&>(),
+                                     const ActionViewList<LiftedTag>&,
+                                     const AxiomViewList<LiftedTag>&>(),
                             "name"_a,
                             "static_predicates"_a,
                             "fluent_predicates"_a,
@@ -49,6 +50,26 @@ void bind_domain(nb::module_& m, RepositoryBinding& repository)
                             "constants"_a,
                             "actions"_a,
                             "axioms"_a);
+        cls.def(nb::init<::cista::offset::string,
+                         ygg::IndexList<Predicate<StaticTag>>,
+                         ygg::IndexList<Predicate<FluentTag>>,
+                         ygg::IndexList<Predicate<DerivedTag>>,
+                         ygg::IndexList<Function<StaticTag>>,
+                         ygg::IndexList<Function<FluentTag>>,
+                         ::cista::optional<ygg::Index<Function<AuxiliaryTag>>>,
+                         ygg::IndexList<Object>,
+                         ygg::IndexList<Action<LiftedTag>>,
+                         ygg::IndexList<Axiom<LiftedTag>>>(),
+                "name"_a,
+                "static_predicates"_a,
+                "fluent_predicates"_a,
+                "derived_predicates"_a,
+                "static_functions"_a,
+                "fluent_functions"_a,
+                "auxiliary_function"_a,
+                "constants"_a,
+                "actions"_a,
+                "axioms"_a);
         ygg::add_print(cls);
         ygg::add_comparison(cls);
         ygg::add_hash(cls);
@@ -74,7 +95,7 @@ void bind_domain(nb::module_& m, RepositoryBinding& repository)
         ygg::add_hash(cls);
     }
 
-    repository.def("get_or_create", &get_or_create_data<Domain>, "data"_a, nb::keep_alive<0, 1>());
+    bind_insert<Domain>(repository);
 }
 
 }  // namespace tyr::formalism::planning

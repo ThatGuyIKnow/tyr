@@ -23,22 +23,21 @@
 
 #include <array>
 #include <cassert>
-#include <iostream>
-#include <queue>
+#include <optional>
 #include <yggdrasil/containers/tuple.hpp>
+#include <yggdrasil/core/config.hpp>
 
 namespace tyr::planning
 {
 
-template<IsOpenList... Os>
+template<IsOpenList First, IsOpenList... Rest>
+    requires(std::same_as<typename First::ItemType, typename Rest::ItemType> && ...) && std::move_constructible<typename First::ItemType>
 class AlternatingOpenList
 {
 public:
-    static constexpr std::size_t N = sizeof...(Os);
+    static constexpr std::size_t N = 1 + sizeof...(Rest);
 
-    static_assert(N > 0);
-
-    using ItemType = typename std::tuple_element<0, std::tuple<Os...>>::type::ItemType;
+    using ItemType = typename First::ItemType;
 
 private:
     bool cur_empty()
@@ -61,34 +60,32 @@ private:
         return result;
     }
 
-    size_t cur_weight() const
+    [[nodiscard]] size_t cur_weight() const
     {
         assert(m_pos < N);
 
         return m_weights[m_pos];
     }
 
+    void advance_pos()
+    {
+        if (++m_pos == N)
+        {
+            m_pos = 0;
+        }
+    }
+
     void find_next_nonempty_queue()
     {
-        do
-        {
-            if (++m_pos == N)
-            {
-                m_pos = 0;
-            }
-        } while (cur_empty());
+        advance_pos();
+        while (cur_empty())
+            advance_pos();
 
         m_count = 0;
     }
 
 public:
-    AlternatingOpenList(Os&... queues, std::array<size_t, N> weights) :
-        m_queues(std::tuple<std::reference_wrapper<Os>...>(std::ref(queues)...)),
-        m_weights(weights),
-        m_pos(0),
-        m_count(0)
-    {
-    }
+    AlternatingOpenList(First& first, Rest&... rest, std::array<size_t, N> weights) : m_queues(std::ref(first), std::ref(rest)...), m_weights(weights) {}
 
     ItemType top()
     {
@@ -99,9 +96,10 @@ public:
             find_next_nonempty_queue();
         }
 
-        ItemType result;
-        ygg::visit_at(m_queues, m_pos, [&result](auto&& queue) { result = queue.get().top(); });
-        return result;
+        std::optional<ItemType> result;
+        ygg::visit_at(m_queues, m_pos, [&result](auto&& queue) { result.emplace(queue.get().top()); });
+        YGG_ASSUME(result.has_value());
+        return std::move(*result);
     }
 
     void pop()
@@ -115,29 +113,29 @@ public:
 
     void clear()
     {
-        std::apply([](auto&&... queues) { return (queues.get().clear() && ...); }, m_queues);
+        std::apply([](auto&&... queues) { (queues.get().clear(), ...); }, m_queues);
     }
 
-    bool empty() const
+    [[nodiscard]] bool empty() const
     {
         return std::apply([](auto&&... queues) { return (queues.get().empty() && ...); }, m_queues);
     }
 
-    std::size_t size() const
+    [[nodiscard]] std::size_t size() const
     {
         return std::apply([](auto&&... queues) { return (queues.get().size() + ...); }, m_queues);
     }
 
     auto& get_weights() noexcept { return m_weights; }
-    const auto& get_weights() const noexcept { return m_weights; }
+    [[nodiscard]] const auto& get_weights() const noexcept { return m_weights; }
 
 private:
-    std::tuple<std::reference_wrapper<Os>...> m_queues;
+    std::tuple<std::reference_wrapper<First>, std::reference_wrapper<Rest>...> m_queues;
 
     std::array<size_t, N> m_weights;
 
-    size_t m_pos;
-    size_t m_count;
+    size_t m_pos = 0;
+    size_t m_count = 0;
 };
 
 }

@@ -17,77 +17,27 @@
 
 #include "tyr/datalog/policies/annotation.hpp"
 
-#include "tyr/datalog/policies/annotation_concept.hpp"
+#include "tyr/datalog/policies/annotation_concepts.hpp"
 
 #include <algorithm>
+#include <utility>
 
 namespace tyr::datalog
 {
 
 template<typename AggregationFunction>
 void MinCostAnnotationPolicy<AggregationFunction>::initialize_annotation(PredicateHead head, PredicateAnnotations<>& annotations) const
-{
-    annotations.insert_or_assign(head, BaseAnnotation(Cost(0)));
-}
+{ annotations.insert_or_assign(head, BaseAnnotation(static_cast<Cost>(0))); }
 
 template<typename AggregationFunction>
 void MinCostAnnotationPolicy<AggregationFunction>::initialize_annotation(FunctionBinding head,
-                                                                         ygg::ClosedInterval<ygg::float_t> interval,
+                                                                         const ygg::ClosedInterval<ygg::float_t>& interval,
                                                                          FunctionAnnotations<>& numeric_annotations) const
-{
-    numeric_annotations.insert(head, interval, BaseAnnotation(Cost(0)));
-}
-
-template<typename AggregationFunction>
-CostUpdate MinCostAnnotationPolicy<AggregationFunction>::commit_annotation(PredicateHead head,
-                                                                           const PredicateAnnotations<true>& delta_annotations,
-                                                                           PredicateAnnotations<>& annotations) const
-{
-    const auto old_cost = annotations.fetch_cost(head);
-    const auto* delta_annotation = delta_annotations.find(head);
-    if (delta_annotation)
-        if (auto update = annotations.insert_if_better(head, *delta_annotation))
-            return *update;
-    return CostUpdate(old_cost, old_cost);
-}
-
-template<typename AggregationFunction>
-CostUpdate MinCostAnnotationPolicy<AggregationFunction>::commit_annotation(FunctionBinding head,
-                                                                           ygg::ClosedInterval<ygg::float_t> interval,
-                                                                           const FunctionAnnotations<true>& delta_numeric_annotations,
-                                                                           FunctionAnnotations<>& numeric_annotations) const
-{
-    const auto old_cost = numeric_annotations.fetch_cost(head, interval);
-    const auto* delta_annotation = delta_numeric_annotations.find(head, interval);
-    if (delta_annotation && numeric_annotations.insert(head, interval, *delta_annotation))
-        return CostUpdate(old_cost, get_cost(*delta_annotation));
-    return CostUpdate(old_cost, old_cost);
-}
-
-template<typename AggregationFunction>
-bool MinCostAnnotationPolicy<AggregationFunction>::can_update(PredicateHead head,
-                                                              Cost cost,
-                                                              const PredicateAnnotations<>& annotations,
-                                                              const PredicateAnnotations<true>& delta_annotations) const noexcept
-{
-    return cost < std::min(annotations.fetch_cost(head), delta_annotations.fetch_cost(head));
-}
-
-template<typename AggregationFunction>
-bool MinCostAnnotationPolicy<AggregationFunction>::can_update(FunctionBinding head,
-                                                              ygg::ClosedInterval<ygg::float_t> interval,
-                                                              Cost cost,
-                                                              const FunctionAnnotations<>& numeric_annotations,
-                                                              const FunctionAnnotations<true>& delta_numeric_annotations) const noexcept
-{
-    return cost < std::min(numeric_annotations.fetch_cost(head, interval), delta_numeric_annotations.fetch_cost(head, interval));
-}
+{ numeric_annotations.insert(head, interval, BaseAnnotation(static_cast<Cost>(0))); }
 
 template<typename AggregationFunction>
 void MinCostAnnotationWithAchieversPolicy<AggregationFunction>::clear_achievers() noexcept
-{
-    m_achievers.clear();
-}
+{ m_achievers.clear(); }
 
 template<typename AggregationFunction>
 const typename MinCostAnnotationWithAchieversPolicy<AggregationFunction>::Achievers*

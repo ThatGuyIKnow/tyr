@@ -17,8 +17,24 @@
 
 #include "planning/metric.hpp"
 #include "planning/parser.hpp"
+#include "tyr/formalism/datalog/declarations.hpp"
+#include "tyr/formalism/declarations.hpp"
+#include "tyr/formalism/planning/declarations.hpp"
+#include "tyr/formalism/planning/fdr_value.hpp"
 #include "tyr/formalism/planning/parser.hpp"
-#include "tyr/planning/planning.hpp"
+#include "tyr/planning/declarations.hpp"
+#include "tyr/planning/factory.hpp"
+#include "tyr/planning/ground/axiom_evaluator.hpp"
+#include "tyr/planning/ground/successor_generator.hpp"
+#include "tyr/planning/ground/task.hpp"
+#include "tyr/planning/heuristics/lmcut.hpp"
+#include "tyr/planning/lifted/axiom_evaluator.hpp"
+#include "tyr/planning/lifted/successor_generator.hpp"
+#include "tyr/planning/lifted/task.hpp"
+#include "tyr/planning/node.hpp"
+#include "tyr/planning/state_delta.hpp"
+#include "tyr/planning/state_routing/dist_hash.hpp"
+#include "tyr/planning/state_routing/dist_hash_concepts.hpp"
 
 #include <algorithm>
 #include <concepts>
@@ -26,6 +42,7 @@
 #include <gtest/gtest.h>
 #include <memory>
 #include <optional>
+#include <set>
 #include <stdexcept>
 #include <string_view>
 #include <thread>
@@ -33,22 +50,18 @@
 #include <utility>
 #include <yggdrasil/execution/onetbb.hpp>
 
-namespace p = tyr::planning;
-namespace f = tyr::formalism;
-namespace fp = tyr::formalism::planning;
-
 namespace tyr::tests
 {
 namespace
 {
 
 template<TaskKind Kind>
-void expect_state_routing(const p::TaskPtr<Kind>& task)
+void expect_state_routing(const tyr::planning::TaskPtr<Kind>& task)
 {
     auto execution_context = ygg::ExecutionContext::create(1);
-    auto axiom_evaluator = p::AxiomEvaluatorFactory<Kind>().create(task, execution_context);
-    auto repository = p::StateRepositoryFactory<Kind>().create(task);
-    auto generator = p::SuccessorGeneratorFactory<Kind>().create(task, execution_context);
+    auto axiom_evaluator = tyr::planning::AxiomEvaluatorFactory<Kind>().create(task, execution_context);
+    auto repository = tyr::planning::StateRepositoryFactory<Kind>().create(task);
+    auto generator = tyr::planning::SuccessorGeneratorFactory<Kind>().create(task, execution_context);
 
     auto worker_context = ygg::ExecutionContext::create(1);
     auto worker_axiom_evaluator = axiom_evaluator->make_worker(worker_context);
@@ -57,11 +70,11 @@ void expect_state_routing(const p::TaskPtr<Kind>& task)
 
     const auto initial = generator->get_initial_node(*repository, *axiom_evaluator);
     const auto worker_initial = worker->get_initial_node(*worker_repository, *worker_axiom_evaluator);
-    const auto dist_hash = p::DistHash<Kind, p::RandomDistHashTag>(17);
+    const auto dist_hash = tyr::planning::DistHash<Kind, tyr::planning::RandomDistHashTag>(17);
 
     const auto expected_source_index = initial.get_state().get_index();
     const auto expected_source_hash = dist_hash.hash(initial.get_state().get_state_builder());
-    auto source = std::optional<p::StateView<Kind>>(repository->get_registered_state(expected_source_index));
+    auto source = std::optional<tyr::planning::StateView<Kind>>(repository->get_registered_state(expected_source_index));
     auto transferred_source = source;
     source.reset();
     auto source_reader = std::jthread(
@@ -118,18 +131,18 @@ void expect_state_routing(const p::TaskPtr<Kind>& task)
 
     EXPECT_EQ(dist_hash.hash(initial.get_state().get_state_builder()), dist_hash.hash(worker_initial.get_state().get_state_builder()));
     EXPECT_EQ(dist_hash.owner(initial.get_state().get_state_builder(), 19), dist_hash.owner(worker_initial.get_state().get_state_builder(), 19));
-    EXPECT_EQ(dist_hash.owner(initial.get_state().get_state_builder(), 1), ygg::Index<p::Worker>(0));
+    EXPECT_EQ(dist_hash.owner(initial.get_state().get_state_builder(), 1), ygg::Index<tyr::planning::Worker>(0));
 
     auto derived_only_difference = repository->get_state_builder();
     derived_only_difference->assign_unextended_part(initial.get_state().get_state_builder());
-    derived_only_difference->set(ygg::Index<fp::GroundAtom<f::DerivedTag>>(0));
+    derived_only_difference->set(ygg::Index<tyr::formalism::planning::Atom<GroundTag, tyr::formalism::DerivedTag>>(0));
     EXPECT_EQ(dist_hash.hash(*derived_only_difference), dist_hash.hash(initial.get_state().get_state_builder()));
 
     auto first_numeric = repository->get_state_builder();
     auto second_numeric = repository->get_state_builder();
     first_numeric->assign_unextended_part(initial.get_state().get_state_builder());
     second_numeric->assign_unextended_part(initial.get_state().get_state_builder());
-    const auto numeric_index = ygg::Index<fp::GroundFunctionTerm<f::FluentTag>>(0);
+    const auto numeric_index = ygg::Index<tyr::formalism::planning::FunctionTerm<GroundTag, tyr::formalism::FluentTag>>(0);
     const auto first_value = ygg::float_t { 1 };
     const auto second_value = first_value + ygg::FloatTolerance<ygg::float_t>::abs_epsilon * ygg::float_t { 0.25 };
     first_numeric->set(numeric_index, first_value);
@@ -140,18 +153,37 @@ void expect_state_routing(const p::TaskPtr<Kind>& task)
     second_numeric->set(numeric_index, ygg::float_t { 2 });
     EXPECT_NE(dist_hash.hash(*first_numeric), dist_hash.hash(*second_numeric));
 
-    if constexpr (std::same_as<Kind, ::tyr::LiftedTag>)
+    if constexpr (std::same_as<Kind, LiftedTag>)
     {
         auto canonical_facts = repository->get_state_builder();
         auto trailing_zero_facts = repository->get_state_builder();
-        const auto low_variable = ygg::Index<fp::FDRVariable<f::FluentTag>>(0);
-        const auto high_variable = ygg::Index<fp::FDRVariable<f::FluentTag>>(1000);
-        canonical_facts->set(ygg::Data<fp::FDRFact<f::FluentTag>>(low_variable, fp::FDRValue { 1 }));
-        trailing_zero_facts->set(ygg::Data<fp::FDRFact<f::FluentTag>>(low_variable, fp::FDRValue { 1 }));
-        trailing_zero_facts->set(ygg::Data<fp::FDRFact<f::FluentTag>>(high_variable, fp::FDRValue { 1 }));
-        trailing_zero_facts->set(ygg::Data<fp::FDRFact<f::FluentTag>>(high_variable, fp::FDRValue::none()));
-        EXPECT_EQ(trailing_zero_facts->get(low_variable), fp::FDRValue { 1 });
+        const auto low_variable = ygg::Index<tyr::formalism::planning::FDRVariable<tyr::formalism::FluentTag>>(0);
+        const auto high_variable = ygg::Index<tyr::formalism::planning::FDRVariable<tyr::formalism::FluentTag>>(1000);
+        canonical_facts->set(ygg::Data<tyr::formalism::planning::FDRFact<tyr::formalism::FluentTag>>(low_variable, tyr::formalism::planning::FDRValue { 1 }));
+        trailing_zero_facts->set(
+            ygg::Data<tyr::formalism::planning::FDRFact<tyr::formalism::FluentTag>>(low_variable, tyr::formalism::planning::FDRValue { 1 }));
+        trailing_zero_facts->set(
+            ygg::Data<tyr::formalism::planning::FDRFact<tyr::formalism::FluentTag>>(high_variable, tyr::formalism::planning::FDRValue { 1 }));
+        trailing_zero_facts->set(
+            ygg::Data<tyr::formalism::planning::FDRFact<tyr::formalism::FluentTag>>(high_variable, tyr::formalism::planning::FDRValue::none()));
+        EXPECT_EQ(trailing_zero_facts->get(low_variable), tyr::formalism::planning::FDRValue { 1 });
         EXPECT_EQ(dist_hash.hash(*canonical_facts), dist_hash.hash(*trailing_zero_facts));
+
+        auto owners = std::set<ygg::uint_t> {};
+        for (ygg::uint_t mask = 0; mask < 256; ++mask)
+        {
+            auto state = repository->get_state_builder();
+            state->set(ygg::Data<tyr::formalism::planning::FDRFact<tyr::formalism::FluentTag>>(
+                ygg::Index<tyr::formalism::planning::FDRVariable<tyr::formalism::FluentTag>>(44),
+                tyr::formalism::planning::FDRValue { 1 }));
+            for (ygg::uint_t bit = 0; bit < 8; ++bit)
+                if (mask & (ygg::uint_t { 1 } << bit))
+                    state->set(ygg::Data<tyr::formalism::planning::FDRFact<tyr::formalism::FluentTag>>(
+                        ygg::Index<tyr::formalism::planning::FDRVariable<tyr::formalism::FluentTag>>(6 + bit),
+                        tyr::formalism::planning::FDRValue { 1 }));
+            owners.insert(ygg::uint_t(dist_hash.owner(*state, 16)));
+        }
+        EXPECT_EQ(owners.size(), 16);
     }
 
     const auto bindings = generator->get_applicable_action_bindings(initial);
@@ -160,15 +192,16 @@ void expect_state_routing(const p::TaskPtr<Kind>& task)
     const auto source_states_before_generation = repository->num_states();
 
     auto remote_state = repository->get_state_builder();
-    const auto remote_result = generator->generate_successor_state(initial, action, *remote_state);
+    auto delta = tyr::planning::StateDelta {};
+    const auto remote_auxiliary_value = generator->generate_successor_state(initial, action, *remote_state, delta);
     axiom_evaluator->compute_extended_state(*remote_state);
-    const auto remote_metric = p::evaluate_successor_metric(*task, *remote_state, remote_result.auxiliary_value);
+    const auto remote_metric = tyr::planning::evaluate_successor_metric(*task, *remote_state, remote_auxiliary_value);
     const auto remote_hash = dist_hash.hash(*remote_state);
     EXPECT_EQ(repository->num_states(), source_states_before_generation);
 
     auto local_state = repository->get_state_builder();
-    const auto local_result = generator->generate_successor_state(initial, action, *local_state);
-    const auto local_node = generator->finalize_successor_state(*repository, *axiom_evaluator, std::move(local_state), local_result);
+    const auto local_auxiliary_value = generator->generate_successor_state(initial, action, *local_state, delta);
+    const auto local_node = generator->finalize_successor_state(*repository, *axiom_evaluator, std::move(local_state), local_auxiliary_value);
 
     const auto compatibility_node = generator->get_successor_node(initial, action, *repository, *axiom_evaluator);
     EXPECT_EQ(local_node, compatibility_node);
@@ -178,7 +211,7 @@ void expect_state_routing(const p::TaskPtr<Kind>& task)
     using std::swap;
     swap(*owner_state, *remote_state);
     EXPECT_EQ(dist_hash.hash(*owner_state), remote_hash);
-    const auto owner_node = p::Node<Kind>(worker_repository->register_extended_state(std::move(owner_state)), remote_metric);
+    const auto owner_node = tyr::planning::Node<Kind>(worker_repository->register_extended_state(std::move(owner_state)), remote_metric);
     EXPECT_EQ(owner_node.get_metric(), compatibility_node.get_metric());
     EXPECT_EQ(repository->num_states(), source_states_after_local_registration);
     EXPECT_EQ(worker_repository->num_states(), 2);
@@ -186,16 +219,16 @@ void expect_state_routing(const p::TaskPtr<Kind>& task)
 }
 
 template<TaskKind Kind>
-void expect_lmcut_state_routing(const p::TaskPtr<Kind>& task)
+void expect_lmcut_state_routing(const tyr::planning::TaskPtr<Kind>& task)
 {
     auto execution_context = ygg::ExecutionContext::create(1);
-    auto axiom_evaluator = p::AxiomEvaluatorFactory<Kind>().create(task, execution_context);
-    auto repository = p::StateRepositoryFactory<Kind>().create(task);
-    auto generator = p::SuccessorGeneratorFactory<Kind>().create(task, execution_context);
+    auto axiom_evaluator = tyr::planning::AxiomEvaluatorFactory<Kind>().create(task, execution_context);
+    auto repository = tyr::planning::StateRepositoryFactory<Kind>().create(task);
+    auto generator = tyr::planning::SuccessorGeneratorFactory<Kind>().create(task, execution_context);
     const auto initial_node = generator->get_initial_node(*repository, *axiom_evaluator);
     const auto& initial = initial_node.get_state();
 
-    auto heuristic = p::LMCutHeuristic<Kind>(task, ygg::ExecutionContext::create(1), ::tyr::CostMode::UNIT);
+    auto heuristic = tyr::planning::LMCutHeuristic<Kind>(task, ygg::ExecutionContext::create(1), CostMode::UNIT);
     const auto frontier = heuristic.compute_cut_frontier_atoms(initial.get_state_builder());
     EXPECT_EQ(frontier.size(), 2);
     const auto find_frontier_atom = [&](std::string_view name)
@@ -208,24 +241,24 @@ void expect_lmcut_state_routing(const p::TaskPtr<Kind>& task)
     const auto bindings = generator->get_applicable_action_bindings(initial_node);
     const auto reach_landmark = std::ranges::find_if(bindings, [](const auto binding) { return binding.get_relation().get_name().str() == "reach-landmark"; });
     ASSERT_NE(reach_landmark, bindings.end());
-    auto side = std::optional<fp::GroundAtomView<f::FluentTag>> {};
+    auto side = std::optional<tyr::formalism::planning::AtomView<GroundTag, tyr::formalism::FluentTag>> {};
     for (const auto conditional_effect : generator->ground_action(*reach_landmark).get_effects())
-        for (const auto fact : conditional_effect.get_effect().template get_facts<f::PositiveTag>())
+        for (const auto fact : conditional_effect.get_effect().template get_facts<tyr::formalism::PositiveTag>())
             if (const auto atom = fact.get_atom(); atom && atom->get_predicate().get_name().str() == "side")
                 side = *atom;
     ASSERT_TRUE(side);
 
-    auto first_hash = p::DistHash<Kind, p::LMCutDistHashTag>(17);
-    auto second_hash = p::DistHash<Kind, p::LMCutDistHashTag>(17);
+    auto first_hash = tyr::planning::DistHash<Kind, tyr::planning::LMCutDistHashTag>(17);
+    auto second_hash = tyr::planning::DistHash<Kind, tyr::planning::LMCutDistHashTag>(17);
     first_hash.initialize(initial);
     second_hash.initialize(initial);
     EXPECT_THROW(first_hash.initialize(initial), std::logic_error);
     EXPECT_EQ(first_hash.hash(initial.get_state_builder()), second_hash.hash(initial.get_state_builder()));
-    EXPECT_EQ(first_hash.owner(initial.get_state_builder(), 1), ygg::Index<p::Worker>(0));
+    EXPECT_EQ(first_hash.owner(initial.get_state_builder(), 1), ygg::Index<tyr::planning::Worker>(0));
 
     auto side_state = repository->get_state_builder();
     side_state->assign_unextended_part(initial.get_state_builder());
-    side_state->set(task->get_fdr_context()->get_fact(*side).get_data());
+    side_state->set(task->get_fdr_context()->get_fact(side.value()).get_data());
     EXPECT_EQ(first_hash.hash(*side_state), first_hash.hash(initial.get_state_builder()));
 
     auto landmark_state = repository->get_state_builder();
@@ -239,7 +272,7 @@ void expect_lmcut_state_routing(const p::TaskPtr<Kind>& task)
 TEST(TyrPlanningStateRoutingTest, RoutesGroundAndLiftedStatesWithoutProducerRegistration)
 {
     const auto root = std::filesystem::path(BENCHMARKS_DIR);
-    auto lifted_task = p::Task<LiftedTag>::create(
+    auto lifted_task = tyr::planning::Task<LiftedTag>::create(
         make_test_parser(root / "classical/tests/philosophers/domain.pddl").parse_task(root / "classical/tests/philosophers/test-1.pddl"));
     auto grounding_context = ygg::ExecutionContext::create(1);
     auto ground_task = lifted_task->instantiate_ground_task(*grounding_context).task;
@@ -252,7 +285,7 @@ TEST(TyrPlanningStateRoutingTest, RoutesGroundAndLiftedStatesWithoutProducerRegi
 TEST(TyrPlanningStateRoutingTest, UsesInitialLMCutFrontierAsStableDistributionFeatures)
 {
     const auto root = std::filesystem::path(ROOT_DIR) / "tests/fixtures/planning/state_routing";
-    auto lifted_task = p::Task<LiftedTag>::create(make_test_parser(root / "domain.pddl").parse_task(root / "problem.pddl"));
+    auto lifted_task = tyr::planning::Task<LiftedTag>::create(make_test_parser(root / "domain.pddl").parse_task(root / "problem.pddl"));
     auto grounding_context = ygg::ExecutionContext::create(1);
     auto ground_task = lifted_task->instantiate_ground_task(*grounding_context).task;
     ASSERT_NE(ground_task, nullptr);

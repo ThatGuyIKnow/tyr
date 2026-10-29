@@ -18,33 +18,26 @@
 #ifndef TYR_FORMALISM_DATALOG_LITERAL_VIEW_HPP_
 #define TYR_FORMALISM_DATALOG_LITERAL_VIEW_HPP_
 
-#include <yggdrasil/core/types.hpp>
 #include "tyr/formalism/datalog/atom_view.hpp"
 #include "tyr/formalism/datalog/declarations.hpp"
-#include "tyr/formalism/datalog/literal_index.hpp"
 #include "tyr/formalism/predicate_view.hpp"
+
+#include <yggdrasil/core/types.hpp>
 
 namespace ygg
 {
-template<::tyr::formalism::FactKind T, ::tyr::formalism::datalog::Context C>
-class View<ygg::Index<::tyr::formalism::datalog::Literal<T>>, C>
+
+template<::tyr::TaskKind T, ::tyr::formalism::FactKind F, ygg::formalism::SymbolContextFor<::tyr::formalism::datalog::Literal<T, F>> C>
+class View<ygg::Index<::tyr::formalism::datalog::Literal<T, F>>, C> : public ygg::IndexViewBase<::tyr::formalism::datalog::Literal<T, F>, C>
 {
-private:
-    const C* m_context;
-    ygg::Index<::tyr::formalism::datalog::Literal<T>> m_handle;
-
 public:
-    View(ygg::Index<::tyr::formalism::datalog::Literal<T>> handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
+    View(ygg::Index<::tyr::formalism::datalog::Literal<T, F>> handle, const C& context) noexcept :
+        ygg::IndexViewBase<::tyr::formalism::datalog::Literal<T, F>, C>(handle, context)
+    {
+    }
 
-    const auto& get_data() const noexcept { return get_repository(*m_context)[m_handle]; }
-    const auto& get_context() const noexcept { return *m_context; }
-    const auto& get_handle() const noexcept { return m_handle; }
-
-    auto get_index() const noexcept { return m_handle; }
-    auto get_atom() const noexcept { return ygg::make_view(get_data().atom, *m_context); }
-    auto get_polarity() const noexcept { return get_data().polarity; }
-
-    auto identifying_members() const noexcept { return std::tie(m_handle, m_context->get_index()); }
+    auto get_atom() const noexcept { return ygg::make_view(this->get_data().atom, this->get_context()); }
+    auto get_polarity() const noexcept { return this->get_data().polarity; }
 };
 
 }

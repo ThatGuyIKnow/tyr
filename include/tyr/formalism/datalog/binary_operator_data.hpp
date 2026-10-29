@@ -18,31 +18,32 @@
 #ifndef TYR_FORMALISM_DATALOG_BINARY_OPERATOR_DATA_HPP_
 #define TYR_FORMALISM_DATALOG_BINARY_OPERATOR_DATA_HPP_
 
-#include "tyr/formalism/datalog/binary_operator_index.hpp"
 #include "tyr/formalism/datalog/declarations.hpp"
 #include "tyr/formalism/datalog/function_expression_data.hpp"
-#include "tyr/formalism/datalog/ground_function_expression_data.hpp"
 
+#include <tuple>
+#include <utility>
 #include <yggdrasil/core/types.hpp>
 #include <yggdrasil/core/types_utils.hpp>
 
 namespace ygg
 {
 
-template<::tyr::formalism::BinaryOperatorKind Operator, typename T>
-struct Data<::tyr::formalism::datalog::BinaryOperator<Operator, T>>
+template<::tyr::TaskKind T, ::tyr::formalism::BinaryOperatorKind O>
+struct Data<::tyr::formalism::datalog::BinaryOperator<T, O>>
 {
-    using OperatorType = Operator;
+    using Operand = ygg::Data<::tyr::formalism::datalog::FunctionExpression<T>>;
+    using OperatorType = O;
 
-    ygg::Index<::tyr::formalism::datalog::BinaryOperator<Operator, T>> index;
+    ygg::Index<::tyr::formalism::datalog::BinaryOperator<T, O>> index;
     OperatorType operator_kind {};
-    T lhs;
-    T rhs;
+    Operand lhs;
+    Operand rhs;
 
     Data() = default;
-    Data(OperatorType operator_kind_, T lhs_, T rhs_) : index(), operator_kind(operator_kind_), lhs(lhs_), rhs(rhs_) {}
+    Data(OperatorType operator_kind_, Operand lhs_, Operand rhs_) : index(), operator_kind(operator_kind_), lhs(lhs_), rhs(rhs_) {}
     template<typename C>
-    Data(OperatorType operator_kind_, ::ygg::View<T, C> lhs_, ::ygg::View<T, C> rhs_) : index(), operator_kind(operator_kind_), lhs(), rhs()
+    Data(OperatorType operator_kind_, ::ygg::View<Operand, C> lhs_, ::ygg::View<Operand, C> rhs_) : index(), operator_kind(operator_kind_), lhs(), rhs()
     {
         set(lhs_, lhs);
         set(rhs_, rhs);
@@ -51,21 +52,14 @@ struct Data<::tyr::formalism::datalog::BinaryOperator<Operator, T>>
     Data& operator=(const Data& other) = default;
     Data(Data&& other) = default;
     Data& operator=(Data&& other) = default;
+    ~Data() = default;
 
-    void clear() noexcept
-    {
-        ygg::clear(index);
-        operator_kind = {};
-        ygg::clear(lhs);
-        ygg::clear(rhs);
-    }
-
-    auto cista_members() const noexcept { return std::tie(index, operator_kind, lhs, rhs); }
-    auto identifying_members() const noexcept { return std::tie(operator_kind, lhs, rhs); }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::operator_kind, &Data::lhs, &Data::rhs> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::operator_kind, &Data::lhs, &Data::rhs> {}; }
+    void clear() noexcept { ygg::clear_members(*this); }
 };
 
-static_assert(!ygg::uses_trivial_storage_v<
-              ::tyr::formalism::datalog::BinaryOperator<::tyr::formalism::ArithmeticOperatorKind, ygg::Data<::tyr::formalism::datalog::FunctionExpression>>>);
+static_assert(!ygg::uses_trivial_storage_v<::tyr::formalism::datalog::BinaryOperator<::tyr::LiftedTag, ::tyr::formalism::ArithmeticOperatorKind>>);
 
 }
 

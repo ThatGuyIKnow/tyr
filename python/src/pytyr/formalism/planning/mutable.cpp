@@ -31,11 +31,12 @@ namespace
 template<FactKind T>
 void bind_atom(nb::module_& m, const std::string& name)
 {
+    using namespace nb::literals;
     using V = MutableAtom<T>;
 
     auto cls = nb::class_<V>(m, name.c_str())  //
                    .def(nb::init<PredicateView<T>, const TermViewList&>(), "predicate"_a, "terms"_a)
-                   .def(nb::init<AtomView<T>>(), "atom"_a)
+                   .def(nb::init<AtomView<LiftedTag, T>>(), "atom"_a)
                    .def_rw("predicate", &V::predicate)
                    .def_rw("terms", &V::terms);
     ygg::add_print(cls);
@@ -46,11 +47,12 @@ void bind_atom(nb::module_& m, const std::string& name)
 template<FactKind T>
 void bind_literal(nb::module_& m, const std::string& name)
 {
+    using namespace nb::literals;
     using V = MutableLiteral<T>;
 
     auto cls = nb::class_<V>(m, name.c_str())  //
                    .def(nb::init<MutableAtom<T>, bool>(), "atom"_a, "polarity"_a)
-                   .def(nb::init<LiteralView<T>>(), "literal"_a);
+                   .def(nb::init<LiteralView<LiftedTag, T>>(), "literal"_a);
     ygg::add_print(cls);
     ygg::add_comparison(cls);
     ygg::add_hash(cls);
@@ -58,10 +60,11 @@ void bind_literal(nb::module_& m, const std::string& name)
 
 void bind_conjunctive_condition(nb::module_& m, const std::string& name)
 {
+    using namespace nb::literals;
     using V = MutableConjunctiveCondition;
 
     auto cls = nb::class_<V>(m, name.c_str())  //
-                   .def(nb::init<size_t, ConjunctiveConditionView>(), "num_parent_variables"_a, "condition"_a);
+                   .def(nb::init<size_t, ConjunctiveConditionView<LiftedTag>>(), "num_parent_variables"_a, "condition"_a);
     ygg::add_print(cls);
     ygg::add_comparison(cls);
     ygg::add_hash(cls);
@@ -69,10 +72,11 @@ void bind_conjunctive_condition(nb::module_& m, const std::string& name)
 
 void bind_conjunctive_effect(nb::module_& m, const std::string& name)
 {
+    using namespace nb::literals;
     using V = MutableConjunctiveEffect;
 
     auto cls = nb::class_<V>(m, name.c_str())  //
-                   .def(nb::init<size_t, size_t, ConjunctiveEffectView>(), "num_parent_variables"_a, "num_variables"_a, "effect"_a);
+                   .def(nb::init<size_t, size_t, ConjunctiveEffectView<LiftedTag>>(), "num_parent_variables"_a, "num_variables"_a, "effect"_a);
     ygg::add_print(cls);
     ygg::add_comparison(cls);
     ygg::add_hash(cls);
@@ -80,10 +84,11 @@ void bind_conjunctive_effect(nb::module_& m, const std::string& name)
 
 void bind_conditional_effect(nb::module_& m, const std::string& name)
 {
+    using namespace nb::literals;
     using V = MutableConditionalEffect;
 
     auto cls = nb::class_<V>(m, name.c_str())  //
-                   .def(nb::init<size_t, ConditionalEffectView>(), "num_parent_variables"_a, "effect"_a);
+                   .def(nb::init<size_t, ConditionalEffectView<LiftedTag>>(), "num_parent_variables"_a, "effect"_a);
     ygg::add_print(cls);
     ygg::add_comparison(cls);
     ygg::add_hash(cls);
@@ -91,10 +96,11 @@ void bind_conditional_effect(nb::module_& m, const std::string& name)
 
 void bind_action(nb::module_& m, const std::string& name)
 {
+    using namespace nb::literals;
     using V = MutableAction;
 
     auto cls = nb::class_<V>(m, name.c_str())  //
-                   .def(nb::init<ActionView>(), "action"_a);
+                   .def(nb::init<ActionView<LiftedTag>>(), "action"_a);
     ygg::add_print(cls);
     ygg::add_comparison(cls);
     ygg::add_hash(cls);

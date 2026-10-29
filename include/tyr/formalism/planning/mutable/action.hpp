@@ -18,8 +18,6 @@
 #ifndef TYR_FORMALISM_PLANNING_MUTABLE_ACTION_HPP_
 #define TYR_FORMALISM_PLANNING_MUTABLE_ACTION_HPP_
 
-#include <yggdrasil/semantics/comparison.hpp>
-#include <yggdrasil/semantics/hash.hpp>
 #include "tyr/formalism/planning/mutable/conditional_effect.hpp"
 #include "tyr/formalism/planning/mutable/conjunctive_condition.hpp"
 #include "tyr/formalism/planning/repository.hpp"
@@ -30,29 +28,32 @@
 #include <tuple>
 #include <utility>
 #include <vector>
+#include <yggdrasil/semantics/comparison.hpp>
+#include <yggdrasil/semantics/hash.hpp>
 
 namespace tyr::formalism::planning
 {
 struct MutableAction : ygg::comparison::Mixin<MutableAction>
 {
-    size_t num_variables;
+    size_t num_variables = 0;
     MutableConjunctiveCondition condition;
     MutableConditionalEffectList effects;
 
     MutableAction() = default;
-    MutableAction(size_t num_variables, MutableConjunctiveCondition condition, MutableConditionalEffectList effects) :
-        num_variables(num_variables),
-        condition(std::move(condition)),
-        effects(std::move(effects))
+    MutableAction(size_t num_variables_, MutableConjunctiveCondition condition_, MutableConditionalEffectList effects_) :
+        num_variables(num_variables_),
+        condition(std::move(condition_)),
+        effects(std::move(effects_))
     {
     }
-    MutableAction(ActionView element) : num_variables(element.get_arity()), condition(num_variables, element.get_condition()), effects()
+    MutableAction(ActionView<LiftedTag> element) : num_variables(element.get_arity()), condition(num_variables, element.get_condition()), effects()
     {
         for (const auto& effect : element.get_effects())
             effects.emplace_back(num_variables, effect);
     }
 
-    auto identifying_members() const noexcept { return std::tie(num_variables, condition, effects); }
+    static constexpr auto identifying_members() noexcept
+    { return ygg::Members<&MutableAction::num_variables, &MutableAction::condition, &MutableAction::effects> {}; }
 };
 
 using MutableActionList = std::vector<MutableAction>;
@@ -61,26 +62,22 @@ using MutableActionList = std::vector<MutableAction>;
 namespace tyr::formalism::unification
 {
 template<>
-struct structure_traits<tyr::formalism::planning::MutableAction>
+struct structure_traits<planning::MutableAction>
 {
-    using Type = tyr::formalism::planning::MutableAction;
+    using Type = planning::MutableAction;
 
     template<typename F>
-    static bool zip_terms(const Type& lhs, const Type& rhs, F&& f)
+    static bool zip_terms(const Type& lhs, const Type& rhs, F f)
     {
         if (lhs.num_variables != rhs.num_variables)
             return false;
 
-        return tyr::formalism::unification::zip_terms(lhs.condition, rhs.condition, f) && tyr::formalism::unification::zip_terms(lhs.effects, rhs.effects, f);
+        return unification::zip_terms(lhs.condition, rhs.condition, f) && unification::zip_terms(lhs.effects, rhs.effects, f);
     }
 
     template<typename F>
-    static Type transform_terms(const Type& value, F&& f)
-    {
-        return Type(value.num_variables,
-                    tyr::formalism::unification::transform_terms(value.condition, f),
-                    tyr::formalism::unification::transform_terms(value.effects, f));
-    }
+    static Type transform_terms(const Type& value, F f)
+    { return Type(value.num_variables, unification::transform_terms(value.condition, f), unification::transform_terms(value.effects, f)); }
 };
 }
 

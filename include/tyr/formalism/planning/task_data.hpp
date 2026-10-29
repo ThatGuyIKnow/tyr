@@ -18,53 +18,52 @@
 #ifndef TYR_FORMALISM_PLANNING_TASK_DATA_HPP_
 #define TYR_FORMALISM_PLANNING_TASK_DATA_HPP_
 
+#include "tyr/formalism/declarations.hpp"
+#include "tyr/formalism/planning/action_index.hpp"
+#include "tyr/formalism/planning/declarations.hpp"
+#include "tyr/formalism/planning/fdr_fact_data.hpp"
+
+#include <optional>
+#include <string>
+#include <tuple>
+#include <utility>
+#include <vector>
 #include <yggdrasil/core/types.hpp>
 #include <yggdrasil/core/types_utils.hpp>
-#include "tyr/formalism/declarations.hpp"
-#include "tyr/formalism/object_index.hpp"
-#include "tyr/formalism/planning/axiom_index.hpp"
-#include "tyr/formalism/planning/domain_index.hpp"
-#include "tyr/formalism/planning/ground_atom_index.hpp"
-#include "tyr/formalism/planning/ground_conjunctive_condition_index.hpp"
-#include "tyr/formalism/planning/ground_function_term_value_index.hpp"
-#include "tyr/formalism/planning/metric_index.hpp"
-#include "tyr/formalism/planning/task_index.hpp"
-#include "tyr/formalism/predicate_index.hpp"
 
 namespace ygg
 {
 
-
 template<>
-struct Data<::tyr::formalism::planning::Task>
+struct Data<::tyr::formalism::planning::Task<::tyr::LiftedTag>>
 {
-    ygg::Index<::tyr::formalism::planning::Task> index;
+    ygg::Index<::tyr::formalism::planning::Task<::tyr::LiftedTag>> index;
     ::cista::offset::string name;
     ygg::Index<::tyr::formalism::planning::Domain> domain;
     ygg::IndexList<::tyr::formalism::Predicate<::tyr::formalism::DerivedTag>> derived_predicates;
     ygg::IndexList<::tyr::formalism::Object> objects;
-    ygg::IndexList<::tyr::formalism::planning::GroundAtom<::tyr::formalism::StaticTag>> static_atoms;
-    ygg::IndexList<::tyr::formalism::planning::GroundAtom<::tyr::formalism::FluentTag>> fluent_atoms;
-    ygg::IndexList<::tyr::formalism::planning::GroundFunctionTermValue<::tyr::formalism::StaticTag>> static_fterm_values;
-    ygg::IndexList<::tyr::formalism::planning::GroundFunctionTermValue<::tyr::formalism::FluentTag>> fluent_fterm_values;
-    ::cista::optional<ygg::Index<::tyr::formalism::planning::GroundFunctionTermValue<::tyr::formalism::AuxiliaryTag>>> auxiliary_fterm_value;
-    ygg::Index<::tyr::formalism::planning::GroundConjunctiveCondition> goal;
+    ygg::IndexList<::tyr::formalism::planning::Atom<::tyr::GroundTag, ::tyr::formalism::StaticTag>> static_atoms;
+    ygg::IndexList<::tyr::formalism::planning::Atom<::tyr::GroundTag, ::tyr::formalism::FluentTag>> fluent_atoms;
+    ygg::IndexList<::tyr::formalism::planning::FunctionTermValue<::tyr::GroundTag, ::tyr::formalism::StaticTag>> static_fterm_values;
+    ygg::IndexList<::tyr::formalism::planning::FunctionTermValue<::tyr::GroundTag, ::tyr::formalism::FluentTag>> fluent_fterm_values;
+    ::cista::optional<ygg::Index<::tyr::formalism::planning::FunctionTermValue<::tyr::GroundTag, ::tyr::formalism::AuxiliaryTag>>> auxiliary_fterm_value;
+    ygg::Index<::tyr::formalism::planning::ConjunctiveCondition<::tyr::GroundTag>> goal;
     ::cista::optional<ygg::Index<::tyr::formalism::planning::Metric>> metric;
-    ygg::IndexList<::tyr::formalism::planning::Axiom> axioms;
+    ygg::IndexList<::tyr::formalism::planning::Axiom<::tyr::LiftedTag>> axioms;
 
     Data() = default;
     Data(::cista::offset::string name_,
          ygg::Index<::tyr::formalism::planning::Domain> domain_,
          ygg::IndexList<::tyr::formalism::Predicate<::tyr::formalism::DerivedTag>> derived_predicates_,
          ygg::IndexList<::tyr::formalism::Object> objects_,
-         ygg::IndexList<::tyr::formalism::planning::GroundAtom<::tyr::formalism::StaticTag>> static_atoms_,
-         ygg::IndexList<::tyr::formalism::planning::GroundAtom<::tyr::formalism::FluentTag>> fluent_atoms_,
-         ygg::IndexList<::tyr::formalism::planning::GroundFunctionTermValue<::tyr::formalism::StaticTag>> static_fterm_values_,
-         ygg::IndexList<::tyr::formalism::planning::GroundFunctionTermValue<::tyr::formalism::FluentTag>> fluent_fterm_values_,
-         ::cista::optional<ygg::Index<::tyr::formalism::planning::GroundFunctionTermValue<::tyr::formalism::AuxiliaryTag>>> auxiliary_fterm_value_,
-         ygg::Index<::tyr::formalism::planning::GroundConjunctiveCondition> goal_,
+         ygg::IndexList<::tyr::formalism::planning::Atom<::tyr::GroundTag, ::tyr::formalism::StaticTag>> static_atoms_,
+         ygg::IndexList<::tyr::formalism::planning::Atom<::tyr::GroundTag, ::tyr::formalism::FluentTag>> fluent_atoms_,
+         ygg::IndexList<::tyr::formalism::planning::FunctionTermValue<::tyr::GroundTag, ::tyr::formalism::StaticTag>> static_fterm_values_,
+         ygg::IndexList<::tyr::formalism::planning::FunctionTermValue<::tyr::GroundTag, ::tyr::formalism::FluentTag>> fluent_fterm_values_,
+         ::cista::optional<ygg::Index<::tyr::formalism::planning::FunctionTermValue<::tyr::GroundTag, ::tyr::formalism::AuxiliaryTag>>> auxiliary_fterm_value_,
+         ygg::Index<::tyr::formalism::planning::ConjunctiveCondition<::tyr::GroundTag>> goal_,
          ::cista::optional<ygg::Index<::tyr::formalism::planning::Metric>> metric_,
-         ygg::IndexList<::tyr::formalism::planning::Axiom> axioms_) :
+         ygg::IndexList<::tyr::formalism::planning::Axiom<::tyr::LiftedTag>> axioms_) :
         index(),
         name(std::move(name_)),
         domain(domain_),
@@ -74,9 +73,9 @@ struct Data<::tyr::formalism::planning::Task>
         fluent_atoms(std::move(fluent_atoms_)),
         static_fterm_values(std::move(static_fterm_values_)),
         fluent_fterm_values(std::move(fluent_fterm_values_)),
-        auxiliary_fterm_value(auxiliary_fterm_value_),
+        auxiliary_fterm_value(std::move(auxiliary_fterm_value_)),
         goal(goal_),
-        metric(metric_),
+        metric(std::move(metric_)),
         axioms(std::move(axioms_))
     {
     }
@@ -86,14 +85,17 @@ struct Data<::tyr::formalism::planning::Task>
          ::ygg::View<ygg::Index<::tyr::formalism::planning::Domain>, C> domain_,
          const std::vector<::ygg::View<ygg::Index<::tyr::formalism::Predicate<::tyr::formalism::DerivedTag>>, C>>& derived_predicates_,
          const std::vector<::ygg::View<ygg::Index<::tyr::formalism::Object>, C>>& objects_,
-         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::planning::GroundAtom<::tyr::formalism::StaticTag>>, C>>& static_atoms_,
-         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::planning::GroundAtom<::tyr::formalism::FluentTag>>, C>>& fluent_atoms_,
-         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::planning::GroundFunctionTermValue<::tyr::formalism::StaticTag>>, C>>& static_fterm_values_,
-         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::planning::GroundFunctionTermValue<::tyr::formalism::FluentTag>>, C>>& fluent_fterm_values_,
-         const std::optional<::ygg::View<ygg::Index<::tyr::formalism::planning::GroundFunctionTermValue<::tyr::formalism::AuxiliaryTag>>, C>>& auxiliary_fterm_value_,
-         ::ygg::View<ygg::Index<::tyr::formalism::planning::GroundConjunctiveCondition>, C> goal_,
+         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::planning::Atom<::tyr::GroundTag, ::tyr::formalism::StaticTag>>, C>>& static_atoms_,
+         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::planning::Atom<::tyr::GroundTag, ::tyr::formalism::FluentTag>>, C>>& fluent_atoms_,
+         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::planning::FunctionTermValue<::tyr::GroundTag, ::tyr::formalism::StaticTag>>, C>>&
+             static_fterm_values_,
+         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::planning::FunctionTermValue<::tyr::GroundTag, ::tyr::formalism::FluentTag>>, C>>&
+             fluent_fterm_values_,
+         const std::optional<::ygg::View<ygg::Index<::tyr::formalism::planning::FunctionTermValue<::tyr::GroundTag, ::tyr::formalism::AuxiliaryTag>>, C>>&
+             auxiliary_fterm_value_,
+         ::ygg::View<ygg::Index<::tyr::formalism::planning::ConjunctiveCondition<::tyr::GroundTag>>, C> goal_,
          const std::optional<::ygg::View<ygg::Index<::tyr::formalism::planning::Metric>, C>>& metric_,
-         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::planning::Axiom>, C>>& axioms_) :
+         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::planning::Axiom<::tyr::LiftedTag>>, C>>& axioms_) :
         index(),
         name(name_),
         domain(),
@@ -122,28 +124,12 @@ struct Data<::tyr::formalism::planning::Task>
     }
     Data(const Data& other) = delete;
     Data& operator=(const Data& other) = delete;
-    Data(Data&& other) = default;
-    Data& operator=(Data&& other) = default;
-
-    void clear() noexcept
-    {
-        ygg::clear(index);
-        ygg::clear(name);
-        ygg::clear(domain);
-        ygg::clear(derived_predicates);
-        ygg::clear(objects);
-        ygg::clear(static_atoms);
-        ygg::clear(fluent_atoms);
-        ygg::clear(static_fterm_values);
-        ygg::clear(fluent_fterm_values);
-        ygg::clear(auxiliary_fterm_value);
-        ygg::clear(goal);
-        ygg::clear(metric);
-        ygg::clear(axioms);
-    }
+    Data(Data&& other) noexcept = default;
+    Data& operator=(Data&& other) noexcept = default;
+    ~Data() = default;
 
     template<::tyr::formalism::FactKind T>
-    const auto& get_atoms() const
+    [[nodiscard]] const auto& get_atoms() const
     {
         if constexpr (std::same_as<T, ::tyr::formalism::StaticTag>)
             return static_atoms;
@@ -154,7 +140,7 @@ struct Data<::tyr::formalism::planning::Task>
     }
 
     template<::tyr::formalism::FactKind T>
-    const auto& get_fterm_values() const
+    [[nodiscard]] const auto& get_fterm_values() const
     {
         if constexpr (std::same_as<T, ::tyr::formalism::StaticTag>)
             return static_fterm_values;
@@ -164,40 +150,239 @@ struct Data<::tyr::formalism::planning::Task>
             static_assert(ygg::dependent_false<T>::value, "Missing case");
     }
 
-    auto cista_members() const noexcept
+    static constexpr auto cista_members() noexcept
     {
-        return std::tie(index,
-                        name,
-                        domain,
-                        derived_predicates,
-                        objects,
-                        static_atoms,
-                        fluent_atoms,
-                        static_fterm_values,
-                        fluent_fterm_values,
-                        auxiliary_fterm_value,
-                        goal,
-                        metric,
-                        axioms);
+        return ygg::Members<&Data::index,
+                            &Data::name,
+                            &Data::domain,
+                            &Data::derived_predicates,
+                            &Data::objects,
+                            &Data::static_atoms,
+                            &Data::fluent_atoms,
+                            &Data::static_fterm_values,
+                            &Data::fluent_fterm_values,
+                            &Data::auxiliary_fterm_value,
+                            &Data::goal,
+                            &Data::metric,
+                            &Data::axioms> {};
     }
-    auto identifying_members() const noexcept
+    static constexpr auto identifying_members() noexcept
     {
-        return std::tie(name,
-                        domain,
-                        derived_predicates,
-                        objects,
-                        static_atoms,
-                        fluent_atoms,
-                        static_fterm_values,
-                        fluent_fterm_values,
-                        auxiliary_fterm_value,
-                        goal,
-                        metric,
-                        axioms);
+        return ygg::Members<&Data::name,
+                            &Data::domain,
+                            &Data::derived_predicates,
+                            &Data::objects,
+                            &Data::static_atoms,
+                            &Data::fluent_atoms,
+                            &Data::static_fterm_values,
+                            &Data::fluent_fterm_values,
+                            &Data::auxiliary_fterm_value,
+                            &Data::goal,
+                            &Data::metric,
+                            &Data::axioms> {};
     }
+    void clear() noexcept { ygg::clear_members(*this); }
 };
 
-static_assert(!ygg::uses_trivial_storage_v<::tyr::formalism::planning::Task>);
+static_assert(!ygg::uses_trivial_storage_v<::tyr::formalism::planning::Task<::tyr::LiftedTag>>);
+
+template<>
+struct Data<::tyr::formalism::planning::Task<::tyr::GroundTag>>
+{
+    ygg::Index<::tyr::formalism::planning::Task<::tyr::GroundTag>> index;
+    ::cista::offset::string name;
+    ygg::Index<::tyr::formalism::planning::Domain> domain;
+    ygg::IndexList<::tyr::formalism::Predicate<::tyr::formalism::DerivedTag>> derived_predicates;
+    ygg::IndexList<::tyr::formalism::Object> objects;
+    ygg::IndexList<::tyr::formalism::planning::Atom<::tyr::GroundTag, ::tyr::formalism::StaticTag>> static_atoms;
+    ygg::IndexList<::tyr::formalism::planning::Atom<::tyr::GroundTag, ::tyr::formalism::FluentTag>> fluent_atoms;
+    ygg::IndexList<::tyr::formalism::planning::Atom<::tyr::GroundTag, ::tyr::formalism::DerivedTag>> derived_atoms;
+    ygg::IndexList<::tyr::formalism::planning::FunctionTermValue<::tyr::GroundTag, ::tyr::formalism::StaticTag>> static_fterm_values;
+    ygg::IndexList<::tyr::formalism::planning::FunctionTermValue<::tyr::GroundTag, ::tyr::formalism::FluentTag>> fluent_fterm_values;
+    ::cista::optional<ygg::Index<::tyr::formalism::planning::FunctionTermValue<::tyr::GroundTag, ::tyr::formalism::AuxiliaryTag>>> auxiliary_fterm_value;
+    ::cista::optional<ygg::Index<::tyr::formalism::planning::Metric>> metric;
+    ygg::IndexList<::tyr::formalism::planning::Axiom<::tyr::LiftedTag>> axioms;
+
+    /// FDR-related
+    ygg::IndexList<::tyr::formalism::planning::FDRVariable<::tyr::formalism::FluentTag>> fluent_variables;
+    ygg::DataList<::tyr::formalism::planning::FDRFact<::tyr::formalism::FluentTag>> fluent_facts;
+    ygg::Index<::tyr::formalism::planning::ConjunctiveCondition<::tyr::GroundTag>> goal;
+    ygg::IndexList<::tyr::formalism::planning::Action<::tyr::GroundTag>> ground_actions;
+    ygg::IndexList<::tyr::formalism::planning::Axiom<::tyr::GroundTag>> ground_axioms;
+
+    Data() = default;
+    Data(::cista::offset::string name_,
+         ygg::Index<::tyr::formalism::planning::Domain> domain_,
+         ygg::IndexList<::tyr::formalism::Predicate<::tyr::formalism::DerivedTag>> derived_predicates_,
+         ygg::IndexList<::tyr::formalism::Object> objects_,
+         ygg::IndexList<::tyr::formalism::planning::Atom<::tyr::GroundTag, ::tyr::formalism::StaticTag>> static_atoms_,
+         ygg::IndexList<::tyr::formalism::planning::Atom<::tyr::GroundTag, ::tyr::formalism::FluentTag>> fluent_atoms_,
+         ygg::IndexList<::tyr::formalism::planning::Atom<::tyr::GroundTag, ::tyr::formalism::DerivedTag>> derived_atoms_,
+         ygg::IndexList<::tyr::formalism::planning::FunctionTermValue<::tyr::GroundTag, ::tyr::formalism::StaticTag>> static_fterm_values_,
+         ygg::IndexList<::tyr::formalism::planning::FunctionTermValue<::tyr::GroundTag, ::tyr::formalism::FluentTag>> fluent_fterm_values_,
+         ::cista::optional<ygg::Index<::tyr::formalism::planning::FunctionTermValue<::tyr::GroundTag, ::tyr::formalism::AuxiliaryTag>>> auxiliary_fterm_value_,
+         ::cista::optional<ygg::Index<::tyr::formalism::planning::Metric>> metric_,
+         ygg::IndexList<::tyr::formalism::planning::Axiom<::tyr::LiftedTag>> axioms_,
+         ygg::IndexList<::tyr::formalism::planning::FDRVariable<::tyr::formalism::FluentTag>> fluent_variables_,
+         ygg::DataList<::tyr::formalism::planning::FDRFact<::tyr::formalism::FluentTag>> fluent_facts_,
+         ygg::Index<::tyr::formalism::planning::ConjunctiveCondition<::tyr::GroundTag>> goal_,
+         ygg::IndexList<::tyr::formalism::planning::Action<::tyr::GroundTag>> ground_actions_,
+         ygg::IndexList<::tyr::formalism::planning::Axiom<::tyr::GroundTag>> ground_axioms_) :
+        index(),
+        name(std::move(name_)),
+        domain(domain_),
+        derived_predicates(std::move(derived_predicates_)),
+        objects(std::move(objects_)),
+        static_atoms(std::move(static_atoms_)),
+        fluent_atoms(std::move(fluent_atoms_)),
+        derived_atoms(std::move(derived_atoms_)),
+        static_fterm_values(std::move(static_fterm_values_)),
+        fluent_fterm_values(std::move(fluent_fterm_values_)),
+        auxiliary_fterm_value(std::move(auxiliary_fterm_value_)),
+        metric(std::move(metric_)),
+        axioms(std::move(axioms_)),
+        fluent_variables(std::move(fluent_variables_)),
+        fluent_facts(std::move(fluent_facts_)),
+        goal(goal_),
+        ground_actions(std::move(ground_actions_)),
+        ground_axioms(std::move(ground_axioms_))
+    {
+    }
+    // Python constructor
+    template<typename C>
+    Data(const std::string& name_,
+         ::ygg::View<ygg::Index<::tyr::formalism::planning::Domain>, C> domain_,
+         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::Predicate<::tyr::formalism::DerivedTag>>, C>>& derived_predicates_,
+         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::Object>, C>>& objects_,
+         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::planning::Atom<::tyr::GroundTag, ::tyr::formalism::StaticTag>>, C>>& static_atoms_,
+         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::planning::Atom<::tyr::GroundTag, ::tyr::formalism::FluentTag>>, C>>& fluent_atoms_,
+         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::planning::Atom<::tyr::GroundTag, ::tyr::formalism::DerivedTag>>, C>>& derived_atoms_,
+         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::planning::FunctionTermValue<::tyr::GroundTag, ::tyr::formalism::StaticTag>>, C>>&
+             static_fterm_values_,
+         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::planning::FunctionTermValue<::tyr::GroundTag, ::tyr::formalism::FluentTag>>, C>>&
+             fluent_fterm_values_,
+         const std::optional<::ygg::View<ygg::Index<::tyr::formalism::planning::FunctionTermValue<::tyr::GroundTag, ::tyr::formalism::AuxiliaryTag>>, C>>&
+             auxiliary_fterm_value_,
+         const std::optional<::ygg::View<ygg::Index<::tyr::formalism::planning::Metric>, C>>& metric_,
+         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::planning::Axiom<::tyr::LiftedTag>>, C>>& axioms_,
+         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::planning::FDRVariable<::tyr::formalism::FluentTag>>, C>>& fluent_variables_,
+         const std::vector<::ygg::View<ygg::Data<::tyr::formalism::planning::FDRFact<::tyr::formalism::FluentTag>>, C>>& fluent_facts_,
+         ::ygg::View<ygg::Index<::tyr::formalism::planning::ConjunctiveCondition<::tyr::GroundTag>>, C> goal_,
+         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::planning::Action<::tyr::GroundTag>>, C>>& ground_actions_,
+         const std::vector<::ygg::View<ygg::Index<::tyr::formalism::planning::Axiom<::tyr::GroundTag>>, C>>& ground_axioms_) :
+        index(),
+        name(name_),
+        domain(),
+        derived_predicates(),
+        objects(),
+        static_atoms(),
+        fluent_atoms(),
+        derived_atoms(),
+        static_fterm_values(),
+        fluent_fterm_values(),
+        auxiliary_fterm_value(),
+        metric(),
+        axioms(),
+        fluent_variables(),
+        fluent_facts(),
+        goal(),
+        ground_actions(),
+        ground_axioms()
+    {
+        set(domain_, domain);
+        set(derived_predicates_, derived_predicates);
+        set(objects_, objects);
+        set(static_atoms_, static_atoms);
+        set(fluent_atoms_, fluent_atoms);
+        set(derived_atoms_, derived_atoms);
+        set(static_fterm_values_, static_fterm_values);
+        set(fluent_fterm_values_, fluent_fterm_values);
+        set(auxiliary_fterm_value_, auxiliary_fterm_value);
+        set(metric_, metric);
+        set(axioms_, axioms);
+        set(fluent_variables_, fluent_variables);
+        set(fluent_facts_, fluent_facts);
+        set(goal_, goal);
+        set(ground_actions_, ground_actions);
+        set(ground_axioms_, ground_axioms);
+    }
+    Data(const Data& other) = delete;
+    Data& operator=(const Data& other) = delete;
+    Data(Data&& other) noexcept = default;
+    Data& operator=(Data&& other) noexcept = default;
+    ~Data() = default;
+
+    template<::tyr::formalism::FactKind T>
+    [[nodiscard]] const auto& get_atoms() const
+    {
+        if constexpr (std::same_as<T, ::tyr::formalism::StaticTag>)
+            return static_atoms;
+        else if constexpr (std::same_as<T, ::tyr::formalism::FluentTag>)
+            return fluent_atoms;
+        else if constexpr (std::same_as<T, ::tyr::formalism::DerivedTag>)
+            return derived_atoms;
+        else
+            static_assert(ygg::dependent_false<T>::value, "Missing case");
+    }
+
+    template<::tyr::formalism::FactKind T>
+    [[nodiscard]] const auto& get_fterm_values() const
+    {
+        if constexpr (std::same_as<T, ::tyr::formalism::StaticTag>)
+            return static_fterm_values;
+        else if constexpr (std::same_as<T, ::tyr::formalism::FluentTag>)
+            return fluent_fterm_values;
+        else
+            static_assert(ygg::dependent_false<T>::value, "Missing case");
+    }
+
+    [[nodiscard]] const auto& get_fluent_variables() const { return fluent_variables; }
+
+    static constexpr auto cista_members() noexcept
+    {
+        return ygg::Members<&Data::index,
+                            &Data::name,
+                            &Data::domain,
+                            &Data::derived_predicates,
+                            &Data::objects,
+                            &Data::static_atoms,
+                            &Data::fluent_atoms,
+                            &Data::derived_atoms,
+                            &Data::static_fterm_values,
+                            &Data::fluent_fterm_values,
+                            &Data::auxiliary_fterm_value,
+                            &Data::metric,
+                            &Data::axioms,
+                            &Data::fluent_variables,
+                            &Data::fluent_facts,
+                            &Data::goal,
+                            &Data::ground_actions,
+                            &Data::ground_axioms> {};
+    }
+    static constexpr auto identifying_members() noexcept
+    {
+        return ygg::Members<&Data::name,
+                            &Data::domain,
+                            &Data::derived_predicates,
+                            &Data::objects,
+                            &Data::static_atoms,
+                            &Data::fluent_atoms,
+                            &Data::derived_atoms,
+                            &Data::static_fterm_values,
+                            &Data::fluent_fterm_values,
+                            &Data::auxiliary_fterm_value,
+                            &Data::metric,
+                            &Data::axioms,
+                            &Data::fluent_variables,
+                            &Data::fluent_facts,
+                            &Data::goal,
+                            &Data::ground_actions,
+                            &Data::ground_axioms> {};
+    }
+    void clear() noexcept { ygg::clear_members(*this); }
+};
+
+static_assert(!ygg::uses_trivial_storage_v<::tyr::formalism::planning::Task<::tyr::GroundTag>>);
 }
 
 #endif

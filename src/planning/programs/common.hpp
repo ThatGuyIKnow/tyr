@@ -18,19 +18,36 @@
 #ifndef TYR_SRC_PLANNING_PROGRAMS_COMMON_HPP_
 #define TYR_SRC_PLANNING_PROGRAMS_COMMON_HPP_
 
+#include "tyr/formalism/datalog/copy_decl.hpp"
+#include "tyr/formalism/datalog/declarations.hpp"
 #include "tyr/formalism/planning/declarations.hpp"
 #include "tyr/planning/declarations.hpp"
+#include "tyr/planning/lifted/programs/translation_context.hpp"
 
 #include <cista/containers/string.h>
+#include <memory>
+#include <stdexcept>
+#include <utility>
 #include <yggdrasil/core/types.hpp>
 
 namespace tyr::planning
 {
-extern ::cista::offset::string create_applicability_name(::tyr::formalism::planning::ActionView action);
+extern ::cista::offset::string create_applicability_name(formalism::planning::ActionView<LiftedTag> action);
 
-extern ::cista::offset::string create_triggered_name(::tyr::formalism::planning::ActionView action, ::tyr::formalism::planning::ConditionalEffectView cond_eff);
+extern ::cista::offset::string create_triggered_name(formalism::planning::ActionView<LiftedTag> action,
+                                                     formalism::planning::ConditionalEffectView<LiftedTag> cond_eff);
 
-extern ::cista::offset::string create_applicability_name(::tyr::formalism::planning::AxiomView axiom);
+extern ::cista::offset::string create_applicability_name(formalism::planning::AxiomView<LiftedTag> axiom);
+
+/// The translation context with its Datalog symbols copied into the copy context's repository.
+TranslationContext<LiftedTag> remap_translation_context(const TranslationContext<LiftedTag>& source, formalism::datalog::CopyContext& context);
+
+/// The RPG heuristics charge each action rule a unit cost.
+inline void require_unit_cost(CostMode cost_mode)
+{
+    if (cost_mode != CostMode::UNIT)
+        throw std::invalid_argument("GENERAL action costs are unsupported in the RPG heuristics; use CostMode::UNIT.");
+}
 
 }
 

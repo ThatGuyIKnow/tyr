@@ -18,7 +18,7 @@
 #ifndef TYR_ANALYSIS_VARIABLE_DOMAIN_HPP_
 #define TYR_ANALYSIS_VARIABLE_DOMAIN_HPP_
 
-#include "tyr/formalism/object_index.hpp"
+#include "tyr/formalism/declarations.hpp"
 
 #include <vector>
 
@@ -27,7 +27,7 @@ namespace tyr::analysis
 
 struct VariableDomain
 {
-    std::vector<ygg::Index<::tyr::formalism::Object>> objects;
+    std::vector<ygg::Index<formalism::Object>> objects;
 };
 
 using VariableDomainList = std::vector<VariableDomain>;

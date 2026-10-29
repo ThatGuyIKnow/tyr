@@ -32,15 +32,20 @@ template<TaskKind Kind>
 class EventHandler
 {
 public:
-    using StatisticsType = Statistics<Kind>;
-
+    EventHandler() = default;
     virtual ~EventHandler() = default;
     virtual void on_start_search(ygg::uint_t max_arity) = 0;
     virtual void on_start_arity(ygg::uint_t arity) = 0;
     virtual void on_end_arity(ygg::uint_t arity, SearchStatus status) = 0;
     virtual void on_end_search(tyr::planning::SearchStatus status, const tyr::planning::Statistics& statistics) = 0;
     virtual void on_solved(ygg::uint_t arity) = 0;
-    virtual const Statistics<Kind>& get_statistics() const = 0;
+    [[nodiscard]] virtual const Statistics<Kind>& get_statistics() const = 0;
+
+protected:
+    EventHandler(const EventHandler&) = default;
+    EventHandler& operator=(const EventHandler&) = default;
+    EventHandler(EventHandler&&) = default;
+    EventHandler& operator=(EventHandler&&) = default;
 };
 
 template<TaskKind Kind>
@@ -49,18 +54,18 @@ class DefaultEventHandler;
 template<typename Derived, TaskKind Kind>
 class EventHandlerBase : public EventHandler<Kind>
 {
-protected:
+private:
     Statistics<Kind> m_statistics;
-    size_t m_verbosity;
+    size_t m_verbosity = 0;
 
 private:
     EventHandlerBase() = default;
     friend Derived;
 
-    constexpr const auto& self() const { return static_cast<const Derived&>(*this); }
+    [[nodiscard]] constexpr const auto& self() const { return static_cast<const Derived&>(*this); }
     constexpr auto& self() { return static_cast<Derived&>(*this); }
 
-    bool verbosity(size_t level) const { return m_verbosity >= level; }
+    [[nodiscard]] bool verbosity(size_t level) const { return m_verbosity >= level; }
 
 public:
     explicit EventHandlerBase(size_t verbosity = 0) : m_statistics(), m_verbosity(verbosity) {}
@@ -99,7 +104,7 @@ public:
             self().on_solved_impl(arity);
     }
 
-    const Statistics<Kind>& get_statistics() const override { return m_statistics; }
+    [[nodiscard]] const Statistics<Kind>& get_statistics() const override { return m_statistics; }
 };
 
 template<TaskKind Kind>

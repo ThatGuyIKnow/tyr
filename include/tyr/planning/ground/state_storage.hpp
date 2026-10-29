@@ -18,12 +18,17 @@
 #ifndef TYR_PLANNING_GROUND_STATE_STORAGE_HPP_
 #define TYR_PLANNING_GROUND_STATE_STORAGE_HPP_
 
+#include "tyr/formalism/planning/declarations.hpp"
+#include "tyr/formalism/planning/fdr_fact_data.hpp"
 #include "tyr/planning/declarations.hpp"
 #include "tyr/planning/state_storage.hpp"
 #include "tyr/planning/state_storage/tags.hpp"
 
 #include <boost/dynamic_bitset.hpp>
+#include <cassert>
+#include <cstddef>
 #include <tuple>
+#include <yggdrasil/containers/dynamic_bitset.hpp>
 #include <yggdrasil/core/config.hpp>
 
 namespace tyr::planning
@@ -34,7 +39,21 @@ struct AtomUnpackedStorage<GroundTag>
 {
     boost::dynamic_bitset<> indices;
 
-    auto identifying_members() const noexcept { return std::tie(indices); }
+    [[nodiscard]] bool test(ygg::Index<formalism::planning::Atom<GroundTag, formalism::DerivedTag>> index) const
+    {
+        assert(static_cast<ygg::uint_t>(index) < indices.size());
+        return indices.test(static_cast<ygg::uint_t>(index));
+    }
+    void set(ygg::Index<formalism::planning::Atom<GroundTag, formalism::DerivedTag>> index)
+    {
+        assert(static_cast<ygg::uint_t>(index) < indices.size());
+        indices.set(static_cast<ygg::uint_t>(index));
+    }
+    void resize(size_t size) { indices.resize(size, false); }
+    void clear() { indices.clear(); }
+    void swap(AtomUnpackedStorage& other) noexcept { indices.swap(other.indices); }
+
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&AtomUnpackedStorage::indices> {}; }
 };
 
 template<>
@@ -42,7 +61,21 @@ struct FactUnpackedStorage<GroundTag>
 {
     std::vector<ygg::uint_t> values;
 
-    auto identifying_members() const noexcept { return std::tie(values); }
+    [[nodiscard]] formalism::planning::FDRValue get(ygg::Index<formalism::planning::FDRVariable<formalism::FluentTag>> index) const
+    {
+        assert(static_cast<ygg::uint_t>(index) < values.size());
+        return formalism::planning::FDRValue(values[static_cast<ygg::uint_t>(index)]);
+    }
+    void set(ygg::Data<formalism::planning::FDRFact<formalism::FluentTag>> fact)
+    {
+        assert(static_cast<ygg::uint_t>(fact.variable) < values.size());
+        values[static_cast<ygg::uint_t>(fact.variable)] = static_cast<ygg::uint_t>(fact.value);
+    }
+    void resize(size_t size) { values.resize(size, 0); }
+    void clear() { values.clear(); }
+    void swap(FactUnpackedStorage& other) noexcept { values.swap(other.values); }
+
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&FactUnpackedStorage::values> {}; }
 };
 
 }

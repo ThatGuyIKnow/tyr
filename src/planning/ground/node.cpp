@@ -15,11 +15,13 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "tyr/planning/ground/state_view.hpp"
 #include "tyr/planning/node.hpp"
+
+#include "tyr/planning/state_builder.hpp"
+#include "tyr/planning/state_repository.hpp"
 //
+#include "tyr/planning/declarations.hpp"
 #include "tyr/planning/ground/task.hpp"
-#include "tyr/planning/state_index.hpp"
 
 #include <yggdrasil/core/config.hpp>
 
@@ -28,4 +30,8 @@ namespace tyr::planning
 
 static_assert(NodeConcept<Node<GroundTag>, GroundTag>);
 
+template class Node<GroundTag>;
+template class Node<GroundTag, BuilderStateView<GroundTag>>;
+template struct LabeledNode<GroundTag>;
+template struct LabeledNode<GroundTag, BuilderStateView<GroundTag>>;
 }

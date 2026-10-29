@@ -25,16 +25,11 @@
 #include "tyr/formalism/planning/views.hpp"
 #include "tyr/planning/declarations.hpp"
 #include "tyr/planning/lifted/task_grounder_decl.hpp"
+#include "tyr/planning/static_state.hpp"
 #include "tyr/planning/task.hpp"
 
-#include <boost/dynamic_bitset.hpp>
-#include <limits>
 #include <memory>
-#include <vector>
-#include <yggdrasil/containers/dynamic_bitset.hpp>
-#include <yggdrasil/containers/vector.hpp>
-#include <yggdrasil/core/config.hpp>
-#include <yggdrasil/execution/onetbb.hpp>
+#include <yggdrasil/execution/declarations.hpp>
 
 namespace tyr::planning
 {
@@ -43,9 +38,9 @@ template<>
 class Task<LiftedTag>
 {
 public:
-    explicit Task(::tyr::formalism::planning::PlanningTask task);
+    explicit Task(formalism::planning::PlanningTask<LiftedTag> task);
 
-    static TaskPtr<LiftedTag> create(::tyr::formalism::planning::PlanningTask task);
+    static TaskPtr<LiftedTag> create(formalism::planning::PlanningTask<LiftedTag> task);
 
     GroundTaskInstantiationResult instantiate_ground_task(ygg::ExecutionContext& execution_context,
                                                           const GroundTaskInstantiationOptions& options = GroundTaskInstantiationOptions());
@@ -54,30 +49,19 @@ public:
      * Getters
      */
 
-    const auto& get_formalism_task() const noexcept { return m_task; }
-    const auto& get_domain() const noexcept { return m_task.get_domain(); }
-    auto get_task() const noexcept { return m_task.get_task(); }
+    [[nodiscard]] const auto& get_formalism_task() const noexcept { return m_task; }
+    [[nodiscard]] const auto& get_domain() const noexcept { return m_task.get_domain(); }
+    [[nodiscard]] auto get_task() const noexcept { return m_task.get_task(); }
     auto& get_fdr_context() noexcept { return m_task.get_fdr_context(); }
-    const auto& get_fdr_context() const noexcept { return m_task.get_fdr_context(); }
-    const auto& get_repository() const noexcept { return m_task.get_repository(); }
-    bool has_axioms() const noexcept { return !get_task().get_axioms().empty() || !get_domain().get_domain().get_axioms().empty(); }
-
-    const auto& get_static_atoms_bitset() const noexcept { return m_static_atoms_bitset; }
-    const auto& get_static_numeric_variables() const noexcept { return m_static_numeric_variables; }
-    bool test(ygg::Index<::tyr::formalism::planning::GroundAtom<::tyr::formalism::StaticTag>> index) const
-    {
-        return ygg::test(ygg::uint_t(index), m_static_atoms_bitset);
-    }
-    ygg::float_t get(ygg::Index<::tyr::formalism::planning::GroundFunctionTerm<::tyr::formalism::StaticTag>> index) const
-    {
-        return ygg::get(ygg::uint_t(index), m_static_numeric_variables, std::numeric_limits<ygg::float_t>::quiet_NaN());
-    }
+    [[nodiscard]] const auto& get_fdr_context() const noexcept { return m_task.get_fdr_context(); }
+    [[nodiscard]] const auto& get_repository() const noexcept { return m_task.get_repository(); }
+    [[nodiscard]] const StaticState& get_static_state() const noexcept { return m_static_state; }
+    [[nodiscard]] bool has_axioms() const noexcept { return !get_task().get_axioms().empty() || !get_domain().get_domain().get_axioms().empty(); }
 
 private:
-    ::tyr::formalism::planning::PlanningTask m_task;
+    formalism::planning::PlanningTask<LiftedTag> m_task;
 
-    boost::dynamic_bitset<> m_static_atoms_bitset;
-    std::vector<ygg::float_t> m_static_numeric_variables;
+    StaticState m_static_state;
 };
 
 }

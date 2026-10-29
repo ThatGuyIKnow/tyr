@@ -23,35 +23,45 @@
 #include "tyr/formalism/planning/planning_task.hpp"
 #include "tyr/planning/declarations.hpp"
 
-#include <loki/loki.hpp>
-
 #include <filesystem>
-
-namespace fs = std::filesystem;
+#include <loki/semantic/options.hpp>
+#include <memory>
+#include <optional>
+#include <string>
 
 namespace tyr::formalism::planning
 {
 class Parser
 {
 public:
-    Parser(const fs::path& domain_filepath,
-           const loki::ParserOptions& options = loki::ParserOptions(),
-           const loki::TranslatorOptions& translator_options = loki::TranslatorOptions());
+    Parser(const std::filesystem::path& domain_filepath,
+           const loki::semantic::ParserOptions& options = loki::semantic::ParserOptions(),
+           const loki::semantic::TranslatorOptions& translator_options = loki::semantic::TranslatorOptions());
     Parser(const std::string& domain_description,
-           const fs::path& domain_filepath,
-           const loki::ParserOptions& options = loki::ParserOptions(),
-           const loki::TranslatorOptions& translator_options = loki::TranslatorOptions());
+           std::optional<std::filesystem::path> domain_filepath,
+           const loki::semantic::ParserOptions& options = loki::semantic::ParserOptions(),
+           const loki::semantic::TranslatorOptions& translator_options = loki::semantic::TranslatorOptions());
 
-    PlanningTask parse_task(const fs::path& task_filepath, const loki::ParserOptions& options = loki::ParserOptions());
-    PlanningTask parse_task(const std::string& task_description, const fs::path& task_filepath, const loki::ParserOptions& options = loki::ParserOptions());
+    PlanningTask<LiftedTag> parse_task(const std::filesystem::path& task_filepath,
+                                       const loki::semantic::ParserOptions& options = loki::semantic::ParserOptions());
+    PlanningTask<LiftedTag> parse_task(const std::string& task_description,
+                                       std::optional<std::filesystem::path> task_filepath,
+                                       const loki::semantic::ParserOptions& options = loki::semantic::ParserOptions());
 
-    PlanningDomain get_domain() const;
+    [[nodiscard]] PlanningDomain get_domain() const;
+
+    Parser(const Parser&) = delete;
+    Parser& operator=(const Parser&) = delete;
+    Parser(Parser&&) noexcept;
+    Parser& operator=(Parser&&) noexcept;
+    ~Parser();
 
 private:
-    loki::Parser m_loki_parser;
-    loki::TranslatorOptions m_loki_translator_options;
-    loki::DomainTranslationResult m_loki_domain_translation_result;
+    /// The loki parser and domain translation, kept out of this header: a parser is a high-level entity, and its
+    /// includers need only the tyr domain and tasks.
+    struct LokiState;
 
+    std::unique_ptr<LokiState> m_loki;
     PlanningDomain m_domain;
 };
 }

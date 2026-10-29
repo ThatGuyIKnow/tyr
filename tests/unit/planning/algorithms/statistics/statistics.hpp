@@ -31,10 +31,15 @@
 #include <ostream>
 #include <stdexcept>
 #include <string>
-#include <tyr/formalism/formalism.hpp>
-#include <tyr/planning/planning.hpp>
+#include <tyr/planning/algorithms/statistics.hpp>
+#include <tyr/planning/algorithms/utils.hpp>
+#include <tyr/planning/factory.hpp>
+#include <tyr/planning/ground/task.hpp>
+#include <tyr/planning/lifted/task.hpp>
+#include <tyr/planning/plan.hpp>
 #include <utility>
 #include <vector>
+#include <yggdrasil/execution/onetbb.hpp>
 #include <yggdrasil/serialization/json.hpp>
 #include <yggdrasil/serialization/json_suite.hpp>
 
@@ -59,9 +64,9 @@ struct SearchStatistics
 /// Parse the four counters from an object that carries them inline (returns nullopt when absent).
 inline std::optional<planning::ProgressStatistics::Snapshot> parse_optional_counters(const boost::json::object& object)
 {
-    if (!object.if_contains("num_accepted_successors"))
+    if (!object.if_contains("num_generated_successors"))
         return std::nullopt;
-    return planning::ProgressStatistics::Snapshot { boost::json::value_to<uint64_t>(object.at("num_accepted_successors")),
+    return planning::ProgressStatistics::Snapshot { boost::json::value_to<uint64_t>(object.at("num_generated_successors")),
                                                     boost::json::value_to<uint64_t>(object.at("num_expanded")),
                                                     boost::json::value_to<uint64_t>(object.at("num_deadends")),
                                                     boost::json::value_to<uint64_t>(object.at("num_pruned")) };
@@ -69,7 +74,7 @@ inline std::optional<planning::ProgressStatistics::Snapshot> parse_optional_coun
 
 inline void expect_counters(const planning::ProgressStatistics::Snapshot& expected, const planning::Statistics& actual)
 {
-    EXPECT_EQ(actual.get_num_accepted_successors(), expected.get_num_accepted_successors());
+    EXPECT_EQ(actual.get_num_generated_successors(), expected.get_num_generated_successors());
     EXPECT_EQ(actual.get_num_expanded(), expected.get_num_expanded());
     EXPECT_EQ(actual.get_num_deadends(), expected.get_num_deadends());
     EXPECT_EQ(actual.get_num_pruned(), expected.get_num_pruned());
@@ -95,7 +100,7 @@ inline std::optional<SearchStatistics> parse_optional_statistics(const boost::js
     if (!value)
         return std::nullopt;
     const auto& stats = value->as_object();
-    return SearchStatistics { *parse_optional_counters(stats), parse_optional_plan(stats) };
+    return SearchStatistics { parse_optional_counters(stats).value(), parse_optional_plan(stats) };
 }
 
 template<TaskKind Kind>
@@ -122,7 +127,7 @@ void expect_statistics(const SearchStatistics& expected, const planning::Statist
 
     ASSERT_EQ(result.plan.has_value(), expected.plan.has_value());
     if (expected.plan)
-        expect_plan(*expected.plan, *result.plan);
+        expect_plan(expected.plan.value(), result.plan.value());
 }
 
 inline planning::SearchStatus parse_search_status(const std::string& status)
@@ -151,7 +156,7 @@ inline planning::SearchStatus parse_search_status(const std::string& status)
 
 /// One fixture case: expected statistics per configuration key. Split fixtures use "default"
 /// for heuristic-free searches and keys such as "hmax_unit" otherwise; any case key whose
-/// object value holds a "num_accepted_successors" member is parsed as a configuration.
+/// object value holds a "num_generated_successors" member is parsed as a configuration.
 struct SearchCase
 {
     std::string name;
@@ -169,8 +174,8 @@ inline SearchCase parse_search_case(const boost::json::object& object)
                                ygg::common::resolve_path(std::filesystem::path(BENCHMARKS_DIR), ygg::common::as_string(object, "task_file", "case")),
                                {} };
     for (const auto& [key, value] : object)
-        if (value.is_object() && value.as_object().if_contains("num_accepted_successors"))
-            result.configs.emplace_back(std::string(key), *parse_optional_statistics(object, std::string(key).c_str()));
+        if (value.is_object() && value.as_object().if_contains("num_generated_successors"))
+            result.configs.emplace_back(std::string(key), parse_optional_statistics(object, std::string(key).c_str()).value());
     return result;
 }
 
@@ -225,47 +230,18 @@ void expect_repository_statistics(const SearchContext<Kind>& context, const plan
 
     EXPECT_EQ(statistics.get_num_registered_states(), state_repository.num_states());
     EXPECT_EQ(statistics.get_state_storage_memory_usage(), state_repository.memory_usage());
-    EXPECT_EQ(statistics.get_action_bindings_memory_usage(), task_repository.template memory_usage<formalism::RelationBinding<formalism::planning::Action>>());
+    EXPECT_EQ(statistics.get_action_bindings_memory_usage(),
+              task_repository.template memory_usage<formalism::RelationBinding<formalism::planning::Action<LiftedTag>>>());
     EXPECT_EQ(statistics.get_predicate_bindings_memory_usage(),
               task_repository.template memory_usage<formalism::RelationBinding<formalism::Predicate<formalism::StaticTag>>>()
                   + task_repository.template memory_usage<formalism::RelationBinding<formalism::Predicate<formalism::FluentTag>>>()
                   + task_repository.template memory_usage<formalism::RelationBinding<formalism::Predicate<formalism::DerivedTag>>>());
-    EXPECT_EQ(statistics.get_axiom_bindings_memory_usage(), task_repository.template memory_usage<formalism::RelationBinding<formalism::planning::Axiom>>());
+    EXPECT_EQ(statistics.get_axiom_bindings_memory_usage(),
+              task_repository.template memory_usage<formalism::RelationBinding<formalism::planning::Axiom<LiftedTag>>>());
     EXPECT_EQ(statistics.get_function_bindings_memory_usage(),
               task_repository.template memory_usage<formalism::RelationBinding<formalism::Function<formalism::StaticTag>>>()
                   + task_repository.template memory_usage<formalism::RelationBinding<formalism::Function<formalism::FluentTag>>>()
                   + task_repository.template memory_usage<formalism::RelationBinding<formalism::Function<formalism::AuxiliaryTag>>>());
-}
-
-inline std::pair<std::string, CostMode> parse_costed_heuristic_key(const std::string& key)
-{
-    const auto pos = key.rfind('_');
-    if (pos == std::string::npos)
-        throw std::invalid_argument("parse_costed_heuristic_key(...): missing cost suffix in key: " + key);
-
-    const auto suffix = key.substr(pos + 1);
-    if (suffix == "unit")
-        return { key.substr(0, pos), CostMode::UNIT };
-    if (suffix == "general")
-        return { key.substr(0, pos), CostMode::GENERAL };
-
-    throw std::invalid_argument("parse_costed_heuristic_key(...): unknown cost suffix in key: " + key);
-}
-
-template<TaskKind Kind>
-planning::HeuristicPtr<Kind> create_search_heuristic(const std::string& name, const SearchContext<Kind>& context, CostMode cost_mode)
-{
-    if (name == "blind")
-        return planning::BlindHeuristic<Kind>::create();
-    if (name == "hmax")
-        return planning::MaxRPGHeuristic<Kind>::create(context.task, context.execution_context, cost_mode);
-    if (name == "hadd")
-        return planning::AddRPGHeuristic<Kind>::create(context.task, context.execution_context, cost_mode);
-    if (name == "hff")
-        return planning::FFRPGHeuristic<Kind>::create(context.task, context.execution_context, cost_mode);
-    if (name == "hlmcut")
-        return planning::LMCutHeuristic<Kind>::create(context.task, context.execution_context, cost_mode);
-    throw std::invalid_argument("create_search_heuristic(...): unknown heuristic: " + name);
 }
 
 }

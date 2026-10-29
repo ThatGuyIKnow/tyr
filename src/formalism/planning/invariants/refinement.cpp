@@ -17,11 +17,10 @@
 
 #include "refinement.hpp"
 
-#include "tyr/formalism/planning/repository.hpp"
-
 #include "matching.hpp"
 #include "normalization.hpp"
 #include "proof.hpp"
+#include "tyr/formalism/planning/repository.hpp"
 #include "utils.hpp"
 
 #include <algorithm>
@@ -43,16 +42,15 @@ get_parameters_from_part(const MutableAtom<FluentTag>& part, const MutableAtom<F
     for (size_t pos = 0; pos < part.terms.size(); ++pos)
     {
         std::visit(
-            [&](auto&& arg)
+            [&]<typename T>(const T& arg)
             {
-                using T = std::decay_t<decltype(arg)>;
                 if constexpr (std::is_same_v<T, ParameterIndex>)
                 {
                     if (static_cast<ygg::uint_t>(arg) < num_rigid_variables)
                         result.emplace(arg, literal.terms[pos]);
                 }
             },
-            part.terms[pos].value);
+            part.terms[pos].variant);
     }
 
     return result;
@@ -85,16 +83,17 @@ void instantiate_factored_mapping_rec(const std::vector<std::pair<std::vector<si
     auto perm = images;
     std::sort(perm.begin(), perm.end(), optional_parameter_less);
 
-    do
+    // Visits every permutation, starting with the sorted one.
+    for (auto more = true; more; more = std::next_permutation(perm.begin(), perm.end(), optional_parameter_less))
     {
         for (size_t i = 0; i < positions.size(); ++i)
-            current.push_back({ positions[i], perm[i] });
+            current.emplace_back(positions[i], perm[i]);
 
         instantiate_factored_mapping_rec(groups, group_index + 1, current, out);
 
         for (size_t i = 0; i < positions.size(); ++i)
             current.pop_back();
-    } while (std::next_permutation(perm.begin(), perm.end(), optional_parameter_less));
+    }
 }
 
 std::vector<PositionMapping> instantiate_factored_mapping(const std::vector<std::pair<std::vector<size_t>, std::vector<std::optional<ParameterIndex>>>>& groups)
@@ -138,15 +137,15 @@ std::vector<PositionMapping> possible_mappings(const MutableAtom<FluentTag>& par
         images.reserve(inv_params.size() + (len_diff != 0 ? 1 : 0));
 
         for (const auto& p : inv_params)
-            images.push_back(p);
+            images.emplace_back(p);
 
         if (len_diff != 0)
         {
-            images.push_back(std::nullopt);
+            images.emplace_back(std::nullopt);
             allowed_omissions = 0;
         }
 
-        factored_mapping.push_back({ other_positions, std::move(images) });
+        factored_mapping.emplace_back(other_positions, std::move(images));
     }
 
     return instantiate_factored_mapping(factored_mapping);
@@ -166,16 +165,16 @@ MutableAtomList<FluentTag> possible_matches(const MutableAtom<FluentTag>& part,
         for (const auto& [other_pos, inv_var] : mapping)
             args[other_pos] = ygg::Data<Term>(inv_var.value_or(ParameterIndex(num_rigid_variables)));
 
-        result.push_back(MutableAtom<FluentTag>(other_literal.predicate, std::move(args)));
+        result.emplace_back(other_literal.predicate, std::move(args));
     }
 
     return result;
 }
 }  // namespace
 
-InvariantList refine_candidate(const Invariant& inv, const Threat& threat, const MutableActionList& ops, PredicateListView<FluentTag>)
+MutableInvariantList refine_candidate(const MutableInvariant& inv, const Threat& threat, const MutableActionList& ops, PredicateListView<FluentTag>)
 {
-    InvariantList result;
+    MutableInvariantList result;
 
     const auto& op = ops[threat.op_index];
     const auto& effect = op.effects[threat.effect_index];
@@ -199,22 +198,24 @@ InvariantList refine_candidate(const Invariant& inv, const Threat& threat, const
             if (inv.predicates.contains(del_atom.predicate))
                 continue;
 
-            for (auto phi_prime : possible_matches(*part, add_atom, del_atom, inv.num_rigid_variables))
+            for (const auto& phi_prime : possible_matches(*part, add_atom, del_atom, inv.num_rigid_variables))
             {
                 if (covers(inv, phi_prime))
                     continue;
 
                 const size_t new_num_counted_variables =
-                    std::max(inv.num_counted_variables, atom_uses_counted(phi_prime, inv.num_rigid_variables) ? size_t(1) : size_t(0));
+                    std::max(inv.num_counted_variables,
+                             atom_uses_counted(phi_prime, inv.num_rigid_variables) ? static_cast<size_t>(1) : static_cast<size_t>(0));
 
                 auto atoms = inv.atoms;
                 atoms.push_back(phi_prime);
 
-                auto refined = Invariant(inv.num_rigid_variables, new_num_counted_variables, std::move(atoms));
+                auto refined = MutableInvariant(inv.num_rigid_variables, new_num_counted_variables, std::move(atoms));
                 normalize_invariant(refined);
 
-                if (!is_add_effect_unbalanced(op, effect, add_atom, refined))
-                    result.push_back(std::move(refined));
+                // Every match becomes a candidate, also one that does not balance this add effect yet: it can be refined
+                // further, as in Fast Downward's refine_candidate.
+                result.push_back(std::move(refined));
             }
         }
     }
@@ -222,9 +223,9 @@ InvariantList refine_candidate(const Invariant& inv, const Threat& threat, const
     return result;
 }
 
-InvariantList make_initial_candidates(PredicateListView<FluentTag> predicates)
+MutableInvariantList make_initial_candidates(PredicateListView<FluentTag> predicates)
 {
-    InvariantList result;
+    MutableInvariantList result;
 
     for (const auto predicate : predicates)
     {

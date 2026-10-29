@@ -47,9 +47,7 @@ struct formatter<tyr::datalog::VertexAssignment, char>
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
     template<typename FormatContext>
     auto format(const tyr::datalog::VertexAssignment& value, FormatContext& ctx) const
-    {
-        return fmt::format_to(ctx.out(), "[{}/{}]", value.index, value.object);
-    }
+    { return fmt::format_to(ctx.out(), "[{}/{}]", value.index, value.object); }
 };
 
 template<>
@@ -58,9 +56,7 @@ struct formatter<tyr::datalog::EdgeAssignment, char>
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
     template<typename FormatContext>
     auto format(const tyr::datalog::EdgeAssignment& value, FormatContext& ctx) const
-    {
-        return fmt::format_to(ctx.out(), "[{}/{}, {}/{}]", value.first_index, value.first_object, value.second_index, value.second_object);
-    }
+    { return fmt::format_to(ctx.out(), "[{}/{}, {}/{}]", value.first_index, value.first_object, value.second_index, value.second_object); }
 };
 
 template<>
@@ -69,9 +65,7 @@ struct formatter<tyr::datalog::details::Vertex, char>
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
     template<typename FormatContext>
     auto format(const tyr::datalog::details::Vertex& value, FormatContext& ctx) const
-    {
-        return fmt::format_to(ctx.out(), "[{}/{}]", value.get_parameter_index(), value.get_object_index());
-    }
+    { return fmt::format_to(ctx.out(), "[{}/{}]", value.get_parameter_index(), value.get_object_index()); }
 };
 
 template<>
@@ -80,9 +74,7 @@ struct formatter<tyr::datalog::details::Edge, char>
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
     template<typename FormatContext>
     auto format(const tyr::datalog::details::Edge& value, FormatContext& ctx) const
-    {
-        return fmt::format_to(ctx.out(), "[{}, {}]", value.vi(), value.vj());
-    }
+    { return fmt::format_to(ctx.out(), "[{}, {}]", value.vi(), value.vj()); }
 };
 
 template<>
@@ -108,7 +100,7 @@ struct formatter<tyr::datalog::details::RuleToLiteralInfoMappings, char>
             fmt::print(os, "{}{}\n", "literal infos with constant pairs = ", value.infos_with_constant_pairs);
         }
         os << ")";
-        return fmt::format_to(ctx.out(), "{}", os.str());
+        return fmt::format_to(ctx.out(), "{}", os.view());
     }
 };
 
@@ -129,7 +121,7 @@ struct formatter<tyr::datalog::details::RuleToLiteralPositionMappings, char>
             fmt::print(os, "{}{}\n", "parameter to positions = ", value.parameter_to_positions);
         }
         os << ")";
-        return fmt::format_to(ctx.out(), "{}", os.str());
+        return fmt::format_to(ctx.out(), "{}", os.view());
     }
 };
 
@@ -152,7 +144,7 @@ struct formatter<tyr::datalog::details::RuleToLiteralInfo<T>, char>
             fmt::print(os, "{}{}\n", "position mappings = ", value.position_mappings);
         }
         os << ")";
-        return fmt::format_to(ctx.out(), "{}", os.str());
+        return fmt::format_to(ctx.out(), "{}", os.view());
     }
 };
 
@@ -173,7 +165,7 @@ struct formatter<tyr::datalog::details::TaggedRuleToLiteralInfos<T>, char>
             fmt::print(os, "{}{}\n", "info mappings = ", value.info_mappings);
         }
         os << ")";
-        return fmt::format_to(ctx.out(), "{}", os.str());
+        return fmt::format_to(ctx.out(), "{}", os.view());
     }
 };
 
@@ -183,9 +175,7 @@ struct formatter<tyr::datalog::StaticConsistencyGraph, char>
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
     template<typename FormatContext>
     auto format(const tyr::datalog::StaticConsistencyGraph&, FormatContext& ctx) const
-    {
-        return ctx.out();
-    }
+    { return ctx.out(); }
 };
 
 template<>
@@ -198,7 +188,8 @@ struct formatter<tyr::datalog::ProgramStatistics, char>
         const double parallel_ns = static_cast<double>(ygg::to_ns(value.parallel_time));
         const double total_ns = static_cast<double>(ygg::to_ns(value.total_time));
         const double frac = parallel_ns > 0.0 && total_ns > 0.0 ? parallel_ns / total_ns : 1.0;
-        const auto avg_total_us = value.num_executions > 0 ? ygg::to_us(value.total_time) / value.num_executions : 0.0;
+        const auto avg_total_us =
+            value.num_executions > 0 ? static_cast<double>(ygg::to_us(value.total_time)) / static_cast<double>(value.num_executions) : 0.0;
 
         return fmt::format_to(ctx.out(),
                               "[ProgramStatistics] N_exec = {:>10}    | executions\n"
@@ -223,7 +214,8 @@ struct formatter<tyr::datalog::RuleStatistics, char>
     template<typename FormatContext>
     auto format(const tyr::datalog::RuleStatistics& value, FormatContext& ctx) const
     {
-        const auto avg_total_us = value.num_executions > 0 ? ygg::to_us(value.total_time) / value.num_executions : 0.0;
+        const auto avg_total_us =
+            value.num_executions > 0 ? static_cast<double>(ygg::to_us(value.total_time)) / static_cast<double>(value.num_executions) : 0.0;
         return fmt::format_to(ctx.out(),
                               "[RuleStatistics] N_exec = {:>10}    | executions\n"
                               "[RuleStatistics] T_seq  = {:>10} ms | sequential time\n"
@@ -231,7 +223,7 @@ struct formatter<tyr::datalog::RuleStatistics, char>
                               "[RuleStatistics] T_tot  = {:>10} ms | total time\n"
                               "[RuleStatistics] T_avg  = {:>10} us | average time",
                               value.num_executions,
-                              ygg::to_ms(value.initialize_time) + ygg::to_ms(value.process_pending_time),
+                              ygg::to_ms(value.initialize_time),
                               ygg::to_ms(value.process_generate_time),
                               ygg::to_ms(value.total_time),
                               avg_total_us);
@@ -245,7 +237,8 @@ struct formatter<tyr::datalog::AggregatedRuleStatistics, char>
     template<typename FormatContext>
     auto format(const tyr::datalog::AggregatedRuleStatistics& value, FormatContext& ctx) const
     {
-        const auto avg_total_us = value.num_executions > 0 ? ygg::to_us(value.total_time) / value.num_executions : 0.0;
+        const auto avg_total_us =
+            value.num_executions > 0 ? static_cast<double>(ygg::to_us(value.total_time)) / static_cast<double>(value.num_executions) : 0.0;
         const double tot_max_ns = static_cast<double>(ygg::to_ns(value.tot_time_max));
         const double tot_med_ns = static_cast<double>(ygg::to_ns(value.tot_time_median));
         const double tot_skew = tot_max_ns > 0.0 && tot_med_ns > 0.0 ? tot_max_ns / tot_med_ns : 1.0;
@@ -274,7 +267,7 @@ struct formatter<tyr::datalog::AggregatedRuleStatistics, char>
                               "[AggregatedRuleStatistics] T_avg_skew = {:>10.2f}    | skew average time (T_avg_max / T_avg_med)",
                               value.num_executions,
                               value.sample_count,
-                              ygg::to_ms(value.initialize_time) + ygg::to_ms(value.process_pending_time),
+                              ygg::to_ms(value.initialize_time),
                               ygg::to_ms(value.process_generate_time),
                               ygg::to_ms(value.total_time),
                               avg_total_us,
@@ -297,17 +290,17 @@ struct formatter<tyr::datalog::RuleWorkerStatistics, char>
     template<typename FormatContext>
     auto format(const tyr::datalog::RuleWorkerStatistics& value, FormatContext& ctx) const
     {
-        const auto pen = static_cast<ygg::float_t>(value.num_pending_rules);
+        const auto rej = static_cast<ygg::float_t>(value.num_rejected_rules);
         const auto gen = static_cast<ygg::float_t>(value.num_generated_rules);
-        auto overapproximation_ratio = (gen > 0) ? (pen + gen) / gen : ygg::float_t { 1.0 };
+        auto overapproximation_ratio = (gen > 0) ? (rej + gen) / gen : ygg::float_t { 1.0 };
         return fmt::format_to(ctx.out(),
                               "[RuleWorkerStatistics] N_exec = {:>10} | executions\n"
                               "[RuleWorkerStatistics] N_gen  = {:>10} | generated rules\n"
-                              "[RuleWorkerStatistics] N_pen  = {:>10} | pending rules\n"
-                              "[RuleWorkerStatistics] OA     = {:>10.2f} | overapproximation ratio (1 + N_pen / N_gen)",
+                              "[RuleWorkerStatistics] N_rej  = {:>10} | rejected rules\n"
+                              "[RuleWorkerStatistics] OA     = {:>10.2f} | overapproximation ratio (1 + N_rej / N_gen)",
                               value.num_executions,
                               value.num_generated_rules,
-                              value.num_pending_rules,
+                              value.num_rejected_rules,
                               overapproximation_ratio);
     }
 };
@@ -319,17 +312,17 @@ struct formatter<tyr::datalog::AggregatedRuleWorkerStatistics, char>
     template<typename FormatContext>
     auto format(const tyr::datalog::AggregatedRuleWorkerStatistics& value, FormatContext& ctx) const
     {
-        const auto pen = static_cast<ygg::float_t>(value.num_pending_rules);
+        const auto rej = static_cast<ygg::float_t>(value.num_rejected_rules);
         const auto gen = static_cast<ygg::float_t>(value.num_generated_rules);
-        auto overapproximation_ratio = (gen > 0) ? (pen + gen) / gen : ygg::float_t { 1.0 };
+        auto overapproximation_ratio = (gen > 0) ? (rej + gen) / gen : ygg::float_t { 1.0 };
         return fmt::format_to(ctx.out(),
                               "[AggregatedRuleWorkerStatistics] N_exec =  {:>10} | executions\n"
                               "[AggregatedRuleWorkerStatistics] N_gen  =  {:>10} | generated rules\n"
-                              "[AggregatedRuleWorkerStatistics] N_pen  =  {:>10} | pending rules\n"
-                              "[AggregatedRuleWorkerStatistics] OA     =  {:>10.2f} | overapproximation ratio (1 + N_pen / N_gen)",
+                              "[AggregatedRuleWorkerStatistics] N_rej  =  {:>10} | rejected rules\n"
+                              "[AggregatedRuleWorkerStatistics] OA     =  {:>10.2f} | overapproximation ratio (1 + N_rej / N_gen)",
                               value.num_executions,
                               value.num_generated_rules,
-                              value.num_pending_rules,
+                              value.num_rejected_rules,
                               overapproximation_ratio);
     }
 };

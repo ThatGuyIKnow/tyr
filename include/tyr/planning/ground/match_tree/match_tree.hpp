@@ -40,10 +40,10 @@ private:
 
     struct Definition
     {
-        explicit Definition(const ::tyr::formalism::planning::Repository& context) : repository(ygg::uint_t(0), context) {}
+        explicit Definition(const formalism::planning::Repository& context) : repository(static_cast<ygg::uint_t>(0), context) {}
 
-        Repository<Tag> repository;  // Constant index 0 is sufficient because match-tree node views are never compared.
-        std::optional<NodeView> root;
+        Repository<Tag> repository;                // Constant index 0 is sufficient because match-tree node views are never compared.
+        std::optional<ygg::Data<Node<Tag>>> root;  // Owned: node views borrow non-trivial node records.
     };
 
     struct Evaluator
@@ -57,11 +57,11 @@ private:
     Evaluator m_evaluator;
 
 public:
-    MatchTree(std::vector<ygg::View<ygg::Index<Tag>, ::tyr::formalism::planning::Repository>> elements, const ::tyr::formalism::planning::Repository& context);
+    MatchTree(std::vector<ygg::View<ygg::Index<Tag>, formalism::planning::Repository>> elements, const formalism::planning::Repository& context);
     ~MatchTree();
 
-    static MatchTreePtr<Tag> create(std::vector<ygg::View<ygg::Index<Tag>, ::tyr::formalism::planning::Repository>> elements,
-                                    const ::tyr::formalism::planning::Repository& context);
+    static MatchTreePtr<Tag> create(std::vector<ygg::View<ygg::Index<Tag>, formalism::planning::Repository>> elements,
+                                    const formalism::planning::Repository& context);
 
     [[nodiscard]] MatchTreePtr<Tag> make_worker() const;
 
@@ -70,8 +70,7 @@ public:
     MatchTree(MatchTree&& other) = delete;
     MatchTree& operator=(MatchTree&& other) = delete;
 
-    void generate(const StateContext<GroundTag>& state,
-                  std::vector<ygg::View<ygg::Index<Tag>, ::tyr::formalism::planning::Repository>>& out_applicable_elements);
+    void generate(const StateContext<GroundTag>& state, std::vector<ygg::View<ygg::Index<Tag>, formalism::planning::Repository>>& out_applicable_elements);
 };
 
 }

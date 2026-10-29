@@ -33,10 +33,6 @@
 #include <yggdrasil/core/config.hpp>
 #include <yggdrasil/core/types.hpp>
 #include <yggdrasil/formatting/formatter.hpp>
-#include <yggdrasil/ids/index_mixins.hpp>
-
-namespace f = tyr::formalism;
-namespace fd = tyr::formalism::datalog;
 
 namespace tyr::analysis
 {
@@ -56,7 +52,7 @@ struct TmpScoped
 
 struct TmpVariableDomain
 {
-    ygg::UnorderedSet<ygg::Index<::tyr::formalism::Object>> objects;
+    ygg::UnorderedSet<ygg::Index<formalism::Object>> objects;
 };
 
 using TmpVariableDomainList = std::vector<TmpVariableDomain>;
@@ -67,14 +63,14 @@ using TmpSimpleScopedDomain = TmpScoped<Element, TmpVariableDomainList>;
 template<typename Element>
 using TmpSimpleScopedDomainMap = ygg::UnorderedMap<ygg::Index<Element>, TmpVariableDomainList>;
 
-template<::tyr::formalism::FactKind T>
-using TmpPredicateDomainMap = TmpSimpleScopedDomainMap<::tyr::formalism::Predicate<T>>;
+template<formalism::FactKind T>
+using TmpPredicateDomainMap = TmpSimpleScopedDomainMap<formalism::Predicate<T>>;
 
-template<::tyr::formalism::FactKind T>
-using TmpFunctionDomainMap = TmpSimpleScopedDomainMap<::tyr::formalism::Function<T>>;
+template<formalism::FactKind T>
+using TmpFunctionDomainMap = TmpSimpleScopedDomainMap<formalism::Function<T>>;
 
-template<::tyr::formalism::RelationKind R>
-using TmpRuleDomainMap = TmpSimpleScopedDomainMap<::tyr::formalism::datalog::Rule<R>>;
+template<formalism::RelationKind R>
+using TmpRuleDomainMap = TmpSimpleScopedDomainMap<formalism::datalog::Rule<LiftedTag, R>>;
 
 /**
  * Conversion helpers to public representation.
@@ -82,7 +78,7 @@ using TmpRuleDomainMap = TmpSimpleScopedDomainMap<::tyr::formalism::datalog::Rul
 
 VariableDomain to_variable_domain(const TmpVariableDomain& domain)
 {
-    auto objects = std::vector<ygg::Index<f::Object>>(domain.objects.begin(), domain.objects.end());
+    auto objects = std::vector<ygg::Index<formalism::Object>>(domain.objects.begin(), domain.objects.end());
     std::sort(objects.begin(), objects.end());
     return VariableDomain { std::move(objects) };
 }
@@ -106,7 +102,7 @@ TmpVariableDomainList to_tmp_variable_domain_list(const VariableDomainList& doma
     return result;
 }
 
-template<f::FactKind T>
+template<formalism::FactKind T>
 PredicateDomainMap<T> to_predicate_domain_map(const TmpPredicateDomainMap<T>& domains)
 {
     auto result = PredicateDomainMap<T> {};
@@ -118,7 +114,7 @@ PredicateDomainMap<T> to_predicate_domain_map(const TmpPredicateDomainMap<T>& do
     return result;
 }
 
-template<f::FactKind T>
+template<formalism::FactKind T>
 FunctionDomainMap<T> to_function_domain_map(const TmpFunctionDomainMap<T>& domains)
 {
     auto result = FunctionDomainMap<T> {};
@@ -130,7 +126,7 @@ FunctionDomainMap<T> to_function_domain_map(const TmpFunctionDomainMap<T>& domai
     return result;
 }
 
-template<f::RelationKind R>
+template<formalism::RelationKind R>
 RuleDomainMap<R> to_rule_domain_map(const TmpRuleDomainMap<R>& domains)
 {
     auto result = RuleDomainMap<R> {};
@@ -139,7 +135,7 @@ RuleDomainMap<R> to_rule_domain_map(const TmpRuleDomainMap<R>& domains)
     for (const auto& [rule, variable_domains] : domains)
     {
         result.emplace(rule,
-                       SimpleScopedDomain<::tyr::formalism::datalog::Rule<R>> {
+                       SimpleScopedDomain<formalism::datalog::Rule<LiftedTag, R>> {
                            rule,
                            to_variable_domain_list(variable_domains),
                        });
@@ -152,8 +148,8 @@ RuleDomainMap<R> to_rule_domain_map(const TmpRuleDomainMap<R>& domains)
  * Initialization of temporary maps.
  */
 
-template<f::FactKind T>
-TmpPredicateDomainMap<T> initialize_predicate_domain_sets(fd::PredicateListView<T> predicates)
+template<formalism::FactKind T>
+TmpPredicateDomainMap<T> initialize_predicate_domain_sets(formalism::datalog::PredicateListView<T> predicates)
 {
     auto predicate_domain_sets = TmpPredicateDomainMap<T> {};
     predicate_domain_sets.reserve(predicates.size());
@@ -164,8 +160,8 @@ TmpPredicateDomainMap<T> initialize_predicate_domain_sets(fd::PredicateListView<
     return predicate_domain_sets;
 }
 
-template<f::FactKind T>
-void insert_into_predicate_domain_sets(fd::GroundAtomListView<T> atoms, TmpPredicateDomainMap<T>& predicate_domain_sets)
+template<formalism::FactKind T>
+void insert_into_predicate_domain_sets(formalism::datalog::AtomListView<GroundTag, T> atoms, TmpPredicateDomainMap<T>& predicate_domain_sets)
 {
     for (const auto atom : atoms)
     {
@@ -178,8 +174,8 @@ void insert_into_predicate_domain_sets(fd::GroundAtomListView<T> atoms, TmpPredi
     }
 }
 
-template<f::FactKind T>
-TmpFunctionDomainMap<T> initialize_function_domain_sets(fd::FunctionListView<T> functions)
+template<formalism::FactKind T>
+TmpFunctionDomainMap<T> initialize_function_domain_sets(formalism::datalog::FunctionListView<T> functions)
 {
     auto function_domain_sets = TmpFunctionDomainMap<T> {};
     function_domain_sets.reserve(functions.size());
@@ -190,8 +186,8 @@ TmpFunctionDomainMap<T> initialize_function_domain_sets(fd::FunctionListView<T> 
     return function_domain_sets;
 }
 
-template<f::FactKind T>
-void insert_into_function_domain_sets(fd::GroundFunctionTermValueListView<T> fterm_values, TmpFunctionDomainMap<T>& function_domain_sets)
+template<formalism::FactKind T>
+void insert_into_function_domain_sets(formalism::datalog::FunctionTermValueListView<GroundTag, T> fterm_values, TmpFunctionDomainMap<T>& function_domain_sets)
 {
     for (const auto term_value : fterm_values)
     {
@@ -206,7 +202,7 @@ void insert_into_function_domain_sets(fd::GroundFunctionTermValueListView<T> fte
 }
 
 template<typename Fn>
-void for_each_term_with_position(Fn&& fn, fd::TermListView terms)
+void for_each_term_with_position(Fn fn, formalism::datalog::TermListView terms)
 {
     size_t pos = 0;
     for (const auto term : terms)
@@ -222,75 +218,69 @@ void for_each_term_with_position(Fn&& fn, fd::TermListView terms)
 
 struct InsertConstantPolicy
 {
-    TmpPredicateDomainMap<f::StaticTag>& static_predicate_domain_sets;
-    TmpPredicateDomainMap<f::FluentTag>& fluent_predicate_domain_sets;
-    TmpFunctionDomainMap<f::StaticTag>& static_function_domain_sets;
-    TmpFunctionDomainMap<f::FluentTag>& fluent_function_domain_sets;
+    TmpPredicateDomainMap<formalism::StaticTag>* static_predicate_domain_sets;
+    TmpPredicateDomainMap<formalism::FluentTag>* fluent_predicate_domain_sets;
+    TmpFunctionDomainMap<formalism::StaticTag>* static_function_domain_sets;
+    TmpFunctionDomainMap<formalism::FluentTag>* fluent_function_domain_sets;
 
     template<typename Element>
-    bool should_skip(Element) const
-    {
-        return false;
-    }
+    [[nodiscard]] bool should_skip(Element) const
+    { return false; }
 
-    bool should_skip(fd::FunctionView<f::FluentTag>) const { return true; }
+    [[nodiscard]] bool should_skip(formalism::datalog::FunctionView<formalism::FluentTag>) const { return true; }
 
-    auto& get_domains(fd::PredicateView<f::StaticTag>) { return static_predicate_domain_sets; }
-    auto& get_domains(fd::PredicateView<f::FluentTag>) { return fluent_predicate_domain_sets; }
+    [[nodiscard]] auto& get_domains(formalism::datalog::PredicateView<formalism::StaticTag>) const { return *static_predicate_domain_sets; }
+    [[nodiscard]] auto& get_domains(formalism::datalog::PredicateView<formalism::FluentTag>) const { return *fluent_predicate_domain_sets; }
 
-    auto& get_domains(fd::FunctionView<f::StaticTag>) { return static_function_domain_sets; }
-    auto& get_domains(fd::FunctionView<f::FluentTag>) { return fluent_function_domain_sets; }
+    [[nodiscard]] auto& get_domains(formalism::datalog::FunctionView<formalism::StaticTag>) const { return *static_function_domain_sets; }
+    [[nodiscard]] auto& get_domains(formalism::datalog::FunctionView<formalism::FluentTag>) const { return *fluent_function_domain_sets; }
 
     template<typename Symbol>
-    void on_object(size_t pos, fd::ObjectView object, Symbol symbol)
+    void on_object(size_t pos, formalism::datalog::ObjectView object, Symbol symbol)
     {
         auto& domain = get_domains(symbol).at(symbol.get_index())[pos];
         domain.objects.insert(object.get_index());
     }
 
     template<typename Symbol>
-    void on_parameter(size_t, f::ParameterIndex, Symbol)
+    void on_parameter(size_t, formalism::ParameterIndex, Symbol)
     {
     }
 };
 
 struct RestrictPolicy
 {
-    const TmpPredicateDomainMap<f::StaticTag>& static_predicate_domain_sets;
-    const TmpPredicateDomainMap<f::FluentTag>& fluent_predicate_domain_sets;
-    const TmpFunctionDomainMap<f::StaticTag>& static_function_domain_sets;
-    const TmpFunctionDomainMap<f::FluentTag>& fluent_function_domain_sets;
-    TmpVariableDomainList& parameter_domains;
+    const TmpPredicateDomainMap<formalism::StaticTag>* static_predicate_domain_sets;
+    const TmpPredicateDomainMap<formalism::FluentTag>* fluent_predicate_domain_sets;
+    const TmpFunctionDomainMap<formalism::StaticTag>* static_function_domain_sets;
+    const TmpFunctionDomainMap<formalism::FluentTag>* fluent_function_domain_sets;
+    TmpVariableDomainList* parameter_domains;
 
     template<typename Element>
-    bool should_skip(Element) const
-    {
-        return false;
-    }
+    [[nodiscard]] bool should_skip(Element) const
+    { return false; }
 
-    template<f::FactKind T>
-    bool should_skip(fd::LiteralView<T> literal) const
-    {
-        return !literal.get_polarity();
-    }
+    template<formalism::FactKind T>
+    [[nodiscard]] bool should_skip(formalism::datalog::LiteralView<LiftedTag, T> literal) const
+    { return !literal.get_polarity(); }
 
-    bool should_skip(fd::FunctionView<f::FluentTag>) const { return true; }
+    [[nodiscard]] bool should_skip(formalism::datalog::FunctionView<formalism::FluentTag>) const { return true; }
 
-    const auto& get_domains(fd::PredicateView<f::StaticTag>) const { return static_predicate_domain_sets; }
-    const auto& get_domains(fd::PredicateView<f::FluentTag>) const { return fluent_predicate_domain_sets; }
+    [[nodiscard]] const auto& get_domains(formalism::datalog::PredicateView<formalism::StaticTag>) const { return *static_predicate_domain_sets; }
+    [[nodiscard]] const auto& get_domains(formalism::datalog::PredicateView<formalism::FluentTag>) const { return *fluent_predicate_domain_sets; }
 
-    const auto& get_domains(fd::FunctionView<f::StaticTag>) const { return static_function_domain_sets; }
-    const auto& get_domains(fd::FunctionView<f::FluentTag>) const { return fluent_function_domain_sets; }
+    [[nodiscard]] const auto& get_domains(formalism::datalog::FunctionView<formalism::StaticTag>) const { return *static_function_domain_sets; }
+    [[nodiscard]] const auto& get_domains(formalism::datalog::FunctionView<formalism::FluentTag>) const { return *fluent_function_domain_sets; }
 
     template<typename Symbol>
-    void on_object(size_t, fd::ObjectView, Symbol)
+    void on_object(size_t, formalism::datalog::ObjectView, Symbol)
     {
     }
 
     template<typename Symbol>
-    void on_parameter(size_t pos, f::ParameterIndex param, Symbol symbol)
+    void on_parameter(size_t pos, formalism::ParameterIndex param, Symbol symbol)
     {
-        auto& parameter_domain = parameter_domains[ygg::uint_t(param)];
+        auto& parameter_domain = (*parameter_domains)[static_cast<ygg::uint_t>(param)];
         const auto& symbol_domain = get_domains(symbol).at(symbol.get_index())[pos];
         ygg::intersect_inplace(parameter_domain.objects, symbol_domain.objects);
     }
@@ -298,40 +288,38 @@ struct RestrictPolicy
 
 struct LiftPolicy
 {
-    TmpPredicateDomainMap<f::StaticTag>& static_predicate_domain_sets;
-    TmpPredicateDomainMap<f::FluentTag>& fluent_predicate_domain_sets;
-    TmpFunctionDomainMap<f::StaticTag>& static_function_domain_sets;
-    TmpFunctionDomainMap<f::FluentTag>& fluent_function_domain_sets;
-    const TmpVariableDomainList& parameter_domains;
+    TmpPredicateDomainMap<formalism::StaticTag>* static_predicate_domain_sets;
+    TmpPredicateDomainMap<formalism::FluentTag>* fluent_predicate_domain_sets;
+    TmpFunctionDomainMap<formalism::StaticTag>* static_function_domain_sets;
+    TmpFunctionDomainMap<formalism::FluentTag>* fluent_function_domain_sets;
+    const TmpVariableDomainList* parameter_domains;
 
     template<typename Element>
-    bool should_skip(Element) const
-    {
-        return false;
-    }
+    [[nodiscard]] bool should_skip(Element) const
+    { return false; }
 
-    bool should_skip(fd::FunctionView<f::StaticTag>) const { return true; }
+    [[nodiscard]] bool should_skip(formalism::datalog::FunctionView<formalism::StaticTag>) const { return true; }
 
-    auto& get_domains(fd::PredicateView<f::StaticTag>) { return static_predicate_domain_sets; }
+    [[nodiscard]] auto& get_domains(formalism::datalog::PredicateView<formalism::StaticTag>) const { return *static_predicate_domain_sets; }
 
-    auto& get_domains(fd::PredicateView<f::FluentTag>) { return fluent_predicate_domain_sets; }
+    [[nodiscard]] auto& get_domains(formalism::datalog::PredicateView<formalism::FluentTag>) const { return *fluent_predicate_domain_sets; }
 
-    auto& get_domains(fd::FunctionView<f::StaticTag>) { return static_function_domain_sets; }
+    [[nodiscard]] auto& get_domains(formalism::datalog::FunctionView<formalism::StaticTag>) const { return *static_function_domain_sets; }
 
-    auto& get_domains(fd::FunctionView<f::FluentTag>) { return fluent_function_domain_sets; }
+    [[nodiscard]] auto& get_domains(formalism::datalog::FunctionView<formalism::FluentTag>) const { return *fluent_function_domain_sets; }
 
     template<typename Symbol>
-    void on_object(size_t pos, fd::ObjectView object, Symbol symbol)
+    void on_object(size_t pos, formalism::datalog::ObjectView object, Symbol symbol)
     {
         auto& domain = get_domains(symbol).at(symbol.get_index())[pos];
         domain.objects.insert(object.get_index());
     }
 
     template<typename Symbol>
-    void on_parameter(size_t pos, f::ParameterIndex param, Symbol symbol)
+    void on_parameter(size_t pos, formalism::ParameterIndex param, Symbol symbol)
     {
         auto& domain = get_domains(symbol).at(symbol.get_index())[pos];
-        ygg::union_inplace(domain.objects, parameter_domains[ygg::uint_t(param)].objects);
+        ygg::union_inplace(domain.objects, (*parameter_domains)[static_cast<ygg::uint_t>(param)].objects);
     }
 };
 
@@ -340,7 +328,7 @@ struct LiftPolicy
  */
 
 template<typename Policy>
-void apply_policy(fd::FunctionExpressionView element, Policy& policy);
+void apply_policy(formalism::datalog::FunctionExpressionView<LiftedTag> element, Policy& policy);
 
 template<typename Policy>
 void apply_policy(ygg::float_t, Policy&)
@@ -348,27 +336,25 @@ void apply_policy(ygg::float_t, Policy&)
 }
 
 template<typename Policy>
-void apply_policy(fd::LiftedUnaryOperatorView element, Policy& policy)
-{
-    apply_policy(element.get_arg(), policy);
-}
+void apply_policy(formalism::datalog::UnaryOperatorView<LiftedTag> element, Policy& policy)
+{ apply_policy(element.get_arg(), policy); }
 
-template<f::BinaryOperatorKind O, typename Policy>
-void apply_policy(fd::LiftedBinaryOperatorView<O> element, Policy& policy)
+template<formalism::BinaryOperatorKind O, typename Policy>
+void apply_policy(formalism::datalog::BinaryOperatorView<LiftedTag, O> element, Policy& policy)
 {
     apply_policy(element.get_lhs(), policy);
     apply_policy(element.get_rhs(), policy);
 }
 
 template<typename Policy>
-void apply_policy(fd::LiftedMultiOperatorView element, Policy& policy)
+void apply_policy(formalism::datalog::MultiOperatorView<LiftedTag> element, Policy& policy)
 {
     for (const auto arg : element.get_args())
         apply_policy(arg, policy);
 }
 
-template<f::FactKind T, typename Policy>
-void apply_policy(fd::AtomView<T> element, Policy& policy)
+template<formalism::FactKind T, typename Policy>
+void apply_policy(formalism::datalog::AtomView<LiftedTag, T> element, Policy& policy)
 {
     const auto predicate = element.get_predicate();
 
@@ -376,15 +362,13 @@ void apply_policy(fd::AtomView<T> element, Policy& policy)
         return;
 
     for_each_term_with_position(
-        [&](size_t pos, auto&& arg)
+        [&]<typename Alternative>(size_t pos, const Alternative& arg)
         {
-            using Alternative = std::decay_t<decltype(arg)>;
-
-            if constexpr (std::is_same_v<Alternative, fd::ObjectView>)
+            if constexpr (std::is_same_v<Alternative, formalism::datalog::ObjectView>)
             {
                 policy.on_object(pos, arg, predicate);
             }
-            else if constexpr (std::is_same_v<Alternative, f::ParameterIndex>)
+            else if constexpr (std::is_same_v<Alternative, formalism::ParameterIndex>)
             {
                 policy.on_parameter(pos, arg, predicate);
             }
@@ -396,8 +380,8 @@ void apply_policy(fd::AtomView<T> element, Policy& policy)
         element.get_terms());
 }
 
-template<f::FactKind T, typename Policy>
-void apply_policy(fd::LiteralView<T> element, Policy& policy)
+template<formalism::FactKind T, typename Policy>
+void apply_policy(formalism::datalog::LiteralView<LiftedTag, T> element, Policy& policy)
 {
     if (policy.should_skip(element))
         return;
@@ -405,8 +389,8 @@ void apply_policy(fd::LiteralView<T> element, Policy& policy)
     apply_policy(element.get_atom(), policy);
 }
 
-template<f::FactKind T, typename Policy>
-void apply_policy(fd::FunctionTermView<T> element, Policy& policy)
+template<formalism::FactKind T, typename Policy>
+void apply_policy(formalism::datalog::FunctionTermView<LiftedTag, T> element, Policy& policy)
 {
     const auto function = element.get_function();
 
@@ -414,15 +398,13 @@ void apply_policy(fd::FunctionTermView<T> element, Policy& policy)
         return;
 
     for_each_term_with_position(
-        [&](size_t pos, auto&& arg)
+        [&]<typename Alternative>(size_t pos, const Alternative& arg)
         {
-            using Alternative = std::decay_t<decltype(arg)>;
-
-            if constexpr (std::is_same_v<Alternative, fd::ObjectView>)
+            if constexpr (std::is_same_v<Alternative, formalism::datalog::ObjectView>)
             {
                 policy.on_object(pos, arg, function);
             }
-            else if constexpr (std::is_same_v<Alternative, f::ParameterIndex>)
+            else if constexpr (std::is_same_v<Alternative, formalism::ParameterIndex>)
             {
                 policy.on_parameter(pos, arg, function);
             }
@@ -434,99 +416,95 @@ void apply_policy(fd::FunctionTermView<T> element, Policy& policy)
         element.get_terms());
 }
 
-template<f::FactKind T, typename Policy>
-void apply_policy(fd::NumericEffectView<T> element, Policy& policy)
+template<formalism::FactKind T, typename Policy>
+void apply_policy(formalism::datalog::NumericEffectView<LiftedTag, T> element, Policy& policy)
 {
     apply_policy(element.get_fterm(), policy);
     apply_policy(element.get_fexpr(), policy);
 }
 
 template<typename Policy>
-void apply_policy(fd::LiftedArithmeticOperatorView element, Policy& policy)
+void apply_policy(formalism::datalog::ArithmeticOperatorView<LiftedTag> element, Policy& policy)
 {
     visit([&](auto&& arg) { apply_policy(arg, policy); }, element.get_variant());
 }
 
 template<typename Policy>
-void apply_policy(fd::FunctionExpressionView element, Policy& policy)
+void apply_policy(formalism::datalog::FunctionExpressionView<LiftedTag> element, Policy& policy)
 {
     visit([&](auto&& arg) { apply_policy(arg, policy); }, element.get_variant());
 }
 
 template<typename Policy>
-void apply_policy(fd::LiftedBooleanOperatorView element, Policy& policy)
+void apply_policy(formalism::datalog::BooleanOperatorView<LiftedTag> element, Policy& policy)
 {
     visit([&](auto&& arg) { apply_policy(arg, policy); }, element.get_variant());
 }
 
-template<f::FactKind T, typename Policy>
-void apply_policy(fd::NumericEffectOperatorView<T> element, Policy& policy)
+template<formalism::FactKind T, typename Policy>
+void apply_policy(formalism::datalog::NumericEffectOperatorView<LiftedTag, T> element, Policy& policy)
 {
     visit([&](auto&& arg) { apply_policy(arg, policy); }, element.get_variant());
 }
 
 }  // namespace
 
-ProgramAnalysis analyze_program(fd::ProgramView<LiftedTag> program)
+ProgramAnalysis analyze_program(formalism::datalog::ProgramView<LiftedTag> program)
 {
-    auto universe = ygg::UnorderedSet<ygg::Index<f::Object>> {};
+    auto universe = ygg::UnorderedSet<ygg::Index<formalism::Object>> {};
     for (const auto object : program.get_objects())
         universe.insert(object.get_index());
 
     ///--- Step 1: Initialize static and fluent predicate parameter domains
 
-    auto static_predicate_domain_sets = initialize_predicate_domain_sets(program.get_predicates<f::StaticTag>());
-    auto fluent_predicate_domain_sets = initialize_predicate_domain_sets(program.get_predicates<f::FluentTag>());
-    insert_into_predicate_domain_sets(program.get_atoms<f::StaticTag>(), static_predicate_domain_sets);
-    insert_into_predicate_domain_sets(program.get_atoms<f::FluentTag>(), fluent_predicate_domain_sets);
+    auto static_predicate_domain_sets = initialize_predicate_domain_sets(program.get_predicates<formalism::StaticTag>());
+    auto fluent_predicate_domain_sets = initialize_predicate_domain_sets(program.get_predicates<formalism::FluentTag>());
+    insert_into_predicate_domain_sets(program.get_atoms<formalism::StaticTag>(), static_predicate_domain_sets);
+    insert_into_predicate_domain_sets(program.get_atoms<formalism::FluentTag>(), fluent_predicate_domain_sets);
 
     ///--- Step 2: Initialize static and fluent function parameter domains
 
-    auto static_function_domain_sets = initialize_function_domain_sets(program.get_functions<f::StaticTag>());
-    auto fluent_function_domain_sets = initialize_function_domain_sets(program.get_functions<f::FluentTag>());
-    insert_into_function_domain_sets(program.get_fterm_values<f::StaticTag>(), static_function_domain_sets);
-    insert_into_function_domain_sets(program.get_fterm_values<f::FluentTag>(), fluent_function_domain_sets);
+    auto static_function_domain_sets = initialize_function_domain_sets(program.get_functions<formalism::StaticTag>());
+    auto fluent_function_domain_sets = initialize_function_domain_sets(program.get_functions<formalism::FluentTag>());
+    insert_into_function_domain_sets(program.get_fterm_values<formalism::StaticTag>(), static_function_domain_sets);
+    insert_into_function_domain_sets(program.get_fterm_values<formalism::FluentTag>(), fluent_function_domain_sets);
 
     ///--- Step 2.5: Important not to forget constants in schemas
 
     {
         auto insert_policy = InsertConstantPolicy {
-            static_predicate_domain_sets,
-            fluent_predicate_domain_sets,
-            static_function_domain_sets,
-            fluent_function_domain_sets,
+            &static_predicate_domain_sets,
+            &fluent_predicate_domain_sets,
+            &static_function_domain_sets,
+            &fluent_function_domain_sets,
         };
 
-        const auto insert_rule_constants = [&](auto kind)
+        const auto insert_rule_constants = [&]<typename R>(R /*kind*/)
         {
-            using R = decltype(kind);
-
             for (const auto rule : program.get_rules<R>())
             {
-                for (const auto literal : rule.get_body().template get_literals<f::StaticTag>())
+                for (const auto literal : rule.get_body().template get_literals<formalism::StaticTag>())
                     apply_policy(literal.get_atom(), insert_policy);
 
                 for (const auto op : rule.get_body().get_numeric_constraints())
                     apply_policy(op, insert_policy);
 
-                apply_policy(rule.get_head(), insert_policy);
+                formalism::datalog::for_each_head(rule, [&](const auto& head) { apply_policy(head, insert_policy); });
             }
         };
 
-        insert_rule_constants(f::PredicateTag {});
-        insert_rule_constants(f::FunctionTag {});
+        insert_rule_constants(formalism::PredicateTag {});
+        insert_rule_constants(formalism::FunctionTag {});
     }
 
     ///--- Step 3: Compute rule parameter domains as tightest bound from the previously computed domains of the static predicates.
 
-    auto predicate_rule_domain_sets = TmpRuleDomainMap<f::PredicateTag> {};
-    auto function_rule_domain_sets = TmpRuleDomainMap<f::FunctionTag> {};
+    auto predicate_rule_domain_sets = TmpRuleDomainMap<formalism::PredicateTag> {};
+    auto function_rule_domain_sets = TmpRuleDomainMap<formalism::FunctionTag> {};
     auto compatibility_graphs = ProgramCompatibilityGraphs {};
 
-    const auto restrict_rule_domains = [&](auto kind, auto& domain_sets)
+    const auto restrict_rule_domains = [&]<typename R>(R /*kind*/, auto& domain_sets)
     {
-        using R = decltype(kind);
-
         domain_sets.reserve(program.get_rules<R>().size());
         auto& graphs = compatibility_graphs.get_rules<R>();
         graphs.reserve(program.get_rules<R>().size());
@@ -540,18 +518,18 @@ ProgramAnalysis analyze_program(fd::ProgramView<LiftedTag> program)
                 domain.objects = universe;
 
             auto restrict_policy = RestrictPolicy {
-                static_predicate_domain_sets, fluent_predicate_domain_sets, static_function_domain_sets, fluent_function_domain_sets, parameter_domains,
+                &static_predicate_domain_sets, &fluent_predicate_domain_sets, &static_function_domain_sets, &fluent_function_domain_sets, &parameter_domains,
             };
 
-            for (const auto literal : rule.get_body().template get_literals<f::StaticTag>())
+            for (const auto literal : rule.get_body().template get_literals<formalism::StaticTag>())
                 apply_policy(literal, restrict_policy);
 
             for (const auto op : rule.get_body().get_numeric_constraints())
                 apply_policy(op, restrict_policy);
 
             const auto domains = to_variable_domain_list(parameter_domains);
-            const auto static_compatibility = detail::StaticLiteralCompatibility(rule.get_body().template get_literals<f::StaticTag>(),
-                                                                                 program.get_atoms<f::StaticTag>(),
+            const auto static_compatibility = detail::StaticLiteralCompatibility(rule.get_body().template get_literals<formalism::StaticTag>(),
+                                                                                 program.get_atoms<formalism::StaticTag>(),
                                                                                  domains,
                                                                                  program.get_objects().size());
             auto compatibility = detail::create_pairwise_compatibility_graph(domains, program.get_objects().size(), { &static_compatibility });
@@ -562,38 +540,36 @@ ProgramAnalysis analyze_program(fd::ProgramView<LiftedTag> program)
         }
     };
 
-    restrict_rule_domains(f::PredicateTag {}, predicate_rule_domain_sets);
-    restrict_rule_domains(f::FunctionTag {}, function_rule_domain_sets);
+    restrict_rule_domains(formalism::PredicateTag {}, predicate_rule_domain_sets);
+    restrict_rule_domains(formalism::FunctionTag {}, function_rule_domain_sets);
 
     ///--- Step 4: Lift the fluent predicate domains given the variable relationships in the rules.
 
-    const auto lift_rule_domains = [&](auto kind, const auto& domain_sets)
+    const auto lift_rule_domains = [&]<typename R>(R /*kind*/, const auto& domain_sets)
     {
-        using R = decltype(kind);
-
         for (const auto rule : program.get_rules<R>())
         {
             const auto& parameter_domains = domain_sets.at(rule.get_index());
 
             auto lift_policy = LiftPolicy {
-                static_predicate_domain_sets, fluent_predicate_domain_sets, static_function_domain_sets, fluent_function_domain_sets, parameter_domains,
+                &static_predicate_domain_sets, &fluent_predicate_domain_sets, &static_function_domain_sets, &fluent_function_domain_sets, &parameter_domains,
             };
 
-            for (const auto literal : rule.get_body().template get_literals<f::StaticTag>())
+            for (const auto literal : rule.get_body().template get_literals<formalism::StaticTag>())
                 apply_policy(literal, lift_policy);
 
-            for (const auto literal : rule.get_body().template get_literals<f::FluentTag>())
+            for (const auto literal : rule.get_body().template get_literals<formalism::FluentTag>())
                 apply_policy(literal, lift_policy);
 
             for (const auto op : rule.get_body().get_numeric_constraints())
                 apply_policy(op, lift_policy);
 
-            apply_policy(rule.get_head(), lift_policy);
+            formalism::datalog::for_each_head(rule, [&](const auto& head) { apply_policy(head, lift_policy); });
         }
     };
 
-    lift_rule_domains(f::PredicateTag {}, predicate_rule_domain_sets);
-    lift_rule_domains(f::FunctionTag {}, function_rule_domain_sets);
+    lift_rule_domains(formalism::PredicateTag {}, predicate_rule_domain_sets);
+    lift_rule_domains(formalism::FunctionTag {}, function_rule_domain_sets);
 
     ///--- Step 5: Convert internal sets to public domain wrapper types.
 
@@ -617,6 +593,6 @@ ProgramAnalysis analyze_program(fd::ProgramView<LiftedTag> program)
     };
 }
 
-ProgramVariableDomains compute_variable_domains(fd::ProgramView<LiftedTag> program) { return std::move(analyze_program(program).domains); }
+ProgramVariableDomains compute_variable_domains(formalism::datalog::ProgramView<LiftedTag> program) { return std::move(analyze_program(program).domains); }
 
 }  // namespace tyr::analysis

@@ -20,6 +20,9 @@
 #include <algorithm>
 #include <map>
 #include <set>
+#include <type_traits>
+#include <yggdrasil/containers/associative_containers.hpp>
+#include <yggdrasil/core/config.hpp>
 
 namespace tyr::formalism::planning::invariant
 {
@@ -66,7 +69,7 @@ struct DisjointSet
 
 InequalityDisjunction::InequalityDisjunction(std::vector<std::pair<ConstraintTerm, ConstraintTerm>> parts_) : parts(std::move(parts_)) {}
 
-EqualityConjunction::EqualityConjunction(std::vector<std::pair<ConstraintTerm, ConstraintTerm>> equalities_) : equalities(std::move(equalities_)) {}
+EqualityConjunction::EqualityConjunction(std::vector<std::pair<ConstraintTerm, ConstraintTerm>> equalities_) : m_equalities(std::move(equalities_)) {}
 
 void EqualityConjunction::compute() const
 {
@@ -89,7 +92,7 @@ void EqualityConjunction::compute() const
         return id;
     };
 
-    for (const auto& [a, b] : equalities)
+    for (const auto& [a, b] : m_equalities)
     {
         get_id(a);
         get_id(b);
@@ -97,7 +100,7 @@ void EqualityConjunction::compute() const
 
     DisjointSet dsu(terms.size());
 
-    for (const auto& [a, b] : equalities)
+    for (const auto& [a, b] : m_equalities)
         dsu.unite(ids.at(a), ids.at(b));
 
     ygg::Map<size_t, std::vector<ConstraintTerm>> classes;
@@ -131,9 +134,11 @@ void EqualityConjunction::compute() const
             return;
         }
 
-        const auto representative = object_rep.has_value() ? *object_rep : *fallback_rep;
+        // A class without object terms has a non-object term, so one of the two is set.
+        const auto& representative = object_rep.has_value() ? object_rep : fallback_rep;
+        YGG_ASSUME(representative.has_value());
         for (const auto& term : eq_class)
-            m_representative.emplace(term, representative);
+            m_representative.emplace(term, *representative);
     }
 }
 
@@ -155,7 +160,7 @@ void ConstraintSystem::add_equality_DNF(std::vector<EqualityConjunction> dnf) { 
 
 void ConstraintSystem::add_inequality_disjunction(const InequalityDisjunction& disj) { inequality_disjunctions.push_back(disj); }
 
-void ConstraintSystem::add_not_constant(ConstraintTerm term) { not_constant.push_back(std::move(term)); }
+void ConstraintSystem::add_not_constant(ConstraintTerm term) { not_constant.push_back(term); }
 
 void ConstraintSystem::extend(const ConstraintSystem& other)
 {
@@ -168,13 +173,13 @@ EqualityConjunction ConstraintSystem::combine_equality_conjunctions(const std::v
 {
     size_t total = 0;
     for (const auto& c : conjunctions)
-        total += c.equalities.size();
+        total += c.get_equalities().size();
 
     std::vector<std::pair<ConstraintTerm, ConstraintTerm>> all_equalities;
     all_equalities.reserve(total);
 
     for (const auto& c : conjunctions)
-        all_equalities.insert(all_equalities.end(), c.equalities.begin(), c.equalities.end());
+        all_equalities.insert(all_equalities.end(), c.get_equalities().begin(), c.get_equalities().end());
     return EqualityConjunction(std::move(all_equalities));
 }
 
@@ -281,10 +286,8 @@ ConstraintTerm make_constraint_term(ygg::Index<Object> object) { return ObjectTe
 ConstraintTerm make_constraint_term(const ygg::Data<Term>& term)
 {
     return std::visit(
-        [](auto&& arg) -> ConstraintTerm
+        []<typename T>(const T& arg) -> ConstraintTerm
         {
-            using T = std::decay_t<decltype(arg)>;
-
             if constexpr (std::is_same_v<T, ParameterIndex>)
                 return VariableTerm { arg };
             else if constexpr (std::is_same_v<T, ygg::Index<Object>>)
@@ -292,12 +295,12 @@ ConstraintTerm make_constraint_term(const ygg::Data<Term>& term)
             else
                 static_assert(ygg::dependent_false<T>::value, "Missing case");
         },
-        term.value);
+        term.variant);
 }
 
 ConstraintTerm make_invariant_parameter_term(size_t index) { return InvariantParameter { index }; }
 
-EqualityConjunction make_cover_equality_conjunction(const MutableAtom<FluentTag>& pattern, const MutableAtom<FluentTag>& atom, const Invariant& inv)
+EqualityConjunction make_cover_equality_conjunction(const MutableAtom<FluentTag>& pattern, const MutableAtom<FluentTag>& atom, const MutableInvariant& inv)
 {
     assert(pattern.predicate == atom.predicate);
     assert(pattern.terms.size() == atom.terms.size());
@@ -308,10 +311,8 @@ EqualityConjunction make_cover_equality_conjunction(const MutableAtom<FluentTag>
     for (size_t pos = 0; pos < pattern.terms.size(); ++pos)
     {
         std::visit(
-            [&](auto&& x)
+            [&]<typename T>(const T& x)
             {
-                using T = std::decay_t<decltype(x)>;
-
                 if constexpr (std::is_same_v<T, ParameterIndex>)
                 {
                     if (ygg::uint_t(x) < inv.num_rigid_variables)
@@ -320,16 +321,14 @@ EqualityConjunction make_cover_equality_conjunction(const MutableAtom<FluentTag>
                     }
                 }
             },
-            pattern.terms[pos].value);
+            pattern.terms[pos].variant);
     }
 
     return EqualityConjunction(std::move(equalities));
 }
 
-void ensure_cover(ConstraintSystem& system, const MutableAtom<FluentTag>& pattern, const MutableAtom<FluentTag>& atom, const Invariant& inv)
-{
-    system.add_equality_conjunction(make_cover_equality_conjunction(pattern, atom, inv));
-}
+void ensure_cover(ConstraintSystem& system, const MutableAtom<FluentTag>& pattern, const MutableAtom<FluentTag>& atom, const MutableInvariant& inv)
+{ system.add_equality_conjunction(make_cover_equality_conjunction(pattern, atom, inv)); }
 
 void ensure_inequality(ConstraintSystem& system, const MutableAtom<FluentTag>& lhs, const MutableAtom<FluentTag>& rhs)
 {
@@ -345,60 +344,65 @@ void ensure_inequality(ConstraintSystem& system, const MutableAtom<FluentTag>& l
     system.add_inequality_disjunction(InequalityDisjunction(std::move(parts)));
 }
 
-void ensure_conjunction_sat(ConstraintSystem& system, const MutableLiteralList<FluentTag>& lits)
+namespace
 {
-    ygg::Map<PredicateView<FluentTag>, MutableLiteralList<FluentTag>> pos;
-    ygg::Map<PredicateView<FluentTag>, MutableLiteralList<FluentTag>> neg;
+template<FactKind T>
+void ensure_literals_sat(ConstraintSystem& system, const MutableLiteralList<T>& literals)
+{
+    ygg::UnorderedMap<PredicateView<T>, std::vector<const MutableLiteral<T>*>> pos;
+    ygg::UnorderedMap<PredicateView<T>, std::vector<const MutableLiteral<T>*>> neg;
 
-    for (const auto& lit : lits)
+    for (const auto& literal : literals)
     {
-        if (lit.atom.predicate.get_name() == "=")
+        if constexpr (std::is_same_v<T, StaticTag>)
         {
-            std::vector<std::pair<ConstraintTerm, ConstraintTerm>> parts;
-            parts.reserve(lit.atom.terms.size() / 2);
-
-            if (lit.atom.terms.size() == 2)
+            if (literal.atom.predicate.get_name().view() == "=")
             {
-                parts.emplace_back(make_constraint_term(lit.atom.terms[0]), make_constraint_term(lit.atom.terms[1]));
+                std::vector<std::pair<ConstraintTerm, ConstraintTerm>> parts;
+                if (literal.atom.terms.size() == 2)
+                    parts.emplace_back(make_constraint_term(literal.atom.terms[0]), make_constraint_term(literal.atom.terms[1]));
+
+                if (literal.polarity)
+                    system.add_equality_DNF({ EqualityConjunction(std::move(parts)) });
+                else
+                    system.add_inequality_disjunction(InequalityDisjunction(std::move(parts)));
+
+                continue;
             }
-
-            if (lit.polarity)
-                system.add_equality_DNF({ EqualityConjunction(std::move(parts)) });
-            else
-                system.add_inequality_disjunction(InequalityDisjunction(std::move(parts)));
-
-            continue;
         }
 
-        if (lit.polarity)
-            pos[lit.atom.predicate].push_back(lit);
-        else
-            neg[lit.atom.predicate].push_back(lit);
+        (literal.polarity ? pos : neg)[literal.atom.predicate].push_back(&literal);
     }
 
-    for (const auto& [pred, posatoms] : pos)
+    for (const auto& [predicate, positives] : pos)
     {
-        const auto neg_it = neg.find(pred);
+        const auto neg_it = neg.find(predicate);
         if (neg_it == neg.end())
             continue;
 
-        for (const auto& posatom : posatoms)
+        for (const auto* positive : positives)
         {
-            for (const auto& negatom : neg_it->second)
+            for (const auto* negative : neg_it->second)
             {
                 std::vector<std::pair<ConstraintTerm, ConstraintTerm>> parts;
-                parts.reserve(posatom.atom.terms.size());
+                parts.reserve(positive->atom.terms.size());
 
-                for (size_t i = 0; i < posatom.atom.terms.size(); ++i)
-                {
-                    parts.emplace_back(make_constraint_term(negatom.atom.terms[i]), make_constraint_term(posatom.atom.terms[i]));
-                }
+                for (size_t i = 0; i < positive->atom.terms.size(); ++i)
+                    parts.emplace_back(make_constraint_term(negative->atom.terms[i]), make_constraint_term(positive->atom.terms[i]));
 
                 if (!parts.empty())
                     system.add_inequality_disjunction(InequalityDisjunction(std::move(parts)));
             }
         }
     }
+}
+}  // namespace
+
+void ensure_conjunction_sat(ConstraintSystem& system, const MutableConjunctiveCondition& conjunction)
+{
+    ensure_literals_sat(system, conjunction.static_literals);
+    ensure_literals_sat(system, conjunction.fluent_literals);
+    ensure_literals_sat(system, conjunction.derived_literals);
 }
 
 }  // namespace tyr::formalism::planning::invariant

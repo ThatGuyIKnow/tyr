@@ -29,35 +29,30 @@ class PyEventHandler : public EventHandler<Kind>
 public:
     using Base = EventHandler<Kind>;
 
-    NB_TRAMPOLINE(Base, 7);
+    NB_TRAMPOLINE(Base);
 
     void on_start_search() override { NB_OVERRIDE_PURE(on_start_search); }
 
     void on_start_subsearch(ygg::uint_t subsearch_index) override { NB_OVERRIDE_PURE(on_start_subsearch, subsearch_index); }
 
     void add_subsearch_statistics(const tyr::planning::Statistics& search_statistics, const iw::Statistics<Kind>& solver_statistics) override
-    {
-        NB_OVERRIDE_PURE(add_subsearch_statistics, search_statistics, solver_statistics);
-    }
+    { NB_OVERRIDE_PURE(add_subsearch_statistics, search_statistics, solver_statistics); }
 
     void on_end_subsearch(ygg::uint_t subsearch_index, tyr::planning::SearchStatus status) override
-    {
-        NB_OVERRIDE_PURE(on_end_subsearch, subsearch_index, status);
-    }
+    { NB_OVERRIDE_PURE(on_end_subsearch, subsearch_index, status); }
 
     void on_end_search(tyr::planning::SearchStatus status, const tyr::planning::Statistics& statistics) override
-    {
-        NB_OVERRIDE_PURE(on_end_search, status, statistics);
-    }
+    { NB_OVERRIDE_PURE(on_end_search, status, statistics); }
 
     void on_solved(const Plan<Kind>& plan) override { NB_OVERRIDE_PURE(on_solved, plan); }
 
-    const Statistics<Kind>& get_statistics() const override { NB_OVERRIDE_PURE(get_statistics); }
+    [[nodiscard]] const Statistics<Kind>& get_statistics() const override { NB_OVERRIDE_PURE(get_statistics); }
 };
 
 template<TaskKind Kind>
 void bind_statistics(nb::module_& m, const std::string& name)
 {
+    using namespace nb::literals;
     using T = Statistics<Kind>;
 
     auto cls = nb::class_<T>(m, name.c_str())
@@ -99,6 +94,7 @@ void bind_solver(nb::module_& m, const std::string& name)
 template<TaskKind Kind>
 void bind_find_solution(nb::module_& m, const std::string& py_name)
 {
+    using namespace nb::literals;
     m.def(
         py_name.c_str(),
         [](iw::Solver<Kind>& iw_solver, const Options<Kind>& options) { return find_solution(iw_solver, options); },
@@ -110,6 +106,7 @@ void bind_find_solution(nb::module_& m, const std::string& py_name)
 template<TaskKind Kind>
 void bind_event_handler(nb::module_& m, const std::string& name)
 {
+    using namespace nb::literals;
     using T = EventHandler<Kind>;
 
     nb::class_<T, PyEventHandler<Kind>>(m, name.c_str())
@@ -126,6 +123,7 @@ void bind_event_handler(nb::module_& m, const std::string& name)
 template<TaskKind Kind>
 void bind_default_event_handler(nb::module_& m, const std::string& name)
 {
+    using namespace nb::literals;
     using T = DefaultEventHandler<Kind>;
 
     nb::class_<T, EventHandler<Kind>>(m, name.c_str())  //

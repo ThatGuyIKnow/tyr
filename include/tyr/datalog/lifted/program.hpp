@@ -22,7 +22,7 @@
 #include "tyr/analysis/program_analysis.hpp"
 #include "tyr/analysis/stratification.hpp"
 #include "tyr/datalog/lifted/workspaces/program.hpp"
-#include "tyr/formalism/datalog/program_index.hpp"
+#include "tyr/formalism/datalog/declarations.hpp"
 #include "tyr/formalism/datalog/repository.hpp"
 
 namespace tyr::datalog
@@ -32,25 +32,25 @@ template<>
 class Program<LiftedTag>
 {
 public:
-    Program(::tyr::formalism::datalog::ProgramView<LiftedTag> program,
-            ::tyr::formalism::datalog::RepositoryPtr program_repository,
-            ::tyr::formalism::datalog::RepositoryFactoryPtr repository_factory);
+    Program(formalism::datalog::ProgramView<LiftedTag> program,
+            formalism::datalog::RepositoryPtr program_repository,
+            formalism::datalog::RepositoryFactoryPtr repository_factory);
 
-    auto get_program() const noexcept { return m_program; }
-    const auto& get_program_repository() const noexcept { return *m_program_repository; }
+    [[nodiscard]] auto get_program() const noexcept { return m_program; }
+    [[nodiscard]] const auto& get_program_repository() const noexcept { return *m_program_repository; }
     auto& get_repository_factory() noexcept { return *m_repository_factory; }
-    auto& get_repository_factory() const noexcept { return *m_repository_factory; }
-    const auto& get_domains() const noexcept { return m_analysis.domains; }
-    const auto& get_strata() const noexcept { return m_strata; }
-    const auto& get_listeners() const noexcept { return m_listeners; }
-    const auto& get_const_program_workspace() const noexcept { return m_const_program_workspace; }
+    [[nodiscard]] auto& get_repository_factory() const noexcept { return *m_repository_factory; }
+    [[nodiscard]] const auto& get_domains() const noexcept { return m_analysis.domains; }
+    [[nodiscard]] const auto& get_strata() const noexcept { return m_strata; }
+    [[nodiscard]] const auto& get_listeners() const noexcept { return m_listeners; }
+    [[nodiscard]] const auto& get_const_program_workspace() const noexcept { return m_const_program_workspace; }
 
 private:
     friend struct ConstProgramWorkspace<LiftedTag>;
 
-    ::tyr::formalism::datalog::ProgramView<LiftedTag> m_program;
-    ::tyr::formalism::datalog::RepositoryPtr m_program_repository;
-    ::tyr::formalism::datalog::RepositoryFactoryPtr m_repository_factory;
+    formalism::datalog::ProgramView<LiftedTag> m_program;
+    formalism::datalog::RepositoryPtr m_program_repository;
+    formalism::datalog::RepositoryFactoryPtr m_repository_factory;
     analysis::ProgramAnalysis m_analysis;
     analysis::RuleStrata m_strata;
     analysis::ListenerStrata m_listeners;

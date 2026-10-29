@@ -18,8 +18,6 @@
 #ifndef TYR_FORMALISM_PLANNING_MUTABLE_CONJUNCTIVE_CONDITION_HPP_
 #define TYR_FORMALISM_PLANNING_MUTABLE_CONJUNCTIVE_CONDITION_HPP_
 
-#include <yggdrasil/semantics/comparison.hpp>
-#include <yggdrasil/semantics/hash.hpp>
 #include "tyr/formalism/planning/mutable/literal.hpp"
 #include "tyr/formalism/planning/repository.hpp"
 #include "tyr/formalism/unification/structure_traits.hpp"
@@ -29,40 +27,55 @@
 #include <tuple>
 #include <utility>
 #include <vector>
+#include <yggdrasil/semantics/comparison.hpp>
+#include <yggdrasil/semantics/hash.hpp>
 
 namespace tyr::formalism::planning
 {
 struct MutableConjunctiveCondition : ygg::comparison::Mixin<MutableConjunctiveCondition>
 {
-    size_t num_parent_variables;
-    size_t num_variables;
+    size_t num_parent_variables = 0;
+    size_t num_variables = 0;
     MutableLiteralList<StaticTag> static_literals;
     MutableLiteralList<FluentTag> fluent_literals;
+    MutableLiteralList<DerivedTag> derived_literals;
 
     MutableConjunctiveCondition() = default;
-    MutableConjunctiveCondition(size_t num_parent_variables,
-                                size_t num_variables,
-                                MutableLiteralList<StaticTag> static_literals,
-                                MutableLiteralList<FluentTag> fluent_literals) :
-        num_parent_variables(num_parent_variables),
-        num_variables(num_variables),
-        static_literals(std::move(static_literals)),
-        fluent_literals(std::move(fluent_literals))
+    MutableConjunctiveCondition(size_t num_parent_variables_,
+                                size_t num_variables_,
+                                MutableLiteralList<StaticTag> static_literals_,
+                                MutableLiteralList<FluentTag> fluent_literals_,
+                                MutableLiteralList<DerivedTag> derived_literals_ = {}) :
+        num_parent_variables(num_parent_variables_),
+        num_variables(num_variables_),
+        static_literals(std::move(static_literals_)),
+        fluent_literals(std::move(fluent_literals_)),
+        derived_literals(std::move(derived_literals_))
     {
     }
-    MutableConjunctiveCondition(size_t num_parent_variables, ConjunctiveConditionView element) :
-        num_parent_variables(num_parent_variables),
+    MutableConjunctiveCondition(size_t num_parent_variables_, ConjunctiveConditionView<LiftedTag> element) :
+        num_parent_variables(num_parent_variables_),
         num_variables(element.get_arity()),
         static_literals(),
-        fluent_literals()
+        fluent_literals(),
+        derived_literals()
     {
         for (const auto& literal : element.get_literals<StaticTag>())
             static_literals.emplace_back(literal);
         for (const auto& literal : element.get_literals<FluentTag>())
             fluent_literals.emplace_back(literal);
+        for (const auto& literal : element.get_literals<DerivedTag>())
+            derived_literals.emplace_back(literal);
     }
 
-    auto identifying_members() const noexcept { return std::tie(num_parent_variables, num_variables, static_literals, fluent_literals); }
+    static constexpr auto identifying_members() noexcept
+    {
+        return ygg::Members<&MutableConjunctiveCondition::num_parent_variables,
+                            &MutableConjunctiveCondition::num_variables,
+                            &MutableConjunctiveCondition::static_literals,
+                            &MutableConjunctiveCondition::fluent_literals,
+                            &MutableConjunctiveCondition::derived_literals> {};
+    }
 };
 
 using MutableConjunctiveConditionList = std::vector<MutableConjunctiveCondition>;
@@ -71,12 +84,12 @@ using MutableConjunctiveConditionList = std::vector<MutableConjunctiveCondition>
 namespace tyr::formalism::unification
 {
 template<>
-struct structure_traits<tyr::formalism::planning::MutableConjunctiveCondition>
+struct structure_traits<planning::MutableConjunctiveCondition>
 {
-    using Type = tyr::formalism::planning::MutableConjunctiveCondition;
+    using Type = planning::MutableConjunctiveCondition;
 
     template<typename F>
-    static bool zip_terms(const Type& lhs, const Type& rhs, F&& f)
+    static bool zip_terms(const Type& lhs, const Type& rhs, F f)
     {
         if (lhs.num_parent_variables != rhs.num_parent_variables)
             return false;
@@ -84,17 +97,18 @@ struct structure_traits<tyr::formalism::planning::MutableConjunctiveCondition>
         if (lhs.num_variables != rhs.num_variables)
             return false;
 
-        return tyr::formalism::unification::zip_terms(lhs.static_literals, rhs.static_literals, f)
-               && tyr::formalism::unification::zip_terms(lhs.fluent_literals, rhs.fluent_literals, f);
+        return unification::zip_terms(lhs.static_literals, rhs.static_literals, f) && unification::zip_terms(lhs.fluent_literals, rhs.fluent_literals, f)
+               && unification::zip_terms(lhs.derived_literals, rhs.derived_literals, f);
     }
 
     template<typename F>
-    static Type transform_terms(const Type& value, F&& f)
+    static Type transform_terms(const Type& value, F f)
     {
         return Type(value.num_parent_variables,
                     value.num_variables,
-                    tyr::formalism::unification::transform_terms(value.static_literals, f),
-                    tyr::formalism::unification::transform_terms(value.fluent_literals, f));
+                    unification::transform_terms(value.static_literals, f),
+                    unification::transform_terms(value.fluent_literals, f),
+                    unification::transform_terms(value.derived_literals, f));
     }
 };
 }

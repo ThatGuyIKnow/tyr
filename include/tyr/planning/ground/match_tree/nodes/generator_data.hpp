@@ -18,40 +18,41 @@
 #ifndef TYR_PLANNING_GROUND_MATCH_TREE_NODES_GENERATOR_DATA_HPP_
 #define TYR_PLANNING_GROUND_MATCH_TREE_NODES_GENERATOR_DATA_HPP_
 
-#include "tyr/formalism/planning/ground_action_index.hpp"
-#include "tyr/formalism/planning/ground_axiom_index.hpp"
+#include "tyr/formalism/planning/action_index.hpp"
+#include "tyr/formalism/planning/declarations.hpp"
 #include "tyr/planning/ground/match_tree/declarations.hpp"
-#include "tyr/planning/ground/match_tree/nodes/generator_index.hpp"
 #include "tyr/planning/ground/match_tree/nodes/node_data.hpp"
 
+#include <optional>
+#include <tuple>
+#include <utility>
+#include <variant>
+#include <vector>
 #include <yggdrasil/core/types.hpp>
 #include <yggdrasil/core/types_utils.hpp>
 
 namespace ygg
 {
-using namespace ::tyr;
-
 template<typename Tag>
-struct Data<planning::match_tree::ElementGeneratorNode<Tag>>
+struct Data<::tyr::planning::match_tree::ElementGeneratorNode<Tag>>
 {
-    ygg::Index<planning::match_tree::ElementGeneratorNode<Tag>> index;
+    ygg::Index<::tyr::planning::match_tree::ElementGeneratorNode<Tag>> index;
     ygg::IndexList<Tag> elements;
 
     Data() = default;
-    Data(ygg::Index<planning::match_tree::ElementGeneratorNode<Tag>> index, ygg::IndexList<Tag> elements) : index(index), elements(std::move(elements)) {}
+    Data(ygg::IndexList<Tag> elements_) : index(), elements(std::move(elements_)) {}
+    template<typename C>
+    Data(const std::vector<::ygg::View<ygg::Index<Tag>, C>>& elements_) : index(), elements()
+    { set(elements_, elements); }
     Data(const Data& other) = delete;
     Data& operator=(const Data& other) = delete;
     Data(Data&& other) = default;
     Data& operator=(Data&& other) = default;
+    ~Data() = default;
 
-    void clear() noexcept
-    {
-        ygg::clear(index);
-        ygg::clear(elements);
-    }
-
-    auto cista_members() const noexcept { return std::tie(index, elements); }
-    auto identifying_members() const noexcept { return std::tie(elements); }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::elements> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::elements> {}; }
+    void clear() noexcept { ygg::clear_members(*this); }
 };
 }
 

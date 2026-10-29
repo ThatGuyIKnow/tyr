@@ -24,15 +24,18 @@
 #include "iw/module.hpp"
 #include "siw/module.hpp"
 
+#include <nanobind/stl/optional.h>
 #include <nanobind/stl/pair.h>
 #include <nanobind/stl/shared_ptr.h>
 #include <nanobind/stl/vector.h>
+#include <yggdrasil/python/owner.hpp>
 
 namespace tyr::planning
 {
 
 void bind_lifted_module_definitions(nb::module_& m)
 {
+    using namespace nb::literals;
     auto astar_eager_module = m.def_submodule("astar_eager");
     astar_eager::bind_lifted_module_definitions(astar_eager_module);
 
@@ -61,17 +64,19 @@ void bind_lifted_module_definitions(nb::module_& m)
     nb::class_<GroundTaskInstantiationOptions>(m, "GroundTaskInstantiationOptions")
         .def(nb::init<>())
         .def(nb::init<bool>(), "disable_invariant_synthesis"_a = true)
-        .def_rw("disable_invariant_synthesis", &GroundTaskInstantiationOptions::disable_invariant_synthesis);
+        .def_rw("disable_invariant_synthesis", &GroundTaskInstantiationOptions::disable_invariant_synthesis)
+        .def_rw("invariant_order", &GroundTaskInstantiationOptions::invariant_order);
 
-    nb::class_<Task<LiftedTag>>(m, "Task")  //
-        .def(nb::new_([](::tyr::formalism::planning::PlanningTask&& task) { return std::make_shared<Task<LiftedTag>>(std::move(task)); }),
-             "formalism_task"_a,
-             R"doc(
+    auto task =
+        nb::class_<Task<LiftedTag>>(m, "Task")  //
+            .def(nb::new_([](formalism::planning::PlanningTask<LiftedTag>&& source_task) { return std::make_shared<Task<LiftedTag>>(std::move(source_task)); }),
+                 "formalism_task"_a,
+                 R"doc(
 Create a planning task from a formalism task.
 
 Parameters
 ----------
-formalism_task : formalism.planning.Task
+formalism_task : formalism.planning.LiftedPlanningTask
     The formalism-level task used to construct the planning task.
 
 Notes
@@ -80,27 +85,27 @@ The `formalism_task` is **moved** into the planning task. After calling this
 constructor, the original formalism task should be considered consumed and
 should not be used further.
         )doc")
-        .def_static(
-            "create",
-            [](::tyr::formalism::planning::PlanningTask&& task) { return Task<LiftedTag>::create(std::move(task)); },
-            "formalism_task"_a)
-        .def("get_formalism_task", &Task<LiftedTag>::get_formalism_task, nb::rv_policy::reference_internal)
-        .def("get_repository", &Task<LiftedTag>::get_repository)
-        .def("get_task", &Task<LiftedTag>::get_task, nb::keep_alive<0, 1>())
-        .def("get_fdr_context", nb::overload_cast<>(&Task<LiftedTag>::get_fdr_context, nb::const_), nb::rv_policy::reference_internal)
-        .def("instantiate_ground_task", &Task<LiftedTag>::instantiate_ground_task, "execution_context"_a, "options"_a);
+            .def_static(
+                "create",
+                [](formalism::planning::PlanningTask<LiftedTag>&& source_task) { return Task<LiftedTag>::create(std::move(source_task)); },
+                "formalism_task"_a)
+            .def("get_formalism_task", &Task<LiftedTag>::get_formalism_task, nb::rv_policy::reference_internal)
+            .def("get_repository", &Task<LiftedTag>::get_repository)
+            .def("get_task", &Task<LiftedTag>::get_task, nb::keep_alive<0, 1>())
+            .def("get_fdr_context", nb::overload_cast<>(&Task<LiftedTag>::get_fdr_context, nb::const_), nb::rv_policy::reference_internal)
+            .def("instantiate_ground_task", &Task<LiftedTag>::instantiate_ground_task, "execution_context"_a, "options"_a = GroundTaskInstantiationOptions());
+    ygg::add_print(task);
 
     using ApplicableProgram = ApplicableActionProgram<LiftedTag>;
     nb::class_<ApplicableProgram>(m, "ApplicableActionProgram")
-        .def(nb::init<::tyr::formalism::planning::TaskView>(), "task"_a, nb::keep_alive<1, 2>())
+        .def(nb::init<formalism::planning::TaskView<LiftedTag>>(), "task"_a, nb::keep_alive<1, 2>())
         .def("get_datalog_program", nb::overload_cast<>(&ApplicableProgram::get_datalog_program), nb::rv_policy::reference_internal)
         .def("get_const_program_workspace", &ApplicableProgram::get_const_program_workspace, nb::rv_policy::reference_internal)
         .def(
             "get_predicate_to_action_mapping",
             [](const ApplicableProgram& self)
             {
-                using Entry =
-                    std::pair<const ::tyr::formalism::datalog::PredicateView<::tyr::formalism::FluentTag>*, const ::tyr::formalism::planning::ActionView*>;
+                using Entry = std::pair<const formalism::datalog::PredicateView<formalism::FluentTag>*, const formalism::planning::ActionView<LiftedTag>*>;
                 auto result = std::vector<Entry> {};
                 for (const auto& [predicate, action] : self.get_predicate_to_action_mapping())
                     result.emplace_back(&predicate, &action);
@@ -110,38 +115,36 @@ should not be used further.
 
     using AxiomProgram = AxiomEvaluatorProgram<LiftedTag>;
     nb::class_<AxiomProgram>(m, "AxiomEvaluatorProgram")
-        .def(nb::init<::tyr::formalism::planning::TaskView>(), "task"_a, nb::keep_alive<1, 2>())
+        .def(nb::init<formalism::planning::TaskView<LiftedTag>>(), "task"_a, nb::keep_alive<1, 2>())
         .def("get_datalog_program", nb::overload_cast<>(&AxiomProgram::get_datalog_program), nb::rv_policy::reference_internal)
         .def("get_const_program_workspace", &AxiomProgram::get_const_program_workspace, nb::rv_policy::reference_internal);
 
     using RelaxedProgram = RPGProgram<LiftedTag>;
     nb::class_<RelaxedProgram>(m, "RPGProgram")
-        .def(nb::init<::tyr::formalism::planning::TaskView, CostMode>(), "task"_a, "cost_mode"_a = CostMode::GENERAL, nb::keep_alive<1, 2>())
+        .def(nb::init<formalism::planning::TaskView<LiftedTag>, CostMode>(), "task"_a, "cost_mode"_a = CostMode::UNIT, nb::keep_alive<1, 2>())
         .def("get_datalog_program", nb::overload_cast<>(&RelaxedProgram::get_datalog_program), nb::rv_policy::reference_internal)
         .def("get_goal", &RelaxedProgram::get_goal, nb::keep_alive<0, 1>())
-        .def(
-            "get_rule_to_action_mapping",
-            [](const RelaxedProgram& self)
-            {
-                using Entry =
-                    std::pair<const ::tyr::formalism::datalog::RuleView<::tyr::formalism::PredicateTag>*, const ::tyr::formalism::planning::ActionView*>;
-                auto result = std::vector<Entry> {};
-                for (const auto& [rule, action] : self.get_rule_to_action_mapping<::tyr::formalism::PredicateTag>())
-                    result.emplace_back(&rule, &action);
-                return result;
-            },
-            nb::rv_policy::reference_internal);
+        .def("get_rule_to_action_mapping",
+             [retain_owner = ygg::python::make_owner_retainer()](nb::typed<nb::handle, RelaxedProgram> owner)
+             {
+                 const auto& self = nb::cast<const RelaxedProgram&>(owner);
+                 const auto& repository = self.get_datalog_program().get_program_repository();
+                 using Entry = std::pair<formalism::datalog::RuleView<LiftedTag, formalism::PredicateTag>, formalism::planning::ActionView<LiftedTag>>;
+                 auto result = std::vector<Entry> {};
+                 for (const auto& [rule, action] : self.get_rule_to_action_mapping<formalism::PredicateTag>())
+                     result.emplace_back(ygg::make_view(rule, repository), action);
+                 return ygg::python::cast_with_owner(std::move(result), owner, retain_owner);
+             });
 
     nb::class_<GroundTaskProgram>(m, "GroundTaskProgram")
-        .def(nb::init<::tyr::formalism::planning::TaskView>(), "task"_a, nb::keep_alive<1, 2>())
+        .def(nb::init<formalism::planning::TaskView<LiftedTag>>(), "task"_a, nb::keep_alive<1, 2>())
         .def("get_datalog_program", nb::overload_cast<>(&GroundTaskProgram::get_datalog_program), nb::rv_policy::reference_internal)
         .def("get_const_program_workspace", &GroundTaskProgram::get_const_program_workspace, nb::rv_policy::reference_internal)
         .def(
             "get_predicate_to_action_mapping",
             [](const GroundTaskProgram& self)
             {
-                using Entry =
-                    std::pair<const ::tyr::formalism::datalog::PredicateView<::tyr::formalism::FluentTag>*, const ::tyr::formalism::planning::ActionView*>;
+                using Entry = std::pair<const formalism::datalog::PredicateView<formalism::FluentTag>*, const formalism::planning::ActionView<LiftedTag>*>;
                 auto result = std::vector<Entry> {};
                 for (const auto& [predicate, action] : self.get_predicate_to_action_mapping())
                     result.emplace_back(&predicate, &action);
@@ -152,8 +155,8 @@ should not be used further.
             "get_predicate_to_axiom_mapping",
             [](const GroundTaskProgram& self)
             {
-                using Axioms = std::vector<const ::tyr::formalism::planning::AxiomView*>;
-                using Entry = std::pair<const ::tyr::formalism::datalog::PredicateView<::tyr::formalism::FluentTag>*, Axioms>;
+                using Axioms = std::vector<const formalism::planning::AxiomView<LiftedTag>*>;
+                using Entry = std::pair<const formalism::datalog::PredicateView<formalism::FluentTag>*, Axioms>;
                 auto result = std::vector<Entry> {};
                 for (const auto& [predicate, axioms] : self.get_predicate_to_axiom_mapping())
                 {
@@ -167,11 +170,15 @@ should not be used further.
             nb::rv_policy::reference_internal);
 
     bind_index<ygg::Index<State<LiftedTag>>>(m, "StateIndex");
+    bind_packed_state<LiftedTag>(m, "PackedState");
     bind_state<LiftedTag>(m, "State");
     bind_state_builder<LiftedTag>(m, "StateBuilder");
     bind_node<LiftedTag>(m, "Node");
+    bind_packed_node<LiftedTag>(m, "PackedNode");
     bind_labeled_node<LiftedTag>(m, "LabeledNode");
+    bind_packed_labeled_node<LiftedTag>(m, "PackedLabeledNode");
     bind_plan<LiftedTag>(m, "Plan");
+    bind_packed_plan<LiftedTag>(m, "PackedPlan");
     bind_axiom_evaluator<LiftedTag>(m, "AxiomEvaluator");
     bind_axiom_evaluator_factory<LiftedTag>(m, "AxiomEvaluatorFactory");
     bind_state_repository<LiftedTag>(m, "StateRepository");

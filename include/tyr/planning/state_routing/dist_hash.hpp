@@ -19,12 +19,13 @@
 #define TYR_PLANNING_STATE_ROUTING_DIST_HASH_HPP_
 
 #include "tyr/formalism/declarations.hpp"
+#include "tyr/formalism/planning/declarations.hpp"
 #include "tyr/formalism/planning/fdr_fact_data.hpp"
-#include "tyr/formalism/planning/ground_atom_index.hpp"
-#include "tyr/planning/ground/state_builder.hpp"
-#include "tyr/planning/lifted/state_builder.hpp"
-#include "tyr/planning/worker_index.hpp"
+#include "tyr/planning/declarations.hpp"
+#include "tyr/planning/state_builder.hpp"
+#include "tyr/planning/state_routing/dist_hash_concepts.hpp"
 
+#include <boost/hash2/xxhash.hpp>
 #include <cassert>
 #include <concepts>
 #include <cstddef>
@@ -35,17 +36,6 @@
 
 namespace tyr::planning
 {
-
-struct RandomDistHashTag
-{
-};
-
-struct LMCutDistHashTag
-{
-};
-
-template<typename T>
-concept DistHashKind = std::same_as<T, RandomDistHashTag> || std::same_as<T, LMCutDistHashTag>;
 
 template<TaskKind Kind, DistHashKind HashKind>
 class DistHash;
@@ -58,15 +48,16 @@ public:
 
     void initialize(const StateView<Kind>&) const noexcept {}
 
-    ygg::hash_t hash(const ygg::Builder<State<Kind>>& state) const noexcept
+    [[nodiscard]] ygg::hash_t hash(const ygg::Builder<State<Kind>>& state) const noexcept
     {
         auto result = static_cast<ygg::hash_t>(m_seed);
-        ygg::hash_combine(result, state.template get_atoms<::tyr::formalism::FluentTag>());
+        ygg::hash_combine(result, state.template get_atom_storage<formalism::FluentTag>());
         ygg::hash_combine(result, state.get_numeric_variables());
-        return result;
+        // Final avalanche over the accumulated hash, using XXH64's 64-bit seed and result.
+        return boost::hash2::xxhash_64(result).result();
     }
 
-    ygg::Index<Worker> owner(const ygg::Builder<State<Kind>>& state, size_t num_workers) const noexcept
+    [[nodiscard]] ygg::Index<Worker> owner(const ygg::Builder<State<Kind>>& state, size_t num_workers) const noexcept
     {
         assert(num_workers > 0);
         // The ordinary single-worker search path pays no state-hashing cost.
@@ -86,9 +77,9 @@ public:
     /// Select the initial state's unit-cost LM-cut frontier and positive task goals once before routing.
     void initialize(const StateView<Kind>& start_state);
 
-    ygg::hash_t hash(const ygg::Builder<State<Kind>>& state) const noexcept;
+    [[nodiscard]] ygg::hash_t hash(const ygg::Builder<State<Kind>>& state) const noexcept;
 
-    ygg::Index<Worker> owner(const ygg::Builder<State<Kind>>& state, size_t num_workers) const noexcept
+    [[nodiscard]] ygg::Index<Worker> owner(const ygg::Builder<State<Kind>>& state, size_t num_workers) const noexcept
     {
         assert(num_workers > 0);
         return ygg::Index<Worker>(static_cast<ygg::uint_t>(num_workers == 1 ? 0 : hash(state) % num_workers));
@@ -97,8 +88,8 @@ public:
 private:
     struct Feature
     {
-        ygg::Index<::tyr::formalism::planning::GroundAtom<::tyr::formalism::FluentTag>> atom;
-        ygg::Data<::tyr::formalism::planning::FDRFact<::tyr::formalism::FluentTag>> fact;
+        ygg::Index<formalism::planning::Atom<GroundTag, formalism::FluentTag>> atom;
+        ygg::Data<formalism::planning::FDRFact<formalism::FluentTag>> fact;
     };
 
     DistHash<Kind, RandomDistHashTag> m_fallback;

@@ -18,7 +18,6 @@
 #ifndef TYR_FORMALISM_DATALOG_CONDITIONAL_EFFECT_VIEW_HPP_
 #define TYR_FORMALISM_DATALOG_CONDITIONAL_EFFECT_VIEW_HPP_
 
-#include "tyr/formalism/datalog/conditional_effect_index.hpp"
 #include "tyr/formalism/datalog/conjunctive_condition_view.hpp"
 #include "tyr/formalism/datalog/conjunctive_effect_view.hpp"
 #include "tyr/formalism/datalog/declarations.hpp"
@@ -28,26 +27,21 @@
 
 namespace ygg
 {
-template<::tyr::formalism::datalog::Context C>
-class View<ygg::Index<::tyr::formalism::datalog::ConditionalEffect>, C>
+
+template<::tyr::TaskKind T, ygg::formalism::SymbolContextFor<::tyr::formalism::datalog::ConditionalEffect<T>> C>
+class View<ygg::Index<::tyr::formalism::datalog::ConditionalEffect<T>>, C> : public ygg::IndexViewBase<::tyr::formalism::datalog::ConditionalEffect<T>, C>
 {
-private:
-    const C* m_context;
-    ygg::Index<::tyr::formalism::datalog::ConditionalEffect> m_handle;
-
 public:
-    View(ygg::Index<::tyr::formalism::datalog::ConditionalEffect> handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
+    View(ygg::Index<::tyr::formalism::datalog::ConditionalEffect<T>> handle, const C& context) noexcept :
+        ygg::IndexViewBase<::tyr::formalism::datalog::ConditionalEffect<T>, C>(handle, context)
+    {
+    }
 
-    const auto& get_data() const noexcept { return get_repository(*m_context)[m_handle]; }
-    const auto& get_context() const noexcept { return *m_context; }
-    const auto& get_handle() const noexcept { return m_handle; }
-
-    auto get_index() const noexcept { return m_handle; }
-    auto get_variables() const noexcept { return ygg::make_view(get_data().variables, *m_context); }
-    auto get_condition() const noexcept { return ygg::make_view(get_data().condition, *m_context); }
-    auto get_effect() const noexcept { return ygg::make_view(get_data().effect, *m_context); }
-
-    auto identifying_members() const noexcept { return std::tie(m_handle, m_context->get_index()); }
+    auto get_variables() const noexcept
+        requires std::same_as<T, ::tyr::LiftedTag>
+    { return ygg::make_view(this->get_data().variables, this->get_context()); }
+    auto get_condition() const noexcept { return ygg::make_view(this->get_data().condition, this->get_context()); }
+    auto get_effect() const noexcept { return ygg::make_view(this->get_data().effect, this->get_context()); }
 };
 
 }

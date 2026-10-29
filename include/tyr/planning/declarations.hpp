@@ -52,15 +52,21 @@ template<TaskKind Kind>
 using TaskPtr = std::shared_ptr<Task<Kind>>;
 
 template<TaskKind Kind>
-class Node;
+class PackedNode;
 template<TaskKind Kind>
-struct LabeledNode;
+struct PackedLabeledNode;
+
+class StaticState;
 
 template<TaskKind Kind>
 class State;
+template<TaskKind Kind>
+class PackedState;
 
 template<TaskKind Kind>
-struct StateContext;
+class StateContext;
+
+struct StateDelta;
 
 template<TaskKind Kind>
 class SuccessorGenerator;
@@ -76,6 +82,10 @@ using StateRepositoryPtr = std::shared_ptr<StateRepository<Kind>>;
 
 template<TaskKind Kind>
 using StateView = ygg::View<ygg::Index<State<Kind>>, StateRepositoryPtr<Kind>>;
+template<TaskKind Kind>
+using BuilderStateView = ygg::View<ygg::Builder<State<Kind>>, Task<Kind>>;
+template<TaskKind Kind>
+using PackedStateView = ygg::View<ygg::Index<PackedState<Kind>>, StateRepositoryPtr<Kind>>;
 template<TaskKind Kind>
 class StateRepositoryFactory;
 
@@ -129,6 +139,8 @@ using GoalStrategyPtr = std::shared_ptr<GoalStrategy<Kind>>;
 
 template<TaskKind Kind>
 class Plan;
+template<TaskKind Kind>
+class PackedPlan;
 
 class Statistics;
 class ProgressStatistics;

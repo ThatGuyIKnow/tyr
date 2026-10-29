@@ -18,21 +18,23 @@
 #ifndef TYR_FORMALISM_FUNCTION_DATA_HPP_
 #define TYR_FORMALISM_FUNCTION_DATA_HPP_
 
+#include "tyr/formalism/declarations.hpp"
+
+#include <string>
+#include <tuple>
+#include <utility>
 #include <yggdrasil/core/types.hpp>
 #include <yggdrasil/core/types_utils.hpp>
-#include "tyr/formalism/declarations.hpp"
-#include "tyr/formalism/function_index.hpp"
 
 namespace ygg
 {
-
 
 template<::tyr::formalism::FactKind T>
 struct Data<::tyr::formalism::Function<T>>
 {
     ygg::Index<::tyr::formalism::Function<T>> index;
     ::cista::offset::string name;
-    ygg::uint_t arity;
+    ygg::uint_t arity = 0;
 
     Data() = default;
     Data(::cista::offset::string name_, ygg::uint_t arity_) : index(), name(std::move(name_)), arity(arity_) {}
@@ -42,16 +44,11 @@ struct Data<::tyr::formalism::Function<T>>
     Data& operator=(const Data& other) = delete;
     Data(Data&& other) = default;
     Data& operator=(Data&& other) = default;
+    ~Data() = default;
 
-    void clear() noexcept
-    {
-        ygg::clear(index);
-        ygg::clear(name);
-        ygg::clear(arity);
-    }
-
-    auto cista_members() const noexcept { return std::tie(index, name, arity); }
-    auto identifying_members() const noexcept { return std::tie(name, arity); }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::name, &Data::arity> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::name, &Data::arity> {}; }
+    void clear() noexcept { ygg::clear_members(*this); }
 };
 
 static_assert(!ygg::uses_trivial_storage_v<::tyr::formalism::Function<::tyr::formalism::StaticTag>>);

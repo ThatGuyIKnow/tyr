@@ -1,33 +1,29 @@
 #include "tyr/formalism/datalog/repository.hpp"
+#include "tyr/formalism/declarations.hpp"
 #include "tyr/formalism/planning/repository.hpp"
 #include "tyr/formalism/predicate_data.hpp"
-#include "tyr/formalism/predicate_index.hpp"
 #include "tyr/formalism/predicate_view.hpp"
 
 #include <concepts>
 #include <gtest/gtest.h>
 
-namespace f = tyr::formalism;
-namespace fd = tyr::formalism::datalog;
-namespace fp = tyr::formalism::planning;
-
-using Predicate = f::Predicate<f::StaticTag>;
+using Predicate = tyr::formalism::Predicate<tyr::formalism::StaticTag>;
 using PredicateData = ygg::Data<Predicate>;
-using PredicateView = ygg::View<ygg::Index<Predicate>, fp::Repository>;
+using PredicateView = ygg::View<ygg::Index<Predicate>, tyr::formalism::planning::Repository>;
 
 template<typename Entity, typename Repository>
 struct PredicatePublicView;
 
-template<f::FactKind T>
-struct PredicatePublicView<f::Predicate<T>, fd::Repository>
+template<tyr::formalism::FactKind T>
+struct PredicatePublicView<tyr::formalism::Predicate<T>, tyr::formalism::datalog::Repository>
 {
-    using type = fd::PredicateView<T>;
+    using type = tyr::formalism::datalog::PredicateView<T>;
 };
 
-template<f::FactKind T>
-struct PredicatePublicView<f::Predicate<T>, fp::Repository>
+template<tyr::formalism::FactKind T>
+struct PredicatePublicView<tyr::formalism::Predicate<T>, tyr::formalism::planning::Repository>
 {
-    using type = fp::PredicateView<T>;
+    using type = tyr::formalism::planning::PredicateView<T>;
 };
 
 template<typename Entity, typename Repository>
@@ -46,12 +42,10 @@ concept PredicateContract = std::constructible_from<ygg::Index<Entity>, ygg::uin
 
 template<typename Repository, typename... Entities>
 consteval bool predicate_contracts(ygg::TypeList<Entities...>)
-{
-    return (PredicateContract<Entities, Repository> && ...);
-}
+{ return (PredicateContract<Entities, Repository> && ...); }
 
-static_assert(predicate_contracts<fd::Repository>(fd::PredicateTypes {}));
-static_assert(predicate_contracts<fp::Repository>(fp::PredicateTypes {}));
+static_assert(predicate_contracts<tyr::formalism::datalog::Repository>(tyr::formalism::datalog::PredicateTypes {}));
+static_assert(predicate_contracts<tyr::formalism::planning::Repository>(tyr::formalism::planning::PredicateTypes {}));
 
 TEST(TyrFormalismPredicate, ExposesOwnedContract)
 {

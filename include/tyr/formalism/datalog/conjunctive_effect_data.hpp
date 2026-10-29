@@ -18,52 +18,49 @@
 #ifndef TYR_FORMALISM_DATALOG_CONJUNCTIVE_EFFECT_DATA_HPP_
 #define TYR_FORMALISM_DATALOG_CONJUNCTIVE_EFFECT_DATA_HPP_
 
-#include "tyr/formalism/datalog/conjunctive_effect_index.hpp"
 #include "tyr/formalism/datalog/declarations.hpp"
 #include "tyr/formalism/datalog/numeric_effect_operator_data.hpp"
 
+#include <tuple>
+#include <utility>
+#include <vector>
 #include <yggdrasil/core/types.hpp>
 #include <yggdrasil/core/types_utils.hpp>
 
 namespace ygg
 {
 
-template<>
-struct Data<::tyr::formalism::datalog::ConjunctiveEffect>
+template<::tyr::TaskKind T>
+struct Data<::tyr::formalism::datalog::ConjunctiveEffect<T>>
 {
-    ygg::Index<::tyr::formalism::datalog::ConjunctiveEffect> index;
-    ygg::DataList<::tyr::formalism::datalog::NumericEffectOperator<::tyr::formalism::FluentTag>> numeric_effects;
+    ygg::Index<::tyr::formalism::datalog::ConjunctiveEffect<T>> index;
+    ygg::DataList<::tyr::formalism::datalog::NumericEffectOperator<T, ::tyr::formalism::FluentTag>> numeric_effects;
 
     Data() = default;
-    explicit Data(ygg::DataList<::tyr::formalism::datalog::NumericEffectOperator<::tyr::formalism::FluentTag>> numeric_effects_) :
+    explicit Data(ygg::DataList<::tyr::formalism::datalog::NumericEffectOperator<T, ::tyr::formalism::FluentTag>> numeric_effects_) :
         index(),
         numeric_effects(std::move(numeric_effects_))
     {
     }
     template<typename C>
     explicit Data(
-        const std::vector<::ygg::View<ygg::Data<::tyr::formalism::datalog::NumericEffectOperator<::tyr::formalism::FluentTag>>, C>>& numeric_effects_) :
+        const std::vector<::ygg::View<ygg::Data<::tyr::formalism::datalog::NumericEffectOperator<T, ::tyr::formalism::FluentTag>>, C>>& numeric_effects_) :
         index(),
         numeric_effects()
-    {
-        set(numeric_effects_, numeric_effects);
-    }
+    { set(numeric_effects_, numeric_effects); }
     Data(const Data& other) = delete;
     Data& operator=(const Data& other) = delete;
     Data(Data&& other) = default;
     Data& operator=(Data&& other) = default;
+    ~Data() = default;
 
-    void clear() noexcept
-    {
-        ygg::clear(index);
-        ygg::clear(numeric_effects);
-    }
-
-    auto cista_members() const noexcept { return std::tie(index, numeric_effects); }
-    auto identifying_members() const noexcept { return std::tie(numeric_effects); }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::numeric_effects> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::numeric_effects> {}; }
+    void clear() noexcept { ygg::clear_members(*this); }
 };
 
-static_assert(!ygg::uses_trivial_storage_v<::tyr::formalism::datalog::ConjunctiveEffect>);
+static_assert(!ygg::uses_trivial_storage_v<::tyr::formalism::datalog::ConjunctiveEffect<::tyr::LiftedTag>>);
+static_assert(!ygg::uses_trivial_storage_v<::tyr::formalism::datalog::ConjunctiveEffect<::tyr::GroundTag>>);
 
 }
 

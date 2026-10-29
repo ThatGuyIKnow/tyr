@@ -58,23 +58,23 @@ struct RuleToLiteralInfoMappings
 
 struct RuleToLiteralPositionMappings
 {
-    std::vector<std::pair<ygg::uint_t, ygg::Index<::tyr::formalism::Object>>> constant_positions;
+    std::vector<std::pair<ygg::uint_t, ygg::Index<formalism::Object>>> constant_positions;
     std::vector<std::vector<ygg::uint_t>> parameter_to_positions;
 };
 
-template<::tyr::formalism::FactKind T>
+template<formalism::FactKind T>
 struct RuleToLiteralInfo
 {
-    ygg::Index<::tyr::formalism::Predicate<T>> predicate;
-    bool polarity;
-    size_t kckp_arity;
-    size_t num_parameters;
-    size_t num_constants;
+    ygg::Index<formalism::Predicate<T>> predicate;
+    bool polarity = false;
+    size_t kckp_arity = 0;
+    size_t num_parameters = 0;
+    size_t num_constants = 0;
 
     RuleToLiteralPositionMappings position_mappings;
 };
 
-template<::tyr::formalism::FactKind T>
+template<formalism::FactKind T>
 struct TaggedRuleToLiteralInfos
 {
     std::vector<RuleToLiteralInfo<T>> infos;
@@ -82,38 +82,38 @@ struct TaggedRuleToLiteralInfos
     RuleToLiteralInfoMappings info_mappings;
 };
 
-template<::tyr::formalism::FactKind T>
+template<formalism::FactKind T>
 struct RuleToFunctionTermInfo
 {
-    ygg::Index<::tyr::formalism::Function<T>> function;
-    size_t kckp_arity;
-    size_t num_parameters;
-    size_t num_constants;
+    ygg::Index<formalism::Function<T>> function;
+    size_t kckp_arity = 0;
+    size_t num_parameters = 0;
+    size_t num_constants = 0;
 
     RuleToLiteralPositionMappings position_mappings;
 };
 
-template<::tyr::formalism::FactKind T>
+template<formalism::FactKind T>
 struct TaggedRuleToFunctionTermInfos
 {
-    ygg::UnorderedMap<ygg::Index<::tyr::formalism::datalog::FunctionTerm<T>>, RuleToFunctionTermInfo<T>> infos;
+    ygg::UnorderedMap<ygg::Index<formalism::datalog::FunctionTerm<LiftedTag, T>>, RuleToFunctionTermInfo<T>> infos;
 
     RuleToLiteralInfoMappings info_mappings;
 };
 
 struct RuleToConstraintInfo
 {
-    TaggedRuleToFunctionTermInfos<::tyr::formalism::StaticTag> static_infos;
-    TaggedRuleToFunctionTermInfos<::tyr::formalism::FluentTag> fluent_infos;
+    TaggedRuleToFunctionTermInfos<formalism::StaticTag> static_infos;
+    TaggedRuleToFunctionTermInfos<formalism::FluentTag> fluent_infos;
 
-    size_t kckp_arity;
+    size_t kckp_arity = 0;
 
-    template<::tyr::formalism::FactKind T>
+    template<formalism::FactKind T>
     const auto& get() const noexcept
     {
-        if constexpr (std::is_same_v<T, ::tyr::formalism::StaticTag>)
+        if constexpr (std::is_same_v<T, formalism::StaticTag>)
             return static_infos;
-        else if constexpr (std::is_same_v<T, ::tyr::formalism::FluentTag>)
+        else if constexpr (std::is_same_v<T, formalism::FluentTag>)
             return fluent_infos;
         else
             static_assert(ygg::dependent_false<T>::value, "Missing case");
@@ -133,18 +133,18 @@ struct RuleToRuleToConstraintInfos
 class Vertex
 {
 private:
-    ::tyr::formalism::ParameterIndex m_parameter_index;
-    ygg::Index<::tyr::formalism::Object> m_object_index;
+    formalism::ParameterIndex m_parameter_index;
+    ygg::Index<formalism::Object> m_object_index;
 
 public:
-    Vertex(::tyr::formalism::ParameterIndex parameter_index, ygg::Index<::tyr::formalism::Object> object_index) noexcept :
+    Vertex(formalism::ParameterIndex parameter_index, ygg::Index<formalism::Object> object_index) noexcept :
         m_parameter_index(parameter_index),
         m_object_index(object_index)
     {
     }
 
-    auto get_parameter_index() const noexcept { return m_parameter_index; }
-    auto get_object_index() const noexcept { return m_object_index; }
+    [[nodiscard]] auto get_parameter_index() const noexcept { return m_parameter_index; }
+    [[nodiscard]] auto get_object_index() const noexcept { return m_object_index; }
 };
 
 /**
@@ -158,10 +158,10 @@ private:
     Vertex m_vj;
 
 public:
-    Edge(Vertex vi, Vertex vj) noexcept : m_vi(std::move(vi)), m_vj(std::move(vj)) {}
+    Edge(Vertex vi, Vertex vj) noexcept : m_vi(vi), m_vj(vj) {}
 
-    const auto& vi() const noexcept { return m_vi; }
-    const auto& vj() const noexcept { return m_vj; }
+    [[nodiscard]] const auto& vi() const noexcept { return m_vi; }
+    [[nodiscard]] const auto& vj() const noexcept { return m_vj; }
 };
 
 }
@@ -169,8 +169,9 @@ public:
 class StaticConsistencyGraph
 {
 public:
-    StaticConsistencyGraph(::tyr::formalism::datalog::ConjunctiveConditionView unary_overapproximation_condition,
-                           ::tyr::formalism::datalog::ConjunctiveConditionView binary_overapproximation_condition,
+    StaticConsistencyGraph(formalism::datalog::ConjunctiveConditionView<LiftedTag> unary_overapproximation_condition,
+                           formalism::datalog::ConjunctiveConditionView<LiftedTag> binary_overapproximation_condition,
+                           formalism::datalog::ConjunctiveConditionView<LiftedTag> hyperedge_condition,
                            kckp::Graph compatibility_graph);
 
     void initialize_dynamic_consistency_graphs(const AssignmentSets& assignment_sets,
@@ -178,41 +179,48 @@ public:
                                                kckp::DeltaGraph& delta_graph,
                                                kckp::FullGraph& full_graph) const;
 
-    const ::tyr::formalism::datalog::VariableDependencyGraph& get_variable_dependeny_graph() const noexcept;
-    const kckp::Graph& get_graph() const noexcept;
-    const kckp::GraphLayout& get_graph_layout() const noexcept;
-    const kckp::PartitionedAdjacencyLayout& get_partitioned_adjacency_layout() const noexcept;
-    const kckp::DeduplicatedAdjacencyMatrix& get_adjacency_matrix() const noexcept;
+    [[nodiscard]] const formalism::datalog::VariableDependencyGraph& get_variable_dependeny_graph() const noexcept;
+    [[nodiscard]] const kckp::Graph& get_graph() const noexcept;
+    [[nodiscard]] const kckp::GraphLayout& get_graph_layout() const noexcept;
+    [[nodiscard]] const kckp::PartitionedAdjacencyLayout& get_partitioned_adjacency_layout() const noexcept;
+    [[nodiscard]] const kckp::DeduplicatedAdjacencyMatrix& get_adjacency_matrix() const noexcept;
+    /// Term positions of the hyperedge condition's literals, in its literal order.
+    [[nodiscard]] const details::TaggedRuleToLiteralInfos<formalism::FluentTag>& get_hyperedge_indexed_literals() const noexcept;
 
 private:
-    ::tyr::formalism::datalog::ConjunctiveConditionView m_unary_overapproximation_condition;
-    ::tyr::formalism::datalog::ConjunctiveConditionView m_binary_overapproximation_condition;
+    formalism::datalog::ConjunctiveConditionView<LiftedTag> m_unary_overapproximation_condition;
+    formalism::datalog::ConjunctiveConditionView<LiftedTag> m_binary_overapproximation_condition;
 
-    ::tyr::formalism::datalog::VariableDependencyGraph m_unary_overapproximation_vdg;
-    ::tyr::formalism::datalog::VariableDependencyGraph m_binary_overapproximation_vdg;
+    formalism::datalog::VariableDependencyGraph m_unary_overapproximation_vdg;
+    formalism::datalog::VariableDependencyGraph m_binary_overapproximation_vdg;
 
     kckp::Graph m_compatibility_graph;
     kckp::PartitionedAdjacencyLayout m_partitioned_adjacency_layout;
 
-    details::TaggedRuleToLiteralInfos<::tyr::formalism::FluentTag> m_unary_overapproximation_indexed_literals;
-    details::TaggedRuleToLiteralInfos<::tyr::formalism::FluentTag> m_binary_overapproximation_indexed_literals;
+    details::TaggedRuleToLiteralInfos<formalism::FluentTag> m_unary_overapproximation_indexed_literals;
+    details::TaggedRuleToLiteralInfos<formalism::FluentTag> m_binary_overapproximation_indexed_literals;
+    details::TaggedRuleToLiteralInfos<formalism::FluentTag> m_hyperedge_indexed_literals;
 
     details::RuleToRuleToConstraintInfos m_unary_overapproximation_indexed_constraints;
     details::RuleToRuleToConstraintInfos m_binary_overapproximation_indexed_constraints;
 };
 
-extern std::pair<::tyr::formalism::datalog::GroundConjunctiveConditionView, bool>
-create_ground_nullary_conjunctive_condition(::tyr::formalism::datalog::ConjunctiveConditionView condition, ::tyr::formalism::datalog::Repository& context);
+extern std::pair<formalism::datalog::ConjunctiveConditionView<GroundTag>, bool>
+create_ground_nullary_conjunctive_condition(formalism::datalog::ConjunctiveConditionView<LiftedTag> condition, formalism::datalog::Repository& context);
 
-extern std::pair<::tyr::formalism::datalog::ConjunctiveConditionView, bool>
+extern std::pair<formalism::datalog::ConjunctiveConditionView<LiftedTag>, bool>
 create_overapproximation_conjunctive_condition(size_t k,
-                                               ::tyr::formalism::datalog::ConjunctiveConditionView condition,
-                                               ::tyr::formalism::datalog::Repository& context);
+                                               formalism::datalog::ConjunctiveConditionView<LiftedTag> condition,
+                                               formalism::datalog::Repository& context);
 
-extern std::pair<::tyr::formalism::datalog::ConjunctiveConditionView, bool>
+extern std::pair<formalism::datalog::ConjunctiveConditionView<LiftedTag>, bool>
 create_overapproximation_conflicting_conjunctive_condition(size_t k,
-                                                           ::tyr::formalism::datalog::ConjunctiveConditionView condition,
-                                                           ::tyr::formalism::datalog::Repository& context);
+                                                           formalism::datalog::ConjunctiveConditionView<LiftedTag> condition,
+                                                           formalism::datalog::Repository& context);
+
+/// The positive fluent literals of the conflicting condition: a new atom of one anchors the cliques it makes applicable.
+extern std::pair<formalism::datalog::ConjunctiveConditionView<LiftedTag>, bool>
+create_hyperedge_conjunctive_condition(formalism::datalog::ConjunctiveConditionView<LiftedTag> conflicting_condition, formalism::datalog::Repository& context);
 
 }
 

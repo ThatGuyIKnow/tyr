@@ -30,7 +30,7 @@ template<TaskKind Kind>
 class LMCutHeuristic : public Heuristic<Kind>
 {
 public:
-    LMCutHeuristic(TaskPtr<Kind> task, ygg::ExecutionContextPtr execution_context, CostMode cost_mode = CostMode::GENERAL);
+    LMCutHeuristic(TaskPtr<Kind> task, ygg::ExecutionContextPtr execution_context, CostMode cost_mode = CostMode::UNIT);
     ~LMCutHeuristic() override;
 
     LMCutHeuristic(const LMCutHeuristic&) = delete;
@@ -38,13 +38,13 @@ public:
     LMCutHeuristic(LMCutHeuristic&&) noexcept;
     LMCutHeuristic& operator=(LMCutHeuristic&&) noexcept;
 
-    static LMCutHeuristicPtr<Kind> create(TaskPtr<Kind> task, ygg::ExecutionContextPtr execution_context, CostMode cost_mode = CostMode::GENERAL);
+    static LMCutHeuristicPtr<Kind> create(TaskPtr<Kind> task, ygg::ExecutionContextPtr execution_context, CostMode cost_mode = CostMode::UNIT);
 
     using Heuristic<Kind>::evaluate;
 
-    void set_goal(::tyr::formalism::planning::GroundConjunctiveConditionView goal) override;
+    void set_goal(formalism::planning::ConjunctiveConditionView<GroundTag> goal) override;
     ygg::float_t evaluate(const ygg::Builder<State<Kind>>& state) override;
-    ::tyr::formalism::planning::GroundAtomViewList<::tyr::formalism::FluentTag> compute_cut_frontier_atoms(const ygg::Builder<State<Kind>>& state);
+    formalism::planning::AtomViewList<GroundTag, formalism::FluentTag> compute_cut_frontier_atoms(const ygg::Builder<State<Kind>>& state);
     [[nodiscard]] HeuristicPtr<Kind> make_worker(ygg::ExecutionContextPtr execution_context) const override;
     void print_summary(size_t verbosity) const override;
 

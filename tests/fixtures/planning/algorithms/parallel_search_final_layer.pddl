@@ -1,0 +1,13 @@
+(define (problem parallel-search-final-layer)
+  (:domain parallel-search-edge-cases)
+  (:objects item - token start left right goal side beyond - location)
+  (:init
+    (at item start)
+    (edge start left)
+    (edge start right)
+    (edge left goal)
+    (edge right side)
+    (edge side beyond)
+  )
+  (:goal (at item goal))
+)

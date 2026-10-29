@@ -18,11 +18,11 @@
 #ifndef TYR_FORMALISM_DATALOG_RULE_VIEW_HPP_
 #define TYR_FORMALISM_DATALOG_RULE_VIEW_HPP_
 
+#include "tyr/formalism/binding_view.hpp"
 #include "tyr/formalism/datalog/atom_view.hpp"
 #include "tyr/formalism/datalog/conjunctive_condition_view.hpp"
 #include "tyr/formalism/datalog/declarations.hpp"
 #include "tyr/formalism/datalog/numeric_effect_operator_view.hpp"
-#include "tyr/formalism/datalog/rule_index.hpp"
 #include "tyr/formalism/variable_view.hpp"
 
 #include <yggdrasil/containers/variant.hpp>
@@ -31,29 +31,61 @@
 
 namespace ygg
 {
-template<::tyr::formalism::RelationKind R, ::tyr::formalism::datalog::Context C>
-class View<ygg::Index<::tyr::formalism::datalog::Rule<R>>, C>
+
+template<::tyr::TaskKind T, ::tyr::formalism::RelationKind R, ygg::formalism::SymbolContextFor<::tyr::formalism::datalog::Rule<T, R>> C>
+class View<ygg::Index<::tyr::formalism::datalog::Rule<T, R>>, C> : public ygg::IndexViewBase<::tyr::formalism::datalog::Rule<T, R>, C>
 {
-private:
-    const C* m_context;
-    ygg::Index<::tyr::formalism::datalog::Rule<R>> m_handle;
-
 public:
-    View(ygg::Index<::tyr::formalism::datalog::Rule<R>> handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
+    View(ygg::Index<::tyr::formalism::datalog::Rule<T, R>> handle, const C& context) noexcept :
+        ygg::IndexViewBase<::tyr::formalism::datalog::Rule<T, R>, C>(handle, context)
+    {
+    }
 
-    const auto& get_data() const noexcept { return get_repository(*m_context)[m_handle]; }
-    const auto& get_context() const noexcept { return *m_context; }
-    const auto& get_handle() const noexcept { return m_handle; }
+    auto get_arity() const noexcept
+        requires std::same_as<T, ::tyr::LiftedTag>
+    { return get_body().get_arity(); }
+    auto get_variables() const noexcept
+        requires std::same_as<T, ::tyr::LiftedTag>
+    { return ygg::make_view(this->get_data().variables, this->get_context()); }
+    auto get_body() const noexcept { return ygg::make_view(this->get_data().body, this->get_context()); }
+    auto get_heads() const noexcept
+        requires std::same_as<R, ::tyr::formalism::PredicateTag>
+    { return ygg::make_view(this->get_data().heads, this->get_context()); }
+    auto get_head() const noexcept
+        requires std::same_as<R, ::tyr::formalism::FunctionTag>
+    { return ygg::make_view(this->get_data().head, this->get_context()); }
+    auto get_metric_effects() const noexcept { return ygg::make_view(this->get_data().metric_effects, this->get_context()); }
+    auto get_cost() const noexcept { return this->get_data().cost; }
 
-    auto get_index() const noexcept { return m_handle; }
-    auto get_arity() const noexcept { return get_body().get_arity(); }
-    auto get_variables() const noexcept { return ygg::make_view(get_data().variables, *m_context); }
-    auto get_body() const noexcept { return ygg::make_view(get_data().body, *m_context); }
-    auto get_head() const noexcept { return ygg::make_view(get_data().head, *m_context); }
-    auto get_metric_effects() const noexcept { return ygg::make_view(get_data().metric_effects, *m_context); }
-
-    auto identifying_members() const noexcept { return std::tie(m_handle, m_context->get_index()); }
+    auto get_rule() const noexcept
+        requires std::same_as<T, ::tyr::GroundTag>
+    { return get_row().get_relation(); }
+    auto get_row() const noexcept
+        requires std::same_as<T, ::tyr::GroundTag>
+    { return ygg::make_view(this->get_data().binding, this->get_context()); }
+    auto get_objects() const noexcept
+        requires std::same_as<T, ::tyr::GroundTag>
+    { return get_row().get_objects(); }
+    auto get_key() const noexcept
+        requires std::same_as<T, ::tyr::GroundTag>
+    { return get_row().get_key(); }
 };
+
+}
+
+namespace tyr::formalism::datalog
+{
+
+/// Calls f for each head of a predicate rule, or for the single head of a function rule.
+template<TaskKind T, RelationKind R, typename C, typename F>
+void for_each_head(::ygg::View<ygg::Index<Rule<T, R>>, C> rule, F f)
+{
+    if constexpr (std::same_as<R, PredicateTag>)
+        for (const auto head : rule.get_heads())
+            f(head);
+    else
+        f(rule.get_head());
+}
 
 }
 

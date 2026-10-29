@@ -31,51 +31,55 @@ namespace tyr::datalog
 template<>
 struct FactsWorkspace<LiftedTag>
 {
-    TaggedFactSets<::tyr::formalism::FluentTag> fact_sets;
-    TaggedAssignmentSets<::tyr::formalism::FluentTag> assignment_sets;
+    TaggedFactSets<formalism::FluentTag> fact_sets;
+    TaggedAssignmentSets<formalism::FluentTag> assignment_sets;
+    TaggedFactSets<formalism::FluentTag> delta_fact_sets;  ///< Facts committed since the rules last ran.
 
-    explicit FactsWorkspace(::tyr::formalism::datalog::PredicateListView<::tyr::formalism::FluentTag> predicates,
-                            ::tyr::formalism::datalog::FunctionListView<::tyr::formalism::FluentTag> functions,
-                            const analysis::PredicateDomainMap<::tyr::formalism::FluentTag>& predicate_domains,
-                            const analysis::FunctionDomainMap<::tyr::formalism::FluentTag>& function_domains,
+    explicit FactsWorkspace(formalism::datalog::PredicateListView<formalism::FluentTag> predicates,
+                            formalism::datalog::FunctionListView<formalism::FluentTag> functions,
+                            const analysis::PredicateDomainMap<formalism::FluentTag>& predicate_domains,
+                            const analysis::FunctionDomainMap<formalism::FluentTag>& function_domains,
                             size_t num_objects,
-                            ::tyr::formalism::datalog::GroundAtomListView<::tyr::formalism::FluentTag> atoms,
-                            ::tyr::formalism::datalog::GroundFunctionTermValueListView<::tyr::formalism::FluentTag> fterm_values,
-                            const ::tyr::formalism::datalog::Repository& workspace_repository);
+                            formalism::datalog::AtomListView<GroundTag, formalism::FluentTag> atoms,
+                            formalism::datalog::FunctionTermValueListView<GroundTag, formalism::FluentTag> fterm_values,
+                            const formalism::datalog::Repository& workspace_repository);
 
-    bool insert(::tyr::formalism::datalog::PredicateBindingView<::tyr::formalism::FluentTag> binding)
+    bool insert(formalism::datalog::PredicateBindingIndex<formalism::FluentTag> binding)
     {
         if (!fact_sets.predicate.insert(binding))
             return false;
-        assignment_sets.predicate.insert(binding);
+        assignment_sets.predicate.insert(ygg::make_view(binding, *repository));
+        delta_fact_sets.predicate.insert(binding);
         return true;
     }
 
-    bool insert(::tyr::formalism::datalog::FunctionBindingView<::tyr::formalism::FluentTag> binding, ygg::ClosedInterval<ygg::float_t> interval)
+    bool insert(formalism::datalog::FunctionBindingIndex<formalism::FluentTag> binding, const ygg::ClosedInterval<ygg::float_t>& interval)
     {
         if (!fact_sets.function.insert(binding, interval))
             return false;
-        assignment_sets.function.insert(binding, interval);
+        assignment_sets.function.insert(ygg::make_view(binding, *repository), interval);
         return true;
     }
 
     void reset();
+
+    const formalism::datalog::Repository* repository;  ///< The workspace repository the bindings live in (or below).
 };
 
 template<>
 struct ConstFactsWorkspace<LiftedTag>
 {
-    const TaggedFactSets<::tyr::formalism::StaticTag> fact_sets;
-    const TaggedAssignmentSets<::tyr::formalism::StaticTag> assignment_sets;
+    TaggedFactSets<formalism::StaticTag> fact_sets;
+    TaggedAssignmentSets<formalism::StaticTag> assignment_sets;
 
-    explicit ConstFactsWorkspace(::tyr::formalism::datalog::PredicateListView<::tyr::formalism::StaticTag> predicates,
-                                 ::tyr::formalism::datalog::FunctionListView<::tyr::formalism::StaticTag> functions,
-                                 const analysis::PredicateDomainMap<::tyr::formalism::StaticTag>& predicate_domains,
-                                 const analysis::FunctionDomainMap<::tyr::formalism::StaticTag>& function_domains,
+    explicit ConstFactsWorkspace(formalism::datalog::PredicateListView<formalism::StaticTag> predicates,
+                                 formalism::datalog::FunctionListView<formalism::StaticTag> functions,
+                                 const analysis::PredicateDomainMap<formalism::StaticTag>& predicate_domains,
+                                 const analysis::FunctionDomainMap<formalism::StaticTag>& function_domains,
                                  size_t num_objects,
-                                 ::tyr::formalism::datalog::GroundAtomListView<::tyr::formalism::StaticTag> atoms,
-                                 ::tyr::formalism::datalog::GroundFunctionTermValueListView<::tyr::formalism::StaticTag> fterm_values,
-                                 const ::tyr::formalism::datalog::Repository& program_repository);
+                                 formalism::datalog::AtomListView<GroundTag, formalism::StaticTag> atoms,
+                                 formalism::datalog::FunctionTermValueListView<GroundTag, formalism::StaticTag> fterm_values,
+                                 const formalism::datalog::Repository& program_repository);
 };
 
 }

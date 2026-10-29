@@ -1,0 +1,36 @@
+#include "tyr/formalism/datalog/declarations.hpp"
+#include "tyr/formalism/datalog/function_term_value_data.hpp"
+#include "tyr/formalism/datalog/function_term_value_view.hpp"
+#include "tyr/formalism/datalog/repository.hpp"
+
+#include <concepts>
+
+template<typename Entity>
+struct GroundFunctionTermValuePublicView;
+
+template<tyr::formalism::FactKind T>
+struct GroundFunctionTermValuePublicView<tyr::formalism::datalog::FunctionTermValue<::tyr::GroundTag, T>>
+{
+    using type = tyr::formalism::datalog::FunctionTermValueView<::tyr::GroundTag, T>;
+};
+
+template<typename Entity>
+concept GroundFunctionTermValueContract =
+    std::constructible_from<ygg::Index<Entity>, ygg::uint_t> && std::totally_ordered<ygg::Index<Entity>> && std::totally_ordered<ygg::Data<Entity>>
+    && std::totally_ordered<ygg::View<ygg::Index<Entity>, tyr::formalism::datalog::Repository>>
+    && std::same_as<ygg::View<ygg::Index<Entity>, tyr::formalism::datalog::Repository>, typename GroundFunctionTermValuePublicView<Entity>::type>
+    && requires(ygg::Data<Entity>& data, const ygg::View<ygg::Index<Entity>, tyr::formalism::datalog::Repository>& view) {
+           data.index;
+           data.fterm;
+           data.value;
+           data.clear();
+           view.get_index();
+           view.get_fterm();
+           view.get_value();
+       };
+
+static_assert([]<typename... Entities>(ygg::TypeList<Entities...>)
+              { return (GroundFunctionTermValueContract<Entities> && ...); }(tyr::formalism::datalog::FunctionTermValueTypes<::tyr::GroundTag> {}));
+static_assert(std::constructible_from<ygg::Data<tyr::formalism::datalog::FunctionTermValue<::tyr::GroundTag, tyr::formalism::StaticTag>>,
+                                      tyr::formalism::datalog::FunctionTermView<::tyr::GroundTag, tyr::formalism::StaticTag>,
+                                      ygg::float_t>);

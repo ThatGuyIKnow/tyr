@@ -44,18 +44,23 @@ void bind_ground_module_definitions(nb::module_& m)
     auto siw_module = m.def_submodule("siw");
     siw::bind_ground_module_definitions(siw_module);
 
-    nb::class_<Task<GroundTag>>(m, "Task")  //
-        .def("get_formalism_task", &Task<GroundTag>::get_formalism_task, nb::rv_policy::reference_internal)
-        .def("get_repository", &Task<GroundTag>::get_repository)
-        .def("get_task", &Task<GroundTag>::get_task, nb::keep_alive<0, 1>())
-        .def("get_fdr_context", &Task<GroundTag>::get_fdr_context, nb::rv_policy::reference_internal);
+    auto task = nb::class_<Task<GroundTag>>(m, "Task")  //
+                    .def("get_formalism_task", &Task<GroundTag>::get_formalism_task, nb::rv_policy::reference_internal)
+                    .def("get_repository", &Task<GroundTag>::get_repository)
+                    .def("get_task", &Task<GroundTag>::get_task, nb::keep_alive<0, 1>())
+                    .def("get_fdr_context", &Task<GroundTag>::get_fdr_context, nb::rv_policy::reference_internal);
+    ygg::add_print(task);
 
     bind_index<ygg::Index<State<GroundTag>>>(m, "StateIndex");
+    bind_packed_state<GroundTag>(m, "PackedState");
     bind_state<GroundTag>(m, "State");
     bind_state_builder<GroundTag>(m, "StateBuilder");
     bind_node<GroundTag>(m, "Node");
+    bind_packed_node<GroundTag>(m, "PackedNode");
     bind_labeled_node<GroundTag>(m, "LabeledNode");
+    bind_packed_labeled_node<GroundTag>(m, "PackedLabeledNode");
     bind_plan<GroundTag>(m, "Plan");
+    bind_packed_plan<GroundTag>(m, "PackedPlan");
     bind_axiom_evaluator<GroundTag>(m, "AxiomEvaluator");
     bind_axiom_evaluator_factory<GroundTag>(m, "AxiomEvaluatorFactory");
     bind_state_repository<GroundTag>(m, "StateRepository");

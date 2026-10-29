@@ -67,5 +67,4 @@ template Node<LiftedTag> normalize_start_node(Task<LiftedTag>& task,
                                               StateRepository<LiftedTag>& state_repository,
                                               AxiomEvaluator<LiftedTag>& axiom_evaluator,
                                               std::optional<Node<LiftedTag>> start_node);
-
 }

@@ -30,6 +30,7 @@ namespace
 template<typename Relation>
 void bind_binding_data(nb::module_& m, const char* name)
 {
+    using namespace nb::literals;
     using V = ygg::Data<RelationBinding<Relation>>;
     auto cls = nb::class_<V>(m, name).def(nb::init<ygg::View<ygg::Index<Relation>, Repository>, const ObjectViewList&>(), "relation"_a, "objects"_a);
     ygg::add_print(cls);
@@ -41,10 +42,16 @@ template<typename Relation>
 void bind_binding_view(nb::module_& m, const char* name)
 {
     using V = ygg::View<ygg::Index<RelationBinding<Relation>>, Repository>;
+    const auto retain_owner = ygg::python::make_owner_retainer();
     auto cls = nb::class_<V>(m, name)
                    .def("get_index", &V::get_index)
                    .def("get_relation", &V::get_relation, nb::keep_alive<0, 1>())
-                   .def("get_objects", &V::get_objects);
+                   .def("get_objects",
+                        [retain_owner](nb::typed<nb::handle, V> owner) -> nb::typed<nb::list, ObjectView>
+                        {
+                            return nb::borrow<nb::typed<nb::list, ObjectView>>(
+                                ygg::python::cast_with_owner(nb::cast<const V&>(owner).get_objects(), owner, retain_owner));
+                        });
     ygg::add_print(cls);
     ygg::add_comparison(cls);
     ygg::add_hash(cls);
@@ -62,7 +69,7 @@ void bind_binding(nb::module_& m, RepositoryBinding& repository)
     }
 
     {
-        using V = ygg::Index<RelationBinding<Action>>;
+        using V = ygg::Index<RelationBinding<Action<LiftedTag>>>;
         auto cls = nb::class_<V>(m, "ActionBindingIndex").def_ro("relation_index", &V::relation).def_ro("row_index", &V::row);
         ygg::add_print(cls);
         ygg::add_comparison(cls);
@@ -70,7 +77,7 @@ void bind_binding(nb::module_& m, RepositoryBinding& repository)
     }
 
     {
-        using V = ygg::Index<RelationBinding<Axiom>>;
+        using V = ygg::Index<RelationBinding<Axiom<LiftedTag>>>;
         auto cls = nb::class_<V>(m, "AxiomBindingIndex").def_ro("relation_index", &V::relation).def_ro("row_index", &V::row);
         ygg::add_print(cls);
         ygg::add_comparison(cls);
@@ -78,26 +85,26 @@ void bind_binding(nb::module_& m, RepositoryBinding& repository)
     }
 
     bind_binding_data<Predicate<DerivedTag>>(m, "DerivedPredicateBindingData");
-    bind_binding_data<Action>(m, "ActionBindingData");
-    bind_binding_data<Axiom>(m, "AxiomBindingData");
+    bind_binding_data<Action<LiftedTag>>(m, "ActionBindingData");
+    bind_binding_data<Axiom<LiftedTag>>(m, "AxiomBindingData");
 
     bind_binding_view<Predicate<DerivedTag>>(m, "DerivedPredicateBinding");
-    bind_binding_view<Action>(m, "ActionBinding");
-    bind_binding_view<Axiom>(m, "AxiomBinding");
+    bind_binding_view<Action<LiftedTag>>(m, "ActionBinding");
+    bind_binding_view<Axiom<LiftedTag>>(m, "AxiomBinding");
     bind_binding_view<Predicate<StaticTag>>(m, "StaticPredicateBinding");
     bind_binding_view<Predicate<FluentTag>>(m, "FluentPredicateBinding");
     bind_binding_view<Function<StaticTag>>(m, "StaticFunctionBinding");
     bind_binding_view<Function<FluentTag>>(m, "FluentFunctionBinding");
     bind_binding_view<Function<AuxiliaryTag>>(m, "AuxiliaryFunctionBinding");
 
-    repository.def("get_or_create", &get_or_create_relation_data<Predicate<DerivedTag>>, "data"_a, nb::keep_alive<0, 1>());
-    repository.def("get_or_create", &get_or_create_relation_data<Action>, "data"_a, nb::keep_alive<0, 1>());
-    repository.def("get_or_create", &get_or_create_relation_data<Axiom>, "data"_a, nb::keep_alive<0, 1>());
-    repository.def("get_or_create", &get_or_create_relation_data<Predicate<StaticTag>>, "data"_a, nb::keep_alive<0, 1>());
-    repository.def("get_or_create", &get_or_create_relation_data<Predicate<FluentTag>>, "data"_a, nb::keep_alive<0, 1>());
-    repository.def("get_or_create", &get_or_create_relation_data<Function<StaticTag>>, "data"_a, nb::keep_alive<0, 1>());
-    repository.def("get_or_create", &get_or_create_relation_data<Function<FluentTag>>, "data"_a, nb::keep_alive<0, 1>());
-    repository.def("get_or_create", &get_or_create_relation_data<Function<AuxiliaryTag>>, "data"_a, nb::keep_alive<0, 1>());
+    bind_insert<RelationBinding<Predicate<DerivedTag>>>(repository);
+    bind_insert<RelationBinding<Action<LiftedTag>>>(repository);
+    bind_insert<RelationBinding<Axiom<LiftedTag>>>(repository);
+    bind_insert<RelationBinding<Predicate<StaticTag>>>(repository);
+    bind_insert<RelationBinding<Predicate<FluentTag>>>(repository);
+    bind_insert<RelationBinding<Function<StaticTag>>>(repository);
+    bind_insert<RelationBinding<Function<FluentTag>>>(repository);
+    bind_insert<RelationBinding<Function<AuxiliaryTag>>>(repository);
 }
 
 }  // namespace tyr::formalism::planning

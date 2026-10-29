@@ -1,5 +1,7 @@
-"""
-Create planning formalism structures.
+# Copyright (C) 2026 Dominik Drexler
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+"""Create planning formalism structures.
 
 This example demonstrates how to create planning tasks over the gripper domain.
 
@@ -15,13 +17,15 @@ from collections.abc import Sequence
 from pyyggdrasil.execution import ExecutionContext
 
 from pytyr.formalism.planning import (
+    Action,
+    ActionData,
+    ConditionalEffectData,
+    ConjunctiveCondition,
+    ConjunctiveConditionData,
+    ConjunctiveEffectData,
+    DomainData,
+    FDRContext,
     FluentAtom,
-    ObjectData,
-    Object,
-    ParameterIndex,
-    Repository,
-    RepositoryFactory,
-    StaticAtom,
     FluentAtomData,
     FluentGroundAtom,
     FluentGroundAtomData,
@@ -30,6 +34,16 @@ from pytyr.formalism.planning import (
     FluentPredicate,
     FluentPredicateBindingData,
     FluentPredicateData,
+    GroundConjunctiveConditionData,
+    LiftedPlanningTask,
+    LiftedTaskData,
+    Object,
+    ObjectData,
+    ParameterIndex,
+    PlanningDomain,
+    Repository,
+    RepositoryFactory,
+    StaticAtom,
     StaticAtomData,
     StaticGroundAtom,
     StaticGroundAtomData,
@@ -40,72 +54,99 @@ from pytyr.formalism.planning import (
     StaticPredicateData,
     Term,
     TermData,
+    Variable,
     VariableData,
-    ConjunctiveConditionData,
-    ConjunctiveEffectData,
-    ConditionalEffectData,
-    ActionData,
-    DomainData,
-    GroundConjunctiveConditionData,
-    LiftedTaskData,
-    FDRContext,
-    PlanningDomain,
-    PlanningTask,
 )
-
 from pytyr.planning.lifted import (
-    Task,
     GroundTaskInstantiationOptions,
+    Task,
 )
 
 
-def make_static_atom(
-    repository: Repository, predicate: StaticPredicate, terms: Sequence[Term]
-) -> StaticAtom:
-    return repository.get_or_create(StaticAtomData(predicate, terms))
+def make_action(
+    repository: Repository,
+    name: str,
+    variables: Sequence[Variable],
+    condition: ConjunctiveCondition,
+    effect_data: ConjunctiveEffectData,
+) -> Action:
+    """Insert an action whose effect is applied unconditionally."""
+    effect = repository.insert(effect_data)[0]
+    empty_condition = repository.insert(
+        ConjunctiveConditionData(
+            variables=[],
+            static_literals=[],
+            fluent_literals=[],
+            derived_literals=[],
+            numeric_constraints=[],
+        ),
+    )[0]
+    conditional_effect = repository.insert(
+        ConditionalEffectData(variables=[], condition=empty_condition, effect=effect),
+    )[0]
+    return repository.insert(
+        ActionData(
+            name=name,
+            original_arity=len(variables),
+            variables=variables,
+            condition=condition,
+            effects=[conditional_effect],
+        ),
+    )[0]
 
 
-def make_fluent_atom(
-    repository: Repository, predicate: FluentPredicate, terms: Sequence[Term]
-) -> FluentAtom:
-    return repository.get_or_create(FluentAtomData(predicate, terms))
+def make_static_atom(repository: Repository, predicate: StaticPredicate, terms: Sequence[Term]) -> StaticAtom:
+    """Insert the static atom of `predicate` over `terms`."""
+    return repository.insert(StaticAtomData(predicate, terms))[0]
+
+
+def make_fluent_atom(repository: Repository, predicate: FluentPredicate, terms: Sequence[Term]) -> FluentAtom:
+    """Insert the fluent atom of `predicate` over `terms`."""
+    return repository.insert(FluentAtomData(predicate, terms))[0]
 
 
 def make_static_literal(
     repository: Repository,
     predicate: StaticPredicate,
     terms: Sequence[Term],
+    *,
     polarity: bool = True,
 ) -> StaticLiteral:
+    """Insert the static literal of `predicate` over `terms` with the given polarity."""
     atom = make_static_atom(repository, predicate, terms)
-    return repository.get_or_create(StaticLiteralData(atom, polarity))
+    return repository.insert(StaticLiteralData(atom, polarity))[0]
 
 
 def make_fluent_literal(
     repository: Repository,
     predicate: FluentPredicate,
     terms: Sequence[Term],
+    *,
     polarity: bool = True,
 ) -> FluentLiteral:
+    """Insert the fluent literal of `predicate` over `terms` with the given polarity."""
     atom = make_fluent_atom(repository, predicate, terms)
-    return repository.get_or_create(FluentLiteralData(atom, polarity))
+    return repository.insert(FluentLiteralData(atom, polarity))[0]
 
 
 def make_static_ground_atom(
     repository: Repository, predicate: StaticPredicate, objects: Sequence[Object]
 ) -> StaticGroundAtom:
-    binding = repository.get_or_create(StaticPredicateBindingData(predicate, objects))
-    return repository.get_or_create(StaticGroundAtomData(binding))
+    """Insert the static ground atom of `predicate` over `objects`."""
+    binding = repository.insert(StaticPredicateBindingData(predicate, objects))[0]
+    return repository.insert(StaticGroundAtomData(binding))[0]
 
 
 def make_fluent_ground_atom(
     repository: Repository, predicate: FluentPredicate, objects: Sequence[Object]
 ) -> FluentGroundAtom:
-    binding = repository.get_or_create(FluentPredicateBindingData(predicate, objects))
-    return repository.get_or_create(FluentGroundAtomData(binding))
+    """Insert the fluent ground atom of `predicate` over `objects`."""
+    binding = repository.insert(FluentPredicateBindingData(predicate, objects))[0]
+    return repository.insert(FluentGroundAtomData(binding))[0]
 
 
 def main() -> None:
+    """Build the gripper domain and a task over it, then instantiate and print the ground task."""
     factory = RepositoryFactory()
 
     # --------------------------------------------------------------------------
@@ -116,30 +157,30 @@ def main() -> None:
     domain_repository = factory.create_repository()
 
     # Static predicates
-    room = domain_repository.get_or_create(StaticPredicateData("room", 1))
-    ball = domain_repository.get_or_create(StaticPredicateData("ball", 1))
-    gripper = domain_repository.get_or_create(StaticPredicateData("gripper", 1))
+    room = domain_repository.insert(StaticPredicateData("room", 1))[0]
+    ball = domain_repository.insert(StaticPredicateData("ball", 1))[0]
+    gripper = domain_repository.insert(StaticPredicateData("gripper", 1))[0]
 
     # Fluent predicates
-    at_robby = domain_repository.get_or_create(FluentPredicateData("at-robby", 1))
-    at = domain_repository.get_or_create(FluentPredicateData("at", 2))
-    free = domain_repository.get_or_create(FluentPredicateData("free", 1))
-    carry = domain_repository.get_or_create(FluentPredicateData("carry", 2))
+    at_robby = domain_repository.insert(FluentPredicateData("at-robby", 1))[0]
+    at = domain_repository.insert(FluentPredicateData("at", 2))[0]
+    free = domain_repository.insert(FluentPredicateData("free", 1))[0]
+    carry = domain_repository.insert(FluentPredicateData("carry", 2))[0]
 
     # Constants
-    rooma = domain_repository.get_or_create(ObjectData("rooma"))
-    roomb = domain_repository.get_or_create(ObjectData("roomb"))
+    rooma = domain_repository.insert(ObjectData("rooma"))[0]
+    roomb = domain_repository.insert(ObjectData("roomb"))[0]
 
     # --------------------------------------------------------------------------
     # Lifted variables
     # --------------------------------------------------------------------------
 
-    v_from = domain_repository.get_or_create(VariableData("?from"))
-    v_to = domain_repository.get_or_create(VariableData("?to"))
+    v_from = domain_repository.insert(VariableData("?from"))[0]
+    v_to = domain_repository.insert(VariableData("?to"))[0]
 
-    v_obj = domain_repository.get_or_create(VariableData("?obj"))
-    v_room = domain_repository.get_or_create(VariableData("?room"))
-    v_gripper = domain_repository.get_or_create(VariableData("?gripper"))
+    v_obj = domain_repository.insert(VariableData("?obj"))[0]
+    v_room = domain_repository.insert(VariableData("?room"))[0]
+    v_gripper = domain_repository.insert(VariableData("?gripper"))[0]
 
     # Terms
     t_from = domain_repository.create(TermData(ParameterIndex(0)))
@@ -157,55 +198,33 @@ def main() -> None:
     #   (at-robby ?to) and not (at-robby ?from)
     # --------------------------------------------------------------------------
 
-    move_condition = domain_repository.get_or_create(
+    move_condition = domain_repository.insert(
         ConjunctiveConditionData(
             variables=[v_from, v_to],
             static_literals=[
-                make_static_literal(domain_repository, room, [t_from], True),
-                make_static_literal(domain_repository, room, [t_to], True),
+                make_static_literal(domain_repository, room, [t_from], polarity=True),
+                make_static_literal(domain_repository, room, [t_to], polarity=True),
             ],
             fluent_literals=[
-                make_fluent_literal(domain_repository, at_robby, [t_from], True),
+                make_fluent_literal(domain_repository, at_robby, [t_from], polarity=True),
             ],
             derived_literals=[],
             numeric_constraints=[],
         ),
-    )
+    )[0]
 
-    move_effect = domain_repository.get_or_create(
+    move = make_action(
+        domain_repository,
+        "move",
+        [v_from, v_to],
+        move_condition,
         ConjunctiveEffectData(
             fluent_literals=[
-                make_fluent_literal(domain_repository, at_robby, [t_to], True),
-                make_fluent_literal(domain_repository, at_robby, [t_from], False),
+                make_fluent_literal(domain_repository, at_robby, [t_to], polarity=True),
+                make_fluent_literal(domain_repository, at_robby, [t_from], polarity=False),
             ],
             fluent_numeric_effects=[],
             auxiliary_numeric_effect=None,
-        ),
-    )
-
-    move_conditional_effect = domain_repository.get_or_create(
-        ConditionalEffectData(
-            variables=[],
-            condition=domain_repository.get_or_create(
-                ConjunctiveConditionData(
-                    variables=[],
-                    static_literals=[],
-                    fluent_literals=[],
-                    derived_literals=[],
-                    numeric_constraints=[],
-                ),
-            ),
-            effect=move_effect,
-        ),
-    )
-
-    move = domain_repository.get_or_create(
-        ActionData(
-            name="move",
-            original_arity=2,
-            variables=[v_from, v_to],
-            condition=move_condition,
-            effects=[move_conditional_effect],
         ),
     )
 
@@ -220,59 +239,37 @@ def main() -> None:
     #   not (free ?gripper)
     # --------------------------------------------------------------------------
 
-    pick_condition = domain_repository.get_or_create(
+    pick_condition = domain_repository.insert(
         ConjunctiveConditionData(
             variables=[v_obj, v_room, v_gripper],
             static_literals=[
-                make_static_literal(domain_repository, ball, [t_obj], True),
-                make_static_literal(domain_repository, room, [t_room], True),
-                make_static_literal(domain_repository, gripper, [t_gripper], True),
+                make_static_literal(domain_repository, ball, [t_obj], polarity=True),
+                make_static_literal(domain_repository, room, [t_room], polarity=True),
+                make_static_literal(domain_repository, gripper, [t_gripper], polarity=True),
             ],
             fluent_literals=[
-                make_fluent_literal(domain_repository, at, [t_obj, t_room], True),
-                make_fluent_literal(domain_repository, at_robby, [t_room], True),
-                make_fluent_literal(domain_repository, free, [t_gripper], True),
+                make_fluent_literal(domain_repository, at, [t_obj, t_room], polarity=True),
+                make_fluent_literal(domain_repository, at_robby, [t_room], polarity=True),
+                make_fluent_literal(domain_repository, free, [t_gripper], polarity=True),
             ],
             derived_literals=[],
             numeric_constraints=[],
         ),
-    )
+    )[0]
 
-    pick_effect = domain_repository.get_or_create(
+    pick = make_action(
+        domain_repository,
+        "pick",
+        [v_obj, v_room, v_gripper],
+        pick_condition,
         ConjunctiveEffectData(
             fluent_literals=[
-                make_fluent_literal(domain_repository, carry, [t_obj, t_gripper], True),
-                make_fluent_literal(domain_repository, at, [t_obj, t_room], False),
-                make_fluent_literal(domain_repository, free, [t_gripper], False),
+                make_fluent_literal(domain_repository, carry, [t_obj, t_gripper], polarity=True),
+                make_fluent_literal(domain_repository, at, [t_obj, t_room], polarity=False),
+                make_fluent_literal(domain_repository, free, [t_gripper], polarity=False),
             ],
             fluent_numeric_effects=[],
             auxiliary_numeric_effect=None,
-        ),
-    )
-
-    pick_conditional_effect = domain_repository.get_or_create(
-        ConditionalEffectData(
-            variables=[],
-            condition=domain_repository.get_or_create(
-                ConjunctiveConditionData(
-                    variables=[],
-                    static_literals=[],
-                    fluent_literals=[],
-                    derived_literals=[],
-                    numeric_constraints=[],
-                ),
-            ),
-            effect=pick_effect,
-        ),
-    )
-
-    pick = domain_repository.get_or_create(
-        ActionData(
-            name="pick",
-            original_arity=3,
-            variables=[v_obj, v_room, v_gripper],
-            condition=pick_condition,
-            effects=[pick_conditional_effect],
         ),
     )
 
@@ -287,64 +284,40 @@ def main() -> None:
     #   not (carry ?obj ?gripper)
     # --------------------------------------------------------------------------
 
-    drop_condition = domain_repository.get_or_create(
+    drop_condition = domain_repository.insert(
         ConjunctiveConditionData(
             variables=[v_obj, v_room, v_gripper],
             static_literals=[
-                make_static_literal(domain_repository, ball, [t_obj], True),
-                make_static_literal(domain_repository, room, [t_room], True),
-                make_static_literal(domain_repository, gripper, [t_gripper], True),
+                make_static_literal(domain_repository, ball, [t_obj], polarity=True),
+                make_static_literal(domain_repository, room, [t_room], polarity=True),
+                make_static_literal(domain_repository, gripper, [t_gripper], polarity=True),
             ],
             fluent_literals=[
-                make_fluent_literal(domain_repository, carry, [t_obj, t_gripper], True),
-                make_fluent_literal(domain_repository, at_robby, [t_room], True),
+                make_fluent_literal(domain_repository, carry, [t_obj, t_gripper], polarity=True),
+                make_fluent_literal(domain_repository, at_robby, [t_room], polarity=True),
             ],
             derived_literals=[],
             numeric_constraints=[],
         ),
-    )
+    )[0]
 
-    drop_effect = domain_repository.get_or_create(
+    drop = make_action(
+        domain_repository,
+        "drop",
+        [v_obj, v_room, v_gripper],
+        drop_condition,
         ConjunctiveEffectData(
             fluent_literals=[
-                make_fluent_literal(domain_repository, at, [t_obj, t_room], True),
-                make_fluent_literal(domain_repository, free, [t_gripper], True),
-                make_fluent_literal(
-                    domain_repository, carry, [t_obj, t_gripper], False
-                ),
+                make_fluent_literal(domain_repository, at, [t_obj, t_room], polarity=True),
+                make_fluent_literal(domain_repository, free, [t_gripper], polarity=True),
+                make_fluent_literal(domain_repository, carry, [t_obj, t_gripper], polarity=False),
             ],
             fluent_numeric_effects=[],
             auxiliary_numeric_effect=None,
         ),
     )
 
-    drop_conditional_effect = domain_repository.get_or_create(
-        ConditionalEffectData(
-            variables=[],
-            condition=domain_repository.get_or_create(
-                ConjunctiveConditionData(
-                    variables=[],
-                    static_literals=[],
-                    fluent_literals=[],
-                    derived_literals=[],
-                    numeric_constraints=[],
-                ),
-            ),
-            effect=drop_effect,
-        ),
-    )
-
-    drop = domain_repository.get_or_create(
-        ActionData(
-            name="drop",
-            original_arity=3,
-            variables=[v_obj, v_room, v_gripper],
-            condition=drop_condition,
-            effects=[drop_conditional_effect],
-        ),
-    )
-
-    domain = domain_repository.get_or_create(
+    domain = domain_repository.insert(
         DomainData(
             name="gripper-strips",
             static_predicates=[room, ball, gripper],
@@ -357,7 +330,7 @@ def main() -> None:
             actions=[move, pick, drop],
             axioms=[],
         ),
-    )
+    )[0]
 
     print(domain)
     print()
@@ -372,9 +345,9 @@ def main() -> None:
 
     fdr_context = FDRContext(task_repository)
 
-    left = task_repository.get_or_create(ObjectData("left"))
-    right = task_repository.get_or_create(ObjectData("right"))
-    ball1 = task_repository.get_or_create(ObjectData("ball1"))
+    left = task_repository.insert(ObjectData("left"))[0]
+    right = task_repository.insert(ObjectData("right"))[0]
+    ball1 = task_repository.insert(ObjectData("ball1"))[0]
 
     # Static atoms from typing
     static_atoms = [
@@ -407,7 +380,7 @@ def main() -> None:
 
     goal_at_ball1_roomb = fdr_context.get_fact(at_ball1_roomb)
 
-    goal = task_repository.get_or_create(
+    goal = task_repository.insert(
         GroundConjunctiveConditionData(
             static_literals=[],
             derived_literals=[],
@@ -415,9 +388,9 @@ def main() -> None:
             negative_facts=[],
             numeric_constraints=[],
         ),
-    )
+    )[0]
 
-    task = task_repository.get_or_create(
+    task = task_repository.insert(
         LiftedTaskData(
             name="gripper-1",
             domain=domain,
@@ -432,7 +405,7 @@ def main() -> None:
             metric=None,
             axioms=[],
         ),
-    )
+    )[0]
 
     print(task)
 
@@ -448,7 +421,7 @@ def main() -> None:
     planning_domain = PlanningDomain(domain, domain_repository, factory)
 
     # Combine the lifted task with the FDR context, task repository, and domain.
-    planning_task = PlanningTask(task, fdr_context, task_repository, planning_domain)
+    planning_task = LiftedPlanningTask(task, fdr_context, task_repository, planning_domain)
 
     # Create a search task from the planning task.
     search_task = Task(planning_task)

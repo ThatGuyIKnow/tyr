@@ -23,13 +23,15 @@ namespace tyr::formalism::planning
 
 void bind_metric(nb::module_& m, RepositoryBinding& repository)
 {
+    using namespace nb::literals;
     ygg::bind_index<ygg::Index<Metric>>(m, "MetricIndex");
 
     {
         using V = ygg::Data<Metric>;
 
         auto cls = nb::class_<V>(m, "MetricData")  //
-                       .def(nb::init<OptimizationDirection, GroundFunctionExpressionView>(), "optimization_direction"_a, "fexpr"_a);
+                       .def(nb::init<OptimizationDirection, FunctionExpressionView<GroundTag>>(), "optimization_direction"_a, "fexpr"_a);
+        cls.def(nb::init<OptimizationDirection, ygg::Data<FunctionExpression<GroundTag>>>(), "optimization_direction"_a, "fexpr"_a);
         ygg::add_print(cls);
         ygg::add_comparison(cls);
         ygg::add_hash(cls);
@@ -47,7 +49,7 @@ void bind_metric(nb::module_& m, RepositoryBinding& repository)
         ygg::add_hash(cls);
     }
 
-    repository.def("get_or_create", &get_or_create_data<Metric>, "data"_a, nb::keep_alive<0, 1>());
+    bind_insert<Metric>(repository);
 }
 
 }  // namespace tyr::formalism::planning

@@ -18,64 +18,47 @@
 #ifndef TYR_FORMALISM_PLANNING_ARITHMETIC_OPERATOR_DATA_HPP_
 #define TYR_FORMALISM_PLANNING_ARITHMETIC_OPERATOR_DATA_HPP_
 
-#include "tyr/formalism/planning/binary_operator_index.hpp"
 #include "tyr/formalism/planning/declarations.hpp"
-#include "tyr/formalism/planning/multi_operator_index.hpp"
-#include "tyr/formalism/planning/unary_operator_index.hpp"
 
 #include <stdexcept>
+#include <tuple>
+#include <utility>
 #include <variant>
+#include <yggdrasil/containers/variant.hpp>
 #include <yggdrasil/core/types.hpp>
 #include <yggdrasil/core/types_utils.hpp>
 
 namespace ygg
 {
 
-template<typename T>
+template<::tyr::TaskKind T>
 struct Data<::tyr::formalism::planning::ArithmeticOperator<T>>
 {
-    using OperatorType = ::tyr::formalism::ArithmeticOperatorKind;
-    using Variant = ::cista::offset::variant<ygg::Index<::tyr::formalism::planning::UnaryOperator<T>>,
-                                             ygg::Index<::tyr::formalism::planning::BinaryOperator<::tyr::formalism::ArithmeticOperatorKind, T>>,
-                                             ygg::Index<::tyr::formalism::planning::MultiOperator<T>>>;
+    using Variant = ::ygg::IndexVariant<::tyr::formalism::planning::ArithmeticExpressionTypes<T>>;
 
-    OperatorType operator_kind = OperatorType::Sub;
-    Variant value;
+    Variant variant;
 
     template<typename C>
-    using ViewVariant = std::variant<::ygg::View<ygg::Index<::tyr::formalism::planning::UnaryOperator<T>>, C>,
-                                     ::ygg::View<ygg::Index<::tyr::formalism::planning::BinaryOperator<::tyr::formalism::ArithmeticOperatorKind, T>>, C>,
-                                     ::ygg::View<ygg::Index<::tyr::formalism::planning::MultiOperator<T>>, C>>;
+    using ViewVariant = ::ygg::ViewVariant<Variant, C>;
 
     Data() = default;
-    Data(OperatorType operator_kind_, Variant value_) : operator_kind(operator_kind_), value(value_)
+    explicit Data(Variant variant_) : variant(variant_)
     {
-        if (!value.valid() || (value.index() == 0 && !::tyr::formalism::is_unary(operator_kind))
-            || (value.index() == 2 && !::tyr::formalism::is_multi(operator_kind)))
-            throw std::invalid_argument("ArithmeticOperator kind does not match operator form");
+        if (!variant.valid())
+            throw std::invalid_argument("ArithmeticOperator requires a valid variant");
     }
     // Python constructor
     template<typename C>
-    Data(ViewVariant<C> value_) :
-        operator_kind(std::visit([](const auto& view) { return view.get_operator(); }, value_)),
-        value(std::visit([](const auto& view) -> Variant { return Variant(view.get_index()); }, value_))
+    Data(const ViewVariant<C>& variant_) : variant(std::visit([](const auto& view) -> Variant { return Variant(view.get_index()); }, variant_))
     {
     }
 
-    void clear() noexcept
-    {
-        operator_kind = OperatorType::Sub;
-        ygg::clear(value);
-    }
-
-    auto cista_members() const noexcept { return std::tie(operator_kind, value); }
-    auto identifying_members() const noexcept
-    {
-        return std::tuple<std::size_t, const OperatorType&, const Variant&>(value.index(), operator_kind, value);
-    }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::variant> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::variant> {}; }
+    void clear() noexcept { ygg::clear_members(*this); }
 };
 
-static_assert(!ygg::uses_trivial_storage_v<::tyr::formalism::planning::ArithmeticOperator<ygg::Data<::tyr::formalism::planning::FunctionExpression>>>);
+static_assert(!ygg::uses_trivial_storage_v<::tyr::formalism::planning::ArithmeticOperator<::tyr::LiftedTag>>);
 }
 
 #endif

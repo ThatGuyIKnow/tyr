@@ -18,12 +18,13 @@
 #ifndef TYR_FORMALISM_DATALOG_VARIABLE_DEPENDENCY_GRAPH_HPP_
 #define TYR_FORMALISM_DATALOG_VARIABLE_DEPENDENCY_GRAPH_HPP_
 
-#include <yggdrasil/core/types.hpp>
-#include <yggdrasil/containers/variant.hpp>
-#include <yggdrasil/containers/vector.hpp>
 #include "tyr/formalism/datalog/declarations.hpp"
 #include "tyr/formalism/datalog/variable_dependency_graph_details.hpp"
 #include "tyr/formalism/datalog/views.hpp"
+
+#include <yggdrasil/containers/variant.hpp>
+#include <yggdrasil/containers/vector.hpp>
+#include <yggdrasil/core/types.hpp>
 
 namespace tyr::formalism::datalog
 {
@@ -31,16 +32,16 @@ namespace tyr::formalism::datalog
 class VariableDependencyGraph
 {
 public:
-    explicit VariableDependencyGraph(ConjunctiveConditionView condition);
+    explicit VariableDependencyGraph(ConjunctiveConditionView<LiftedTag> condition);
 
-    const auto& unary() const noexcept { return m_unary_dependencies; }
-    const auto& binary() const noexcept { return m_binary_dependencies; }
+    [[nodiscard]] const auto& unary() const noexcept { return m_unary_dependencies; }
+    [[nodiscard]] const auto& binary() const noexcept { return m_binary_dependencies; }
 
     /**
      * Getters
      */
 
-    auto k() const noexcept { return m_k; }
+    [[nodiscard]] auto k() const noexcept { return m_k; }
 
 private:
     ygg::uint_t m_k;

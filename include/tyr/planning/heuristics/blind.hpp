@@ -18,6 +18,7 @@
 #ifndef TYR_PLANNING_HEURISTICS_BLIND_HPP_
 #define TYR_PLANNING_HEURISTICS_BLIND_HPP_
 
+#include "tyr/formalism/planning/repository.hpp"
 #include "tyr/planning/declarations.hpp"
 #include "tyr/planning/heuristic.hpp"
 
@@ -36,7 +37,7 @@ public:
 
     using Heuristic<Kind>::evaluate;
 
-    void set_goal([[maybe_unused]] ::tyr::formalism::planning::GroundConjunctiveConditionView goal) override {}
+    void set_goal([[maybe_unused]] formalism::planning::ConjunctiveConditionView<GroundTag> goal) override {}
 
     ygg::float_t evaluate([[maybe_unused]] const ygg::Builder<State<Kind>>& state) override { return ygg::float_t { 0 }; }
 

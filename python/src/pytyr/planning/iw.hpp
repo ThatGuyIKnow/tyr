@@ -29,7 +29,7 @@ class PyEventHandler : public EventHandler<Kind>
 public:
     using Base = EventHandler<Kind>;
 
-    NB_TRAMPOLINE(Base, 6);
+    NB_TRAMPOLINE(Base);
 
     void on_start_search(ygg::uint_t max_arity) override { NB_OVERRIDE_PURE(on_start_search, max_arity); }
 
@@ -38,18 +38,17 @@ public:
     void on_end_arity(ygg::uint_t arity, tyr::planning::SearchStatus status) override { NB_OVERRIDE_PURE(on_end_arity, arity, status); }
 
     void on_end_search(tyr::planning::SearchStatus status, const tyr::planning::Statistics& statistics) override
-    {
-        NB_OVERRIDE_PURE(on_end_search, status, statistics);
-    }
+    { NB_OVERRIDE_PURE(on_end_search, status, statistics); }
 
     void on_solved(ygg::uint_t arity) override { NB_OVERRIDE_PURE(on_solved, arity); }
 
-    const Statistics<Kind>& get_statistics() const override { NB_OVERRIDE_PURE(get_statistics); }
+    [[nodiscard]] const Statistics<Kind>& get_statistics() const override { NB_OVERRIDE_PURE(get_statistics); }
 };
 
 template<TaskKind Kind>
 void bind_statistics(nb::module_& m, const std::string& name)
 {
+    using namespace nb::literals;
     using T = Statistics<Kind>;
 
     auto cls = nb::class_<T>(m, name.c_str())  //
@@ -70,8 +69,7 @@ void bind_options(nb::module_& m, const std::string& name)
         .def_rw("start_node", &T::start_node)
         .def_rw("event_handler", &T::event_handler)
         .def_rw("goal_strategy", &T::goal_strategy)
-        .def_rw("max_num_states", &T::max_num_states)
-        .def_rw("max_time", &T::max_time)
+        .def_rw("search_budget", &T::search_budget)
         .def_rw("random_seed", &T::random_seed)
         .def_rw("shuffle_labeled_succ_nodes", &T::shuffle_labeled_succ_nodes);
 }
@@ -92,6 +90,7 @@ void bind_solver(nb::module_& m, const std::string& name)
 template<TaskKind Kind>
 void bind_find_solution(nb::module_& m, const std::string& py_name)
 {
+    using namespace nb::literals;
     m.def(
         py_name.c_str(),
         [](brfs::Solver<Kind>& brfs_solver, ygg::uint_t max_arity, const Options<Kind>& options) { return find_solution(brfs_solver, max_arity, options); },
@@ -104,6 +103,7 @@ void bind_find_solution(nb::module_& m, const std::string& py_name)
 template<TaskKind Kind>
 void bind_event_handler(nb::module_& m, const std::string& name)
 {
+    using namespace nb::literals;
     using T = EventHandler<Kind>;
 
     nb::class_<T, PyEventHandler<Kind>>(m, name.c_str())
@@ -119,6 +119,7 @@ void bind_event_handler(nb::module_& m, const std::string& name)
 template<TaskKind Kind>
 void bind_default_event_handler(nb::module_& m, const std::string& name)
 {
+    using namespace nb::literals;
     using T = DefaultEventHandler<Kind>;
 
     nb::class_<T, EventHandler<Kind>>(m, name.c_str())  //

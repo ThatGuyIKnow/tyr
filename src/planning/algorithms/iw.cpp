@@ -37,6 +37,9 @@
 namespace tyr::planning::iw
 {
 
+namespace
+{
+
 template<TaskKind Kind>
 class CombinedPruningStrategy : public PruningStrategy<Kind>
 {
@@ -46,9 +49,7 @@ public:
     bool should_prune_state(const StateView<Kind>& state) override { return m_lhs->should_prune_state(state) || m_rhs->should_prune_state(state); }
 
     bool should_prune_successor_state(const StateView<Kind>& state, const StateView<Kind>& succ_state, bool is_new_succ) override
-    {
-        return m_lhs->should_prune_successor_state(state, succ_state, is_new_succ) || m_rhs->should_prune_successor_state(state, succ_state, is_new_succ);
-    }
+    { return m_lhs->should_prune_successor_state(state, succ_state, is_new_succ) || m_rhs->should_prune_successor_state(state, succ_state, is_new_succ); }
 
     [[nodiscard]] PruningStrategyPtr<Kind> make_worker(ygg::Index<Worker> index) const override
     {
@@ -74,6 +75,8 @@ PruningStrategyPtr<Kind> make_pruning_strategy(ygg::uint_t arity, PruningStrateg
     return std::make_shared<CombinedPruningStrategy<Kind>>(std::move(base_pruning_strategy), std::move(novelty_pruning_strategy));
 }
 
+}
+
 template<TaskKind Kind>
 SearchResult<Kind> find_solution(brfs::Solver<Kind>& brfs_solver, ygg::uint_t max_arity, const Options<Kind>& options)
 {
@@ -95,11 +98,11 @@ SearchResult<Kind> find_solution(brfs::Solver<Kind>& brfs_solver, ygg::uint_t ma
     auto result = SearchResult<Kind> {};
     result.status = SearchStatus::EXHAUSTED;
     const auto search_start = std::chrono::steady_clock::now();
-    const auto max_time = options.max_time ? options.max_time : brfs_solver.options.max_time;
+    const auto max_time = options.search_budget.max_time ? options.search_budget.max_time : brfs_solver.options.search_budget.max_time;
     const auto deadline = max_time ? std::make_optional(search_start + *max_time) : std::optional<std::chrono::steady_clock::time_point> {};
     statistics.set_search_start_time_point(search_start);
 
-    const auto finalize = [&](SearchResult<Kind> result)
+    const auto finalize = [&](SearchResult<Kind> search_result)
     {
         const auto search_end = std::chrono::steady_clock::now();
         statistics.set_search_end_time_point(search_end);
@@ -108,10 +111,10 @@ SearchResult<Kind> find_solution(brfs::Solver<Kind>& brfs_solver, ygg::uint_t ma
             worker.set_search_start_time_point(search_start);
             worker.set_search_end_time_point(search_end);
         }
-        result.statistics = statistics;
-        result.worker_statistics = worker_statistics;
-        event_handler->on_end_search(result.status, result.statistics);
-        return result;
+        search_result.statistics = statistics;
+        search_result.worker_statistics = worker_statistics;
+        event_handler->on_end_search(search_result.status, search_result.statistics);
+        return search_result;
     };
 
     event_handler->on_start_search(max_arity);
@@ -131,11 +134,11 @@ SearchResult<Kind> find_solution(brfs::Solver<Kind>& brfs_solver, ygg::uint_t ma
         local_brfs_solver.options.start_node = options.start_node ? options.start_node : brfs_solver.options.start_node;
         local_brfs_solver.options.pruning_strategy = make_pruning_strategy<Kind>(arity, brfs_solver.options.pruning_strategy);
         local_brfs_solver.options.goal_strategy = options.goal_strategy ? options.goal_strategy : brfs_solver.options.goal_strategy;
-        local_brfs_solver.options.max_num_states = options.max_num_states;
+        local_brfs_solver.options.search_budget.max_num_states = options.search_budget.max_num_states;
         local_brfs_solver.options.random_seed = options.random_seed;
         local_brfs_solver.options.shuffle_labeled_succ_nodes = options.shuffle_labeled_succ_nodes;
 
-        local_brfs_solver.options.max_time =
+        local_brfs_solver.options.search_budget.max_time =
             deadline ? std::make_optional(std::max(*deadline - std::chrono::steady_clock::now(), std::chrono::steady_clock::duration::zero())) :
                        std::optional<std::chrono::steady_clock::duration> {};
         result = local_brfs_solver.solve();

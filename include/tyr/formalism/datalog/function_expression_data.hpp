@@ -20,8 +20,12 @@
 
 #include "tyr/formalism/datalog/arithmetic_operator_data.hpp"
 #include "tyr/formalism/datalog/declarations.hpp"
-#include "tyr/formalism/datalog/function_term_index.hpp"
+#include "tyr/formalism/planning/function_expression_data.hpp"
 
+#include <tuple>
+#include <utility>
+#include <variant>
+#include <yggdrasil/containers/variant.hpp>
 #include <yggdrasil/core/types.hpp>
 #include <yggdrasil/core/types_utils.hpp>
 
@@ -29,62 +33,103 @@ namespace ygg
 {
 
 template<>
-struct Data<::tyr::formalism::datalog::FunctionExpression>
+struct Data<::tyr::formalism::datalog::FunctionExpression<::tyr::LiftedTag>>
 {
     using Variant = ::cista::offset::variant<ygg::float_t,
-                                             ygg::Data<::tyr::formalism::datalog::ArithmeticOperator<ygg::Data<::tyr::formalism::datalog::FunctionExpression>>>,
-                                             ygg::Index<::tyr::formalism::datalog::FunctionTerm<::tyr::formalism::StaticTag>>,
-                                             ygg::Index<::tyr::formalism::datalog::FunctionTerm<::tyr::formalism::FluentTag>>>;
+                                             ygg::Data<::tyr::formalism::datalog::ArithmeticOperator<::tyr::LiftedTag>>,
+                                             ygg::Index<::tyr::formalism::datalog::FunctionTerm<::tyr::LiftedTag, ::tyr::formalism::StaticTag>>,
+                                             ygg::Index<::tyr::formalism::datalog::FunctionTerm<::tyr::LiftedTag, ::tyr::formalism::FluentTag>>>;
 
-    Variant value;
+    Variant variant;
 
     template<typename C>
-    using ViewVariant =
-        std::variant<ygg::float_t,
-                     ::ygg::View<ygg::Data<::tyr::formalism::datalog::ArithmeticOperator<ygg::Data<::tyr::formalism::datalog::FunctionExpression>>>, C>,
-                     ::ygg::View<ygg::Index<::tyr::formalism::datalog::FunctionTerm<::tyr::formalism::StaticTag>>, C>,
-                     ::ygg::View<ygg::Index<::tyr::formalism::datalog::FunctionTerm<::tyr::formalism::FluentTag>>, C>>;
+    using ViewVariant = ::ygg::ViewVariant<Variant, C>;
 
     Data() = default;
-    Data(Variant value_) : value(value_) {}
+    Data(Variant variant_) : variant(std::move(variant_)) {}
     template<typename C>
-    Data(ViewVariant<C> value_) :
-        value(std::visit(
-            [](const auto& arg) -> Variant
+    Data(const ViewVariant<C>& variant_) :
+        variant(std::visit(
+            []<typename Alternative>(const Alternative& arg) -> Variant
             {
-                using Alternative = std::decay_t<decltype(arg)>;
-
                 if constexpr (std::is_same_v<Alternative, ygg::float_t>)
                     return Variant(arg);
-                else if constexpr (
-                    std::is_same_v<
-                        Alternative,
-                        ::ygg::View<ygg::Data<::tyr::formalism::datalog::ArithmeticOperator<ygg::Data<::tyr::formalism::datalog::FunctionExpression>>>, C>>)
+                else if constexpr (ygg::is_view_of_v<Alternative, ygg::Data<::tyr::formalism::datalog::ArithmeticOperator<::tyr::LiftedTag>>>)
                     return Variant(arg.get_data());
-                else if constexpr (std::is_same_v<Alternative,
-                                                  ::ygg::View<ygg::Index<::tyr::formalism::datalog::FunctionTerm<::tyr::formalism::StaticTag>>, C>>)
-                    return Variant(arg.get_index());
-                else if constexpr (std::is_same_v<Alternative,
-                                                  ::ygg::View<ygg::Index<::tyr::formalism::datalog::FunctionTerm<::tyr::formalism::FluentTag>>, C>>)
+                else if constexpr (ygg::is_view_of_v<Alternative,
+                                                     ygg::Index<::tyr::formalism::datalog::FunctionTerm<::tyr::LiftedTag, ::tyr::formalism::StaticTag>>>
+                                   || ygg::is_view_of_v<Alternative,
+                                                        ygg::Index<::tyr::formalism::datalog::FunctionTerm<::tyr::LiftedTag, ::tyr::formalism::FluentTag>>>)
                     return Variant(arg.get_index());
                 else
                     static_assert(ygg::dependent_false<Alternative>::value, "Missing case");
             },
-            value_))
+            variant_))
     {
     }
     Data(const Data& other) = default;
     Data& operator=(const Data& other) = default;
     Data(Data&& other) = default;
     Data& operator=(Data&& other) = default;
+    ~Data() = default;
 
-    void clear() noexcept { ygg::clear(value); }
-
-    auto cista_members() const noexcept { return std::tie(value); }
-    auto identifying_members() const noexcept { return std::tie(value); }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::variant> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::variant> {}; }
+    void clear() noexcept { ygg::clear_members(*this); }
 };
 
-static_assert(!ygg::uses_trivial_storage_v<::tyr::formalism::datalog::FunctionExpression>);
+static_assert(!ygg::uses_trivial_storage_v<::tyr::formalism::datalog::FunctionExpression<::tyr::LiftedTag>>);
+
+template<>
+struct Data<::tyr::formalism::datalog::FunctionExpression<::tyr::GroundTag>>
+{
+    using Variant = ::cista::offset::variant<ygg::float_t,
+                                             ygg::Data<::tyr::formalism::datalog::ArithmeticOperator<::tyr::GroundTag>>,
+                                             ygg::Index<::tyr::formalism::datalog::FunctionTerm<::tyr::GroundTag, ::tyr::formalism::StaticTag>>,
+                                             ygg::Index<::tyr::formalism::datalog::FunctionTerm<::tyr::GroundTag, ::tyr::formalism::FluentTag>>,
+                                             ygg::Index<::tyr::formalism::datalog::FunctionTerm<::tyr::GroundTag, ::tyr::formalism::AuxiliaryTag>>>;
+
+    Variant variant;
+
+    template<typename C>
+    using ViewVariant = ::ygg::ViewVariant<Variant, C>;
+
+    Data() = default;
+    Data(Variant variant_) : variant(std::move(variant_)) {}
+    template<typename C>
+    Data(const ViewVariant<C>& variant_) :
+        variant(std::visit(
+            []<typename Alternative>(const Alternative& arg) -> Variant
+            {
+                if constexpr (std::is_same_v<Alternative, ygg::float_t>)
+                    return Variant(arg);
+                else if constexpr (ygg::is_view_of_v<Alternative, ygg::Data<::tyr::formalism::datalog::ArithmeticOperator<::tyr::GroundTag>>>)
+                    return Variant(arg.get_data());
+                else if constexpr (ygg::is_view_of_v<Alternative,
+                                                     ygg::Index<::tyr::formalism::datalog::FunctionTerm<::tyr::GroundTag, ::tyr::formalism::StaticTag>>>
+                                   || ygg::is_view_of_v<Alternative,
+                                                        ygg::Index<::tyr::formalism::datalog::FunctionTerm<::tyr::GroundTag, ::tyr::formalism::FluentTag>>>
+                                   || ygg::is_view_of_v<Alternative,
+                                                        ygg::Index<::tyr::formalism::datalog::FunctionTerm<::tyr::GroundTag, ::tyr::formalism::AuxiliaryTag>>>)
+                    return Variant(arg.get_index());
+                else
+                    static_assert(ygg::dependent_false<Alternative>::value, "Missing case");
+            },
+            variant_))
+    {
+    }
+    Data(const Data& other) = default;
+    Data& operator=(const Data& other) = default;
+    Data(Data&& other) = default;
+    Data& operator=(Data&& other) = default;
+    ~Data() = default;
+
+    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::variant> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::variant> {}; }
+    void clear() noexcept { ygg::clear_members(*this); }
+};
+
+static_assert(!ygg::uses_trivial_storage_v<::tyr::formalism::datalog::FunctionExpression<::tyr::GroundTag>>);
 
 }
 

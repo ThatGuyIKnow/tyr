@@ -24,7 +24,6 @@
 #include "tyr/datalog/policies/cost.hpp"
 #include "tyr/datalog/policies/numeric_support.hpp"
 #include "tyr/datalog/policies/termination.hpp"
-#include "tyr/planning/action_executor.hpp"
 
 #include <cassert>
 #include <tuple>
@@ -44,8 +43,8 @@ struct FFRPGHeuristic<Kind>::Impl :
 {
     using Base =
         detail::RPGEvaluator<Impl, Kind, datalog::MinCostAnnotationPolicy<datalog::SumAggregation>, datalog::TerminationPolicy<datalog::SumAggregation>>;
-    using PredicateHead = ::tyr::formalism::datalog::PredicateBindingView<::tyr::formalism::FluentTag>;
-    using FunctionHead = ::tyr::formalism::datalog::FunctionBindingView<::tyr::formalism::FluentTag>;
+    using PredicateHead = formalism::datalog::PredicateBindingView<formalism::FluentTag>;
+    using FunctionHead = formalism::datalog::FunctionBindingIndex<formalism::FluentTag>;
     using NumericSupportWorkspace = datalog::NumericSupportSelectorWorkspace;
 
     struct NumericCertificate : ygg::comparison::Mixin<NumericCertificate>
@@ -53,28 +52,27 @@ struct FFRPGHeuristic<Kind>::Impl :
         FunctionHead head;
         ygg::ClosedInterval<ygg::float_t> interval;
 
-        NumericCertificate(FunctionHead head, ygg::ClosedInterval<ygg::float_t> interval) : head(head), interval(interval) {}
+        NumericCertificate(FunctionHead head_, ygg::ClosedInterval<ygg::float_t> interval_) : head(head_), interval(std::move(interval_)) {}
 
-        auto identifying_members() const noexcept { return std::tie(head, interval); }
+        static constexpr auto identifying_members() noexcept { return ygg::Members<&NumericCertificate::head, &NumericCertificate::interval> {}; }
     };
 
     Impl(TaskPtr<Kind> task, ygg::ExecutionContextPtr execution_context, CostMode cost_mode) :
         Base(std::move(task), std::move(execution_context), cost_mode),
-        m_predicate_markings(this->m_workspace.facts.fact_sets.predicate.get_sets().size())
+        m_predicate_markings(this->workspace().facts.fact_sets.predicate.get_sets().size())
     {
     }
 
     Impl(const Impl& source, ygg::ExecutionContextPtr execution_context) :
         Base(source, std::move(execution_context)),
-        m_predicate_markings(this->m_workspace.facts.fact_sets.predicate.get_sets().size())
+        m_predicate_markings(this->workspace().facts.fact_sets.predicate.get_sets().size())
     {
     }
 
-    void set_goal(::tyr::formalism::planning::GroundConjunctiveConditionView goal)
+    void set_goal(formalism::planning::ConjunctiveConditionView<GroundTag> goal)
     {
         Base::set_goal(goal);
         m_relaxed_plan.clear();
-        m_preferred_actions.clear();
     }
 
     ygg::float_t evaluate(const ygg::Builder<State<Kind>>& state)
@@ -82,92 +80,85 @@ struct FFRPGHeuristic<Kind>::Impl :
         m_numeric_support_workspace.clear();
         m_numeric_markings.clear();
         m_relaxed_plan.clear();
-        m_preferred_actions.clear();
         return Base::evaluate(state);
     }
 
-    ygg::float_t compute_result(const ygg::Builder<State<Kind>>& state)
+    ygg::float_t compute_result(const ygg::Builder<State<Kind>>&)
     {
         for (auto& bits : m_predicate_markings)
             bits.reset();
 
-        const auto state_context = StateContext<Kind>(this->get_task(), state, ygg::float_t(0));
-        if (const auto& goal = this->m_workspace.tp.get_goal())
+        if (const auto& goal = this->workspace().tp.get_goal())
         {
-            for (const auto literal : goal->template get_literals<::tyr::formalism::FluentTag>())
+            for (const auto literal : goal->template get_literals<formalism::FluentTag>())
             {
                 assert(literal.get_polarity());
-                extract_relaxed_plan(literal.get_atom().get_row(), state_context);
+                extract_relaxed_plan(literal.get_atom().get_row());
             }
 
             for (const auto constraint : goal->get_numeric_constraints())
-                extract_numeric_constraint_support(constraint, state_context);
+                extract_numeric_constraint_support(constraint);
         }
 
-        return ygg::float_t(m_relaxed_plan.size());
+        return static_cast<ygg::float_t>(m_relaxed_plan.size());
     }
 
-    const auto& get_preferred_actions() const noexcept { return m_preferred_actions; }
+    const auto& get_relaxed_plan() const noexcept { return m_relaxed_plan; }
 
 private:
-    void extract_relaxed_plan(PredicateHead head, const StateContext<Kind>& state_context)
+    void extract_relaxed_plan(PredicateHead head)
     {
         if (mark(m_predicate_markings, head.get_index().relation, head.get_index().row))
             return;
 
-        const auto* annotation = this->m_workspace.annotations.find(head);
+        const auto* annotation = this->workspace().annotations.find(head.get_index());
         if (!annotation)
             return;
 
         const auto* witness = std::get_if<datalog::WitnessAnnotation<>>(annotation);
         if (witness)
-            extract_relaxed_plan(*witness, state_context);
+            extract_relaxed_plan(*witness);
     }
 
-    void extract_relaxed_plan(FunctionHead head, ygg::ClosedInterval<ygg::float_t> interval, const StateContext<Kind>& state_context)
+    void extract_relaxed_plan(FunctionHead head, const ygg::ClosedInterval<ygg::float_t>& interval)
     {
         if (!m_numeric_markings.emplace(head, interval).second)
             return;
 
-        const auto* annotation = this->m_workspace.numeric_annotations.find(head, interval);
+        const auto* annotation = this->workspace().numeric_annotations.find(head, interval);
         if (!annotation)
             return;
 
-        const auto* witness = std::get_if<datalog::WitnessAnnotation<::tyr::formalism::FunctionTag>>(annotation);
+        const auto* witness = std::get_if<datalog::WitnessAnnotation<formalism::FunctionTag>>(annotation);
         if (witness)
-            extract_relaxed_plan(*witness, state_context);
+            extract_relaxed_plan(*witness);
     }
 
-    void extract_numeric_constraint_support(::tyr::formalism::datalog::GroundBooleanOperatorView constraint, const StateContext<Kind>& state_context)
+    void extract_numeric_constraint_support(formalism::datalog::BooleanOperatorView<GroundTag> constraint)
     {
-        const auto& selector = this->m_workspace.get_numeric_support_selector();
-        selector.for_each_constraint_support(constraint,
+        const auto& selector = this->workspace().get_numeric_support_selector();
+        selector.for_each_constraint_support(std::move(constraint),
                                              m_numeric_support_workspace.selection,
                                              datalog::SumAggregation {},
-                                             [&](const auto head, const auto interval, const auto&) { extract_relaxed_plan(head, interval, state_context); });
+                                             [&](const auto head, const auto& interval, const auto&) { extract_relaxed_plan(head, interval); });
     }
 
-    template<::tyr::formalism::RelationKind R>
-    void extract_relaxed_plan(const datalog::WitnessAnnotation<R>& witness, const StateContext<Kind>& state_context)
+    template<formalism::RelationKind R>
+    void extract_relaxed_plan(const datalog::WitnessAnnotation<R>& witness)
     {
         if (const auto action = this->get_action(witness))
-        {
-            const auto action_binding = this->get_action_binding(*action);
-            m_relaxed_plan.insert(action_binding);
-            if (this->is_action_applicable(m_executor, *action, state_context))
-                m_preferred_actions.insert(action_binding);
-        }
+            m_relaxed_plan.insert(this->get_action_binding(*action));
 
-        this->for_each_witness_precondition(witness, [&](const auto precondition) { extract_relaxed_plan(precondition, state_context); });
+        this->for_each_witness_precondition(witness, [&](const auto precondition) { extract_relaxed_plan(precondition); });
         for (const auto& support : witness.get_numeric_supports())
-            extract_relaxed_plan(support.get_key(), support.get_interval(), state_context);
+            extract_relaxed_plan(support.get_key(), support.get_interval());
     }
 
     template<typename Relation, typename Row>
     static bool mark(std::vector<boost::dynamic_bitset<>>& markings, Relation relation, Row row)
     {
-        const auto relation_index = ygg::uint_t(relation);
-        const auto row_index = ygg::uint_t(row);
+        const auto relation_index = static_cast<ygg::uint_t>(relation);
+        const auto row_index = static_cast<ygg::uint_t>(row);
         assert(relation_index < markings.size());
         if (ygg::test(row_index, markings[relation_index]))
             return true;
@@ -177,10 +168,8 @@ private:
 
     std::vector<boost::dynamic_bitset<>> m_predicate_markings;
     ygg::UnorderedSet<NumericCertificate> m_numeric_markings;
-    ActionExecutor m_executor;
     NumericSupportWorkspace m_numeric_support_workspace;
-    ygg::UnorderedSet<::tyr::formalism::planning::ActionBindingView> m_relaxed_plan;
-    ygg::UnorderedSet<::tyr::formalism::planning::ActionBindingView> m_preferred_actions;
+    ygg::UnorderedSet<formalism::planning::ActionBindingView> m_relaxed_plan;
 };
 
 template<TaskKind Kind>
@@ -205,39 +194,27 @@ FFRPGHeuristic<Kind>& FFRPGHeuristic<Kind>::operator=(FFRPGHeuristic&&) noexcept
 
 template<TaskKind Kind>
 FFRPGHeuristicPtr<Kind> FFRPGHeuristic<Kind>::create(TaskPtr<Kind> task, ygg::ExecutionContextPtr execution_context, CostMode cost_mode)
-{
-    return std::make_shared<FFRPGHeuristic<Kind>>(std::move(task), std::move(execution_context), cost_mode);
-}
+{ return std::make_shared<FFRPGHeuristic<Kind>>(std::move(task), std::move(execution_context), cost_mode); }
 
 template<TaskKind Kind>
-void FFRPGHeuristic<Kind>::set_goal(::tyr::formalism::planning::GroundConjunctiveConditionView goal)
-{
-    m_impl->set_goal(goal);
-}
+void FFRPGHeuristic<Kind>::set_goal(formalism::planning::ConjunctiveConditionView<GroundTag> goal)
+{ m_impl->set_goal(goal); }
 
 template<TaskKind Kind>
 ygg::float_t FFRPGHeuristic<Kind>::evaluate(const ygg::Builder<State<Kind>>& state)
-{
-    return m_impl->evaluate(state);
-}
+{ return m_impl->evaluate(state); }
 
 template<TaskKind Kind>
 HeuristicPtr<Kind> FFRPGHeuristic<Kind>::make_worker(ygg::ExecutionContextPtr execution_context) const
-{
-    return HeuristicPtr<Kind>(new FFRPGHeuristic(std::make_unique<Impl>(*m_impl, std::move(execution_context))));
-}
+{ return HeuristicPtr<Kind>(new FFRPGHeuristic(std::make_unique<Impl>(*m_impl, std::move(execution_context)))); }
 
 template<TaskKind Kind>
-const ygg::UnorderedSet<::tyr::formalism::planning::ActionBindingView>& FFRPGHeuristic<Kind>::get_preferred_actions()
-{
-    return m_impl->get_preferred_actions();
-}
+const ygg::UnorderedSet<formalism::planning::ActionBindingView>* FFRPGHeuristic<Kind>::get_relaxed_plan() const
+{ return &m_impl->get_relaxed_plan(); }
 
 template<TaskKind Kind>
 void FFRPGHeuristic<Kind>::print_summary(size_t verbosity) const
-{
-    m_impl->print_summary(verbosity);
-}
+{ m_impl->print_summary(verbosity); }
 
 template class FFRPGHeuristic<GroundTag>;
 template class FFRPGHeuristic<LiftedTag>;

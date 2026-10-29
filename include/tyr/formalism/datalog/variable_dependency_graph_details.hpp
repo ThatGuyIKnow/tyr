@@ -18,18 +18,19 @@
 #ifndef TYR_FORMALISM_DATALOG_VARIABLE_DEPENDENCY_GRAPH_DETAILS_HPP_
 #define TYR_FORMALISM_DATALOG_VARIABLE_DEPENDENCY_GRAPH_DETAILS_HPP_
 
-#include <yggdrasil/core/config.hpp>
 #include "tyr/formalism/declarations.hpp"
 
 #include <boost/dynamic_bitset.hpp>
+#include <cstddef>
+#include <yggdrasil/core/config.hpp>
 
 namespace tyr::formalism::datalog::details
 {
 
-template<FactKind T, PolarityKind P, typename Dep>
+template<FactKind F, PolarityKind P, typename Dep>
 decltype(auto) select_literal_dependency(Dep&& dep) noexcept
 {
-    if constexpr (std::is_same_v<T, StaticTag>)
+    if constexpr (std::is_same_v<F, StaticTag>)
     {
         if constexpr (std::is_same_v<P, PositiveTag>)
             return (std::forward<Dep>(dep).static_positive_literal);
@@ -38,7 +39,7 @@ decltype(auto) select_literal_dependency(Dep&& dep) noexcept
         else
             static_assert(ygg::dependent_false<P>::value, "Missing case");
     }
-    else if constexpr (std::is_same_v<T, FluentTag>)
+    else if constexpr (std::is_same_v<F, FluentTag>)
     {
         if constexpr (std::is_same_v<P, PositiveTag>)
             return (std::forward<Dep>(dep).fluent_positive_literal);
@@ -49,15 +50,13 @@ decltype(auto) select_literal_dependency(Dep&& dep) noexcept
     }
     else
     {
-        static_assert(ygg::dependent_false<T>::value, "Missing case");
+        static_assert(ygg::dependent_false<F>::value, "Missing case");
     }
 }
 
 template<typename Dep>
 decltype(auto) select_numeric_dependency(Dep&& dep) noexcept
-{
-    return (std::forward<Dep>(dep).numeric_constraint);
-}
+{ return (std::forward<Dep>(dep).numeric_constraint); }
 
 struct UnaryDependencies
 {
@@ -75,32 +74,30 @@ struct UnaryDependencies
      * get_
      */
 
-    template<FactKind T, PolarityKind P>
-    const auto& get_literal_dependency() const noexcept
-    {
-        return details::select_literal_dependency<T, P>(*this);
-    }
+    template<FactKind F, PolarityKind P>
+    [[nodiscard]] const auto& get_literal_dependency() const noexcept
+    { return details::select_literal_dependency<F, P>(*this); }
 
-    const auto& get_numeric_dependency() const noexcept { return details::select_numeric_dependency(*this); }
+    [[nodiscard]] const auto& get_numeric_dependency() const noexcept { return details::select_numeric_dependency(*this); }
 
     /**
      * has_
      */
 
-    template<FactKind T, PolarityKind P>
-    bool has_literal_dependency(ygg::uint_t p) const noexcept
+    template<FactKind F, PolarityKind P>
+    [[nodiscard]] bool has_literal_dependency(ygg::uint_t p) const noexcept
     {
         assert(p < k);
-        return get_literal_dependency<T, P>().test(p);
+        return get_literal_dependency<F, P>().test(p);
     }
 
-    bool has_numeric_dependency(ygg::uint_t p) const noexcept
+    [[nodiscard]] bool has_numeric_dependency(ygg::uint_t p) const noexcept
     {
         assert(p < k);
         return numeric_constraint.test(p);
     }
 
-    bool has_dependency(ygg::uint_t p) const noexcept
+    [[nodiscard]] bool has_dependency(ygg::uint_t p) const noexcept
     {
         return has_literal_dependency<StaticTag, PositiveTag>(p) || has_literal_dependency<StaticTag, NegativeTag>(p)
                || has_literal_dependency<FluentTag, PositiveTag>(p) || has_literal_dependency<FluentTag, NegativeTag>(p) || has_numeric_dependency(p);
@@ -119,15 +116,15 @@ struct BinaryDependencies
 {
     explicit BinaryDependencies(ygg::uint_t k_) :
         k(k_),
-        static_positive_literal(k_ * k_),
-        static_negative_literal(k_ * k_),
-        fluent_positive_literal(k_ * k_),
-        fluent_negative_literal(k_ * k_),
-        numeric_constraint(k_ * k_)
+        static_positive_literal(static_cast<std::size_t>(k_) * k_),
+        static_negative_literal(static_cast<std::size_t>(k_) * k_),
+        fluent_positive_literal(static_cast<std::size_t>(k_) * k_),
+        fluent_negative_literal(static_cast<std::size_t>(k_) * k_),
+        numeric_constraint(static_cast<std::size_t>(k_) * k_)
     {
     }
 
-    ygg::uint_t get_index(ygg::uint_t pi, ygg::uint_t pj) const noexcept
+    [[nodiscard]] ygg::uint_t get_index(ygg::uint_t pi, ygg::uint_t pj) const noexcept
     {
         assert(pi < k && pj < k);
         return pi * k + pj;
@@ -137,27 +134,23 @@ struct BinaryDependencies
      * get_
      */
 
-    template<FactKind T, PolarityKind P>
-    const auto& get_literal_dependency() const noexcept
-    {
-        return details::select_literal_dependency<T, P>(*this);
-    }
+    template<FactKind F, PolarityKind P>
+    [[nodiscard]] const auto& get_literal_dependency() const noexcept
+    { return details::select_literal_dependency<F, P>(*this); }
 
-    const auto& get_numeric_dependency() const noexcept { return details::select_numeric_dependency(*this); }
+    [[nodiscard]] const auto& get_numeric_dependency() const noexcept { return details::select_numeric_dependency(*this); }
 
     /**
      * has_
      */
 
-    template<FactKind T, PolarityKind P>
-    bool has_literal_dependency(ygg::uint_t pi, ygg::uint_t pj) const noexcept
-    {
-        return get_literal_dependency<T, P>().test(get_index(pi, pj));
-    }
+    template<FactKind F, PolarityKind P>
+    [[nodiscard]] bool has_literal_dependency(ygg::uint_t pi, ygg::uint_t pj) const noexcept
+    { return get_literal_dependency<F, P>().test(get_index(pi, pj)); }
 
-    bool has_numeric_dependency(ygg::uint_t pi, ygg::uint_t pj) const noexcept { return numeric_constraint.test(get_index(pi, pj)); }
+    [[nodiscard]] bool has_numeric_dependency(ygg::uint_t pi, ygg::uint_t pj) const noexcept { return numeric_constraint.test(get_index(pi, pj)); }
 
-    bool has_dependency(ygg::uint_t pi, ygg::uint_t pj) const noexcept
+    [[nodiscard]] bool has_dependency(ygg::uint_t pi, ygg::uint_t pj) const noexcept
     {
         return has_literal_dependency<StaticTag, PositiveTag>(pi, pj) || has_literal_dependency<StaticTag, NegativeTag>(pi, pj)
                || has_literal_dependency<FluentTag, PositiveTag>(pi, pj) || has_literal_dependency<FluentTag, NegativeTag>(pi, pj)

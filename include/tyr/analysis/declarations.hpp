@@ -18,20 +18,17 @@
 #ifndef TYR_ANALYSIS_DECLARATIONS_HPP_
 #define TYR_ANALYSIS_DECLARATIONS_HPP_
 
-#include "tyr/algorithms/kckp/kckp.hpp"
 #include "tyr/analysis/variable_domain.hpp"
-#include "tyr/formalism/datalog/indices.hpp"
-#include "tyr/formalism/datalog/repository.hpp"
+#include "tyr/formalism/datalog/declarations.hpp"
 #include "tyr/formalism/declarations.hpp"
-#include "tyr/formalism/object_index.hpp"
-#include "tyr/formalism/planning/indices.hpp"
-#include "tyr/formalism/planning/repository.hpp"
+#include "tyr/formalism/planning/declarations.hpp"
 
 #include <vector>
 #include <yggdrasil/containers/associative_containers.hpp>
 #include <yggdrasil/containers/optional.hpp>
 #include <yggdrasil/containers/variant.hpp>
 #include <yggdrasil/containers/vector.hpp>
+#include <yggdrasil/core/dependent_false.hpp>
 #include <yggdrasil/core/types.hpp>
 #include <yggdrasil/core/types_utils.hpp>
 #include <yggdrasil/semantics/equal_to.hpp>
@@ -60,38 +57,30 @@ using SimpleScopedDomainMap = ygg::UnorderedMap<ygg::Index<Element>, VariableDom
 template<typename Element>
 using ScopedDomainMap = ygg::UnorderedMap<ygg::Index<Element>, SimpleScopedDomain<Element>>;
 
-template<::tyr::formalism::FactKind T>
-using PredicateDomainMap = SimpleScopedDomainMap<::tyr::formalism::Predicate<T>>;
+template<formalism::FactKind T>
+using PredicateDomainMap = SimpleScopedDomainMap<formalism::Predicate<T>>;
 
-template<::tyr::formalism::FactKind T>
-using FunctionDomainMap = SimpleScopedDomainMap<::tyr::formalism::Function<T>>;
+template<formalism::FactKind T>
+using FunctionDomainMap = SimpleScopedDomainMap<formalism::Function<T>>;
 
-template<::tyr::formalism::RelationKind R>
-using RuleDomainMap = ScopedDomainMap<::tyr::formalism::datalog::Rule<R>>;
+template<formalism::RelationKind R>
+using RuleDomainMap = ScopedDomainMap<formalism::datalog::Rule<LiftedTag, R>>;
 
-using AxiomDomainMap = ScopedDomainMap<::tyr::formalism::planning::Axiom>;
+using AxiomDomainMap = ScopedDomainMap<formalism::planning::Axiom<LiftedTag>>;
 
-using ConjunctiveConditionDomain = SimpleScopedDomain<::tyr::formalism::planning::ConjunctiveCondition>;
+using ConjunctiveConditionDomain = SimpleScopedDomain<formalism::planning::ConjunctiveCondition<LiftedTag>>;
 
-using ConjunctiveEffectDomain = SimpleScopedDomain<::tyr::formalism::planning::ConjunctiveEffect>;
+using ConjunctiveEffectDomain = SimpleScopedDomain<formalism::planning::ConjunctiveEffect<LiftedTag>>;
 
 struct ConditionalEffectDomainData
 {
     ConjunctiveConditionDomain condition_domain;
     ConjunctiveEffectDomain effect_domain;
-    kckp::Graph compatibility_graph;
-    std::vector<std::vector<kckp::Vertex>> object_to_vertex;
 };
 
-using ConditionalEffectDomain = Scoped<::tyr::formalism::planning::ConditionalEffect, ConditionalEffectDomainData>;
+using ConditionalEffectDomain = Scoped<formalism::planning::ConditionalEffect<LiftedTag>, ConditionalEffectDomainData>;
 
-using ConditionalEffectDomainMap = ygg::UnorderedMap<ygg::Index<::tyr::formalism::planning::ConditionalEffect>, ConditionalEffectDomain>;
-
-struct CompatibilityWorkspace
-{
-    kckp::Workspace kckp;
-    std::vector<kckp::Vertex> vertex_prefix;
-};
+using ConditionalEffectDomainMap = ygg::UnorderedMap<ygg::Index<formalism::planning::ConditionalEffect<LiftedTag>>, ConditionalEffectDomain>;
 
 struct ActionDomainData
 {
@@ -99,36 +88,36 @@ struct ActionDomainData
     ConditionalEffectDomainMap effect_domains;
 };
 
-using ActionDomain = Scoped<::tyr::formalism::planning::Action, ActionDomainData>;
+using ActionDomain = Scoped<formalism::planning::Action<LiftedTag>, ActionDomainData>;
 
-using ActionDomainMap = ygg::UnorderedMap<ygg::Index<::tyr::formalism::planning::Action>, ActionDomain>;
+using ActionDomainMap = ygg::UnorderedMap<ygg::Index<formalism::planning::Action<LiftedTag>>, ActionDomain>;
 
 struct ProgramVariableDomains
 {
-    PredicateDomainMap<::tyr::formalism::StaticTag> static_predicate_domains;
-    PredicateDomainMap<::tyr::formalism::FluentTag> fluent_predicate_domains;
-    FunctionDomainMap<::tyr::formalism::StaticTag> static_function_domains;
-    FunctionDomainMap<::tyr::formalism::FluentTag> fluent_function_domains;
-    RuleDomainMap<::tyr::formalism::PredicateTag> predicate_rule_domains;
-    RuleDomainMap<::tyr::formalism::FunctionTag> function_rule_domains;
+    PredicateDomainMap<formalism::StaticTag> static_predicate_domains;
+    PredicateDomainMap<formalism::FluentTag> fluent_predicate_domains;
+    FunctionDomainMap<formalism::StaticTag> static_function_domains;
+    FunctionDomainMap<formalism::FluentTag> fluent_function_domains;
+    RuleDomainMap<formalism::PredicateTag> predicate_rule_domains;
+    RuleDomainMap<formalism::FunctionTag> function_rule_domains;
 
-    template<::tyr::formalism::RelationKind R>
+    template<formalism::RelationKind R>
     auto& get_rule_domains() noexcept
     {
-        if constexpr (std::same_as<R, ::tyr::formalism::PredicateTag>)
+        if constexpr (std::same_as<R, formalism::PredicateTag>)
             return predicate_rule_domains;
-        else if constexpr (std::same_as<R, ::tyr::formalism::FunctionTag>)
+        else if constexpr (std::same_as<R, formalism::FunctionTag>)
             return function_rule_domains;
         else
             static_assert(ygg::dependent_false<R>::value, "Missing case");
     }
 
-    template<::tyr::formalism::RelationKind R>
+    template<formalism::RelationKind R>
     const auto& get_rule_domains() const noexcept
     {
-        if constexpr (std::same_as<R, ::tyr::formalism::PredicateTag>)
+        if constexpr (std::same_as<R, formalism::PredicateTag>)
             return predicate_rule_domains;
-        else if constexpr (std::same_as<R, ::tyr::formalism::FunctionTag>)
+        else if constexpr (std::same_as<R, formalism::FunctionTag>)
             return function_rule_domains;
         else
             static_assert(ygg::dependent_false<R>::value, "Missing case");
@@ -137,11 +126,11 @@ struct ProgramVariableDomains
 
 struct TaskVariableDomains
 {
-    PredicateDomainMap<::tyr::formalism::StaticTag> static_predicate_domains;
-    PredicateDomainMap<::tyr::formalism::FluentTag> fluent_predicate_domains;
-    PredicateDomainMap<::tyr::formalism::DerivedTag> derived_predicate_domains;
-    FunctionDomainMap<::tyr::formalism::StaticTag> static_function_domains;
-    FunctionDomainMap<::tyr::formalism::FluentTag> fluent_function_domains;
+    PredicateDomainMap<formalism::StaticTag> static_predicate_domains;
+    PredicateDomainMap<formalism::FluentTag> fluent_predicate_domains;
+    PredicateDomainMap<formalism::DerivedTag> derived_predicate_domains;
+    FunctionDomainMap<formalism::StaticTag> static_function_domains;
+    FunctionDomainMap<formalism::FluentTag> fluent_function_domains;
     ActionDomainMap action_domains;
     AxiomDomainMap axiom_domains;
 };
@@ -160,15 +149,15 @@ struct ScopedView
 template<typename C>
 struct VariableDomainView
 {
-    std::vector<ygg::View<ygg::Index<::tyr::formalism::Object>, C>> objects;
+    std::vector<ygg::View<ygg::Index<formalism::Object>, C>> objects;
 
     auto begin() noexcept { return objects.begin(); }
     auto end() noexcept { return objects.end(); }
-    auto begin() const noexcept { return objects.begin(); }
-    auto end() const noexcept { return objects.end(); }
+    [[nodiscard]] auto begin() const noexcept { return objects.begin(); }
+    [[nodiscard]] auto end() const noexcept { return objects.end(); }
 
-    auto size() const noexcept { return objects.size(); }
-    bool empty() const noexcept { return objects.empty(); }
+    [[nodiscard]] auto size() const noexcept { return objects.size(); }
+    [[nodiscard]] bool empty() const noexcept { return objects.empty(); }
 
     auto& operator[](std::size_t i) noexcept { return objects[i]; }
     const auto& operator[](std::size_t i) const noexcept { return objects[i]; }
@@ -186,23 +175,23 @@ using SimpleScopedDomainViewMap = ygg::UnorderedMap<ygg::View<ygg::Index<Element
 template<typename Element, typename C>
 using ScopedDomainViewMap = ygg::UnorderedMap<ygg::View<ygg::Index<Element>, C>, SimpleScopedDomainView<Element, C>>;
 
-template<::tyr::formalism::FactKind T, typename C>
-using PredicateDomainViewMap = SimpleScopedDomainViewMap<::tyr::formalism::Predicate<T>, C>;
+template<formalism::FactKind T, typename C>
+using PredicateDomainViewMap = SimpleScopedDomainViewMap<formalism::Predicate<T>, C>;
 
-template<::tyr::formalism::FactKind T, typename C>
-using FunctionDomainViewMap = SimpleScopedDomainViewMap<::tyr::formalism::Function<T>, C>;
+template<formalism::FactKind T, typename C>
+using FunctionDomainViewMap = SimpleScopedDomainViewMap<formalism::Function<T>, C>;
 
-template<::tyr::formalism::RelationKind R, typename C>
-using RuleDomainViewMap = ScopedDomainViewMap<::tyr::formalism::datalog::Rule<R>, C>;
-
-template<typename C>
-using AxiomDomainViewMap = ScopedDomainViewMap<::tyr::formalism::planning::Axiom, C>;
+template<formalism::RelationKind R, typename C>
+using RuleDomainViewMap = ScopedDomainViewMap<formalism::datalog::Rule<LiftedTag, R>, C>;
 
 template<typename C>
-using ConjunctiveConditionDomainView = SimpleScopedDomainView<::tyr::formalism::planning::ConjunctiveCondition, C>;
+using AxiomDomainViewMap = ScopedDomainViewMap<formalism::planning::Axiom<LiftedTag>, C>;
 
 template<typename C>
-using ConjunctiveEffectDomainView = SimpleScopedDomainView<::tyr::formalism::planning::ConjunctiveEffect, C>;
+using ConjunctiveConditionDomainView = SimpleScopedDomainView<formalism::planning::ConjunctiveCondition<LiftedTag>, C>;
+
+template<typename C>
+using ConjunctiveEffectDomainView = SimpleScopedDomainView<formalism::planning::ConjunctiveEffect<LiftedTag>, C>;
 
 template<typename C>
 struct ConditionalEffectDomainViewData
@@ -212,11 +201,11 @@ struct ConditionalEffectDomainViewData
 };
 
 template<typename C>
-using ConditionalEffectDomainView = ScopedView<::tyr::formalism::planning::ConditionalEffect, ConditionalEffectDomainViewData<C>, C>;
+using ConditionalEffectDomainView = ScopedView<formalism::planning::ConditionalEffect<LiftedTag>, ConditionalEffectDomainViewData<C>, C>;
 
 template<typename C>
 using ConditionalEffectDomainViewMap =
-    ygg::UnorderedMap<ygg::View<ygg::Index<::tyr::formalism::planning::ConditionalEffect>, C>, ConditionalEffectDomainView<C>>;
+    ygg::UnorderedMap<ygg::View<ygg::Index<formalism::planning::ConditionalEffect<LiftedTag>>, C>, ConditionalEffectDomainView<C>>;
 
 template<typename C>
 struct ActionDomainViewData
@@ -226,46 +215,10 @@ struct ActionDomainViewData
 };
 
 template<typename C>
-using ActionDomainView = ScopedView<::tyr::formalism::planning::Action, ActionDomainViewData<C>, C>;
+using ActionDomainView = ScopedView<formalism::planning::Action<LiftedTag>, ActionDomainViewData<C>, C>;
 
 template<typename C>
-using ActionDomainViewMap = ygg::UnorderedMap<ygg::View<ygg::Index<::tyr::formalism::planning::Action>, C>, ActionDomainView<C>>;
-
-struct ProgramVariableDomainsView
-{
-    using C = ::tyr::formalism::datalog::Repository;
-
-    PredicateDomainViewMap<::tyr::formalism::StaticTag, C> static_predicate_domains;
-    PredicateDomainViewMap<::tyr::formalism::FluentTag, C> fluent_predicate_domains;
-    FunctionDomainViewMap<::tyr::formalism::StaticTag, C> static_function_domains;
-    FunctionDomainViewMap<::tyr::formalism::FluentTag, C> fluent_function_domains;
-    RuleDomainViewMap<::tyr::formalism::PredicateTag, C> predicate_rule_domains;
-    RuleDomainViewMap<::tyr::formalism::FunctionTag, C> function_rule_domains;
-
-    template<::tyr::formalism::RelationKind R>
-    const auto& get_rule_domains() const noexcept
-    {
-        if constexpr (std::same_as<R, ::tyr::formalism::PredicateTag>)
-            return predicate_rule_domains;
-        else if constexpr (std::same_as<R, ::tyr::formalism::FunctionTag>)
-            return function_rule_domains;
-        else
-            static_assert(ygg::dependent_false<R>::value, "Missing case");
-    }
-};
-
-struct TaskVariableDomainsView
-{
-    using C = ::tyr::formalism::planning::Repository;
-
-    PredicateDomainViewMap<::tyr::formalism::StaticTag, C> static_predicate_domains;
-    PredicateDomainViewMap<::tyr::formalism::FluentTag, C> fluent_predicate_domains;
-    PredicateDomainViewMap<::tyr::formalism::DerivedTag, C> derived_predicate_domains;
-    FunctionDomainViewMap<::tyr::formalism::StaticTag, C> static_function_domains;
-    FunctionDomainViewMap<::tyr::formalism::FluentTag, C> fluent_function_domains;
-    ActionDomainViewMap<C> action_domains;
-    AxiomDomainViewMap<C> axiom_domains;
-};
+using ActionDomainViewMap = ygg::UnorderedMap<ygg::View<ygg::Index<formalism::planning::Action<LiftedTag>>, C>, ActionDomainView<C>>;
 
 /**
  * Stratification

@@ -27,16 +27,15 @@
 #include "tyr/planning/algorithms/utils.hpp"
 #include "tyr/planning/ground/axiom_evaluator.hpp"
 #include "tyr/planning/ground/state_repository.hpp"
-#include "tyr/planning/ground/state_view.hpp"
 #include "tyr/planning/ground/successor_generator.hpp"
 #include "tyr/planning/ground/task.hpp"
 #include "tyr/planning/heuristic.hpp"
 #include "tyr/planning/lifted/axiom_evaluator.hpp"
 #include "tyr/planning/lifted/state_repository.hpp"
-#include "tyr/planning/lifted/state_view.hpp"
 #include "tyr/planning/lifted/successor_generator.hpp"
 #include "tyr/planning/lifted/task.hpp"
 #include "tyr/planning/node.hpp"
+#include "tyr/planning/state_delta.hpp"
 #include "tyr/planning/state_repository.hpp"
 #include "tyr/planning/worker_state_index.hpp"
 
@@ -68,10 +67,10 @@ enum class ExpansionResult : uint8_t
 template<TaskKind Kind, typename SearchNode>
 SearchNode& get_or_create_search_node(ygg::Index<State<Kind>> state_index, ygg::SegmentedVector<SearchNode>& search_nodes, const SearchNode& default_node)
 {
-    while (ygg::uint_t(state_index) >= search_nodes.size())
+    while (static_cast<ygg::uint_t>(state_index) >= search_nodes.size())
         search_nodes.push_back(default_node);
 
-    return search_nodes[ygg::uint_t(state_index)];
+    return search_nodes[static_cast<ygg::uint_t>(state_index)];
 }
 
 template<TaskKind Kind, SearchPolicyConcept<Kind> SearchPolicy, ExecutionPolicyConcept<Kind, SearchPolicy> ExecutionPolicy>
@@ -81,15 +80,15 @@ class SearchEngine
     friend ExecutionPolicy;
 
 public:
-    using SearchTag = typename SearchPolicy::SearchTag;
-    using Options = typename SearchPolicy::Options;
-    using SearchNode = typename SearchPolicy::SearchNode;
+    using SearchTag = SearchTagT<SearchPolicy>;
+    using Options = OptionsT<SearchPolicy>;
+    using SearchNode = SearchNodeT<SearchPolicy>;
     using WorkerExecutionState = typename ExecutionPolicy::WorkerState;
 
     struct RoutedSuccessor
     {
         LabeledNode<Kind> labeled_node;
-        typename SearchPolicy::SuccessorMetadata metadata;
+        SuccessorMetadataT<SearchPolicy> metadata;
         ygg::float_t g_value;
         bool is_goal;
     };
@@ -105,21 +104,19 @@ public:
                    const Options& options,
                    PruningStrategyPtr<Kind> pruning_strategy_,
                    GoalStrategyPtr<Kind> goal_strategy_,
-                   typename SearchPolicy::WorkerEventHandlerPtr event_handler_) :
+                   WorkerEventHandlerPtrT<SearchPolicy> event_handler_) :
             index(index_),
             num_state_owners(num_state_owners_),
-            state_repository(state_repository_),
-            axiom_evaluator(axiom_evaluator_),
-            successor_generator(successor_generator_),
-            heuristic(heuristic_),
-            search(heuristic, options),
-            rng(options.random_seed + ygg::uint_t(index)),
+            state_repository(&state_repository_),
+            axiom_evaluator(&axiom_evaluator_),
+            successor_generator(&successor_generator_),
+            heuristic(&heuristic_),
+            search(heuristic_, options),
+            rng(options.random_seed + static_cast<ygg::uint_t>(index)),
             pruning_strategy(std::move(pruning_strategy_)),
             goal_strategy(std::move(goal_strategy_)),
             event_handler(std::move(event_handler_))
-        {
-            assert(num_state_owners > 0);
-        }
+        { assert(num_state_owners > 0); }
 
         WorkerData(ygg::Index<Worker> index_,
                    StateRepositoryPtr<Kind> state_repository_,
@@ -130,35 +127,29 @@ public:
                    const Options& options,
                    PruningStrategyPtr<Kind> pruning_strategy_,
                    GoalStrategyPtr<Kind> goal_strategy_,
-                   typename SearchPolicy::WorkerEventHandlerPtr event_handler_) :
+                   WorkerEventHandlerPtrT<SearchPolicy> event_handler_) :
             index(index_),
             num_state_owners(num_state_owners_),
             owned_state_repository(std::move(state_repository_)),
             owned_axiom_evaluator(std::move(axiom_evaluator_)),
             owned_successor_generator(std::move(successor_generator_)),
             owned_heuristic(std::move(heuristic_)),
-            state_repository(*owned_state_repository),
-            axiom_evaluator(*owned_axiom_evaluator),
-            successor_generator(*owned_successor_generator),
-            heuristic(*owned_heuristic),
-            search(heuristic, options),
-            rng(options.random_seed + ygg::uint_t(index)),
+            state_repository(owned_state_repository.get()),
+            axiom_evaluator(owned_axiom_evaluator.get()),
+            successor_generator(owned_successor_generator.get()),
+            heuristic(owned_heuristic.get()),
+            search(*heuristic, options),
+            rng(options.random_seed + static_cast<ygg::uint_t>(index)),
             pruning_strategy(std::move(pruning_strategy_)),
             goal_strategy(std::move(goal_strategy_)),
             event_handler(std::move(event_handler_))
-        {
-            assert(num_state_owners > 0);
-        }
+        { assert(num_state_owners > 0); }
 
         ygg::Index<State<Kind>> get_search_node_index(ygg::Index<State<Kind>> state) const noexcept
-        {
-            return ExecutionPolicy::search_node_index(state, index, num_state_owners);
-        }
+        { return ExecutionPolicy::search_node_index(state, index, num_state_owners); }
 
         SearchNode& initialize_start(ygg::Index<State<Kind>> state, ygg::float_t g_value, ygg::float_t h_value)
-        {
-            return search.initialize_start(get_search_node_index(state), g_value, h_value);
-        }
+        { return search.initialize_start(get_search_node_index(state), g_value, h_value); }
 
         SearchNode& get_search_node(ygg::Index<State<Kind>> state) { return search.get_search_node(get_search_node_index(state)); }
 
@@ -168,18 +159,21 @@ public:
         AxiomEvaluatorPtr<Kind> owned_axiom_evaluator;
         SuccessorGeneratorPtr<Kind> owned_successor_generator;
         HeuristicPtr<Kind> owned_heuristic;
-        StateRepository<Kind>& state_repository;
-        AxiomEvaluator<Kind>& axiom_evaluator;
-        SuccessorGenerator<Kind>& successor_generator;
-        Heuristic<Kind>& heuristic;
+        // Never null: they point at the owned objects or at the caller's.
+        StateRepository<Kind>* state_repository;
+        std::vector<StateRepositoryPtr<Kind>> registration_repositories;
+        AxiomEvaluator<Kind>* axiom_evaluator;
+        SuccessorGenerator<Kind>* successor_generator;
+        Heuristic<Kind>* heuristic;
         SearchPolicy search;
         WorkerExecutionState execution;
         std::mt19937_64 rng;
-        std::vector<::tyr::formalism::planning::ActionBindingView> applicable_actions;
+        std::vector<formalism::planning::ActionBindingView> applicable_actions;
+        StateDelta successor_delta;
         PruningStrategyPtr<Kind> pruning_strategy;
         GoalStrategyPtr<Kind> goal_strategy;
         Statistics statistics;
-        typename SearchPolicy::WorkerEventHandlerPtr event_handler;
+        WorkerEventHandlerPtrT<SearchPolicy> event_handler;
     };
 
     using Workers = WorkerPolicy<SearchTag, Kind, SearchPolicy, ExecutionPolicy, WorkerData>;
@@ -205,20 +199,31 @@ public:
         return SearchEngine(task, state_repository, axiom_evaluator, successor_generator, heuristic, options, search_start).run();
     }
 
-    size_t num_workers() const noexcept { return m_workers.size(); }
+    [[nodiscard]] size_t num_workers() const noexcept { return m_workers.size(); }
 
     WorkerData& get_worker(ygg::Index<Worker> index) noexcept { return m_workers.get(index); }
 
-    void on_finish_priority_layer(ygg::float_t priority)
+    std::optional<Statistics> collect_priority_layer_statistics()
     {
         if (!m_event_handler || !SearchPolicy::emits_priority_layer_events)
-            return;
+            return std::nullopt;
 
         auto statistics = Statistics {};
         for_each_worker([&](const auto& worker) { statistics.add(worker.statistics); });
         statistics.set_search_start_time_point(m_search_start_time_point);
         statistics.set_search_end_time_point(std::chrono::steady_clock::now());
+        return statistics;
+    }
+
+    void on_finish_priority_layer(ygg::float_t priority, const Statistics& statistics)
+    {
         call_root_event([&](auto& handler) { SearchPolicy::on_finish_priority_layer(handler, priority, statistics); });
+    }
+
+    void on_finish_priority_layer(ygg::float_t priority)
+    {
+        if (const auto statistics = collect_priority_layer_statistics())
+            on_finish_priority_layer(priority, *statistics);
     }
 
     void worker_loop(WorkerData& worker)
@@ -265,8 +270,8 @@ private:
                  Heuristic<Kind>& heuristic,
                  const Options& options,
                  std::chrono::steady_clock::time_point search_start) :
-        m_task(task),
-        m_options(options),
+        m_task(&task),
+        m_options(&options),
         m_event_handler(options.event_handler),
         m_search_start_time_point(search_start),
         m_start_node(tyr::planning::normalize_start_node(task, state_repository, axiom_evaluator, options.start_node)),
@@ -277,7 +282,7 @@ private:
 
     SearchResult<Kind> run()
     {
-        const auto deadline = m_options.max_time ? std::optional(m_search_start_time_point + *m_options.max_time) : std::nullopt;
+        const auto deadline = m_options->search_budget.max_time ? std::optional(m_search_start_time_point + *m_options->search_budget.max_time) : std::nullopt;
         const auto timed_out = [&] { return deadline && std::chrono::steady_clock::now() >= *deadline; };
 
         m_result.statistics.set_search_start_time_point(m_search_start_time_point);
@@ -288,24 +293,30 @@ private:
                 worker.statistics.set_search_end_time_point(m_search_start_time_point);
             });
 
+        auto [start_owner, start_state] = prepare_start_state();
         auto& root_worker = get_worker(ygg::Index<Worker>(0));
 
-        if (!root_worker.goal_strategy->is_static_goal_satisfied(m_task))
+        if (!root_worker.goal_strategy->is_static_goal_satisfied(*m_task))
         {
             finalize(SearchStatus::UNSOLVABLE);
             return std::move(m_result);
         }
 
-        if (root_worker.goal_strategy->is_dynamic_goal_satisfied(m_start_node.get_state(), m_start_node.get_state()))
+        if constexpr (!requires { SearchPolicy::goal_test_on_pop; })
         {
-            m_result.plan = Plan(m_start_node, LabeledNodeList<Kind> {});
-            m_result.goal_node = m_start_node;
-            finalize(SearchStatus::SOLVED);
-            call_root_event([&](auto& handler) { handler.on_solved(*m_result.plan); });
-            return std::move(m_result);
+            if (root_worker.goal_strategy->is_dynamic_goal_satisfied(m_start_node.get_state(), m_start_node.get_state()))
+            {
+                m_result.plan = Plan(m_start_node, LabeledNodeList<Kind> {});
+                m_result.goal_node = m_start_node;
+                finalize(SearchStatus::SOLVED);
+                call_root_event([&](auto& handler) { handler.on_solved(*m_result.plan); });
+                return std::move(m_result);
+            }
         }
 
-        if (m_options.max_num_states == 0)
+        // Count solve-local states, including an unsolved start. Existing repository population is ignored, but a pre-interned state counts when first
+        // encountered, and an over-limit successor may already be interned. Search policies with an early goal check may solve a satisfied start even when this is zero.
+        if (m_options->search_budget.max_num_states == 0)
         {
             finalize(SearchStatus::OUT_OF_STATES);
             return std::move(m_result);
@@ -317,7 +328,6 @@ private:
             return std::move(m_result);
         }
 
-        auto [start_owner, start_state] = prepare_start_state();
         auto& start_worker = get_worker(start_owner);
         const auto start_state_index = start_state.get_index();
         const auto start_g_value = ygg::FloatTolerance<ygg::float_t>::canonicalize(m_start_node.get_metric());
@@ -334,7 +344,7 @@ private:
             return std::move(m_result);
         }
 
-        const auto start_h_value = ygg::FloatTolerance<ygg::float_t>::canonicalize(start_worker.heuristic.evaluate(start_state));
+        const auto start_h_value = ygg::FloatTolerance<ygg::float_t>::canonicalize(start_worker.heuristic->evaluate(start_state));
         if (std::isnan(start_h_value))
             throw std::runtime_error("find_solution(...): start heuristic value is NaN.");
         if (timed_out())
@@ -354,7 +364,7 @@ private:
         }
 
         start_worker.search.open_start(start_state_index, start_search_node);
-        m_execution.start(deadline, start_worker.search.get_start_priority(), m_options);
+        m_execution.start(deadline, start_worker.search.get_start_priority(), *m_options);
         try
         {
             m_execution.invoke(*this);
@@ -384,18 +394,11 @@ private:
 
     bool expand_one(WorkerData& worker)
     {
-        struct PreparedExpansion
-        {
-            typename SearchPolicy::PoppedEntry entry;
-            Node<Kind> node;
-            SearchNode search_node;
-        };
-
-        auto prepared = std::optional<PreparedExpansion> {};
+        auto prepared = std::optional<Node<Kind>> {};
         auto claimed = false;
         m_execution.with_worker_lock(
             worker,
-            [&](auto&& evaluate_unlocked)
+            [&]<typename EvaluateUnlocked>(EvaluateUnlocked&& evaluate_unlocked)
             {
                 if (!m_execution.can_expand_locked(*this, worker))
                     return;
@@ -405,22 +408,31 @@ private:
                 if (worker.search.should_discard(entry, m_execution.incumbent_cost()))
                     return;
 
-                auto state = worker.state_repository.get_registered_state(entry.state);
-                auto& search_node = worker.get_search_node(entry.state);
-                auto node = Node<Kind>(std::move(state), search_node.g_value);
-
-                if (search_node.status == SearchNodeStatus::CLOSED || search_node.status == SearchNodeStatus::DEAD_END)
+                const auto is_stale = [](SearchNodeStatus status)
+                { return status == SearchNodeStatus::CLOSED || status == SearchNodeStatus::DEAD_END || status == SearchNodeStatus::HEURISTIC_PENDING; };
+                if (is_stale(worker.get_search_node(entry.state).status))
                     return;
+
+                auto state = evaluate_unlocked([&] { return worker.state_repository->get_registered_state(entry.state); });
+                // Incoming successors can relax this node while its immutable state is being decoded.
+                auto& search_node = worker.get_search_node(entry.state);
+                if (!m_execution.running() || is_stale(search_node.status))
+                    return;
+                auto node = Node<Kind>(std::move(state), search_node.g_value);
+                if constexpr (requires { SearchPolicy::goal_test_on_pop; })
+                {
+                    if (worker.goal_strategy->is_dynamic_goal_satisfied(m_start_node.get_state(), node.get_state()))
+                        search_node.status = SearchNodeStatus::GOAL;
+                }
 
                 const auto expansion_result = worker.search.prepare_expansion(
                     entry,
                     node,
                     search_node,
                     worker.statistics,
-                    std::forward<decltype(evaluate_unlocked)>(evaluate_unlocked),
-                    [&](ygg::float_t h_value, auto&& callback)
-                    { return improve_best_h(h_value, std::forward<decltype(callback)>(callback)); },
-                    [&](auto&& callback) { call_worker_event(worker, std::forward<decltype(callback)>(callback)); },
+                    std::forward<EvaluateUnlocked>(evaluate_unlocked),
+                    [&]<typename Callback>(ygg::float_t h_value, Callback&& callback) { return improve_best_h(h_value, std::forward<Callback>(callback)); },
+                    [&]<typename Callback>(Callback&& callback) { call_worker_event(worker, std::forward<Callback>(callback)); },
                     [&](ygg::float_t priority) { on_finish_priority_layer(priority); });
                 if (expansion_result == ExpansionResult::GOAL)
                 {
@@ -428,7 +440,7 @@ private:
                     return;
                 }
                 if (expansion_result == ExpansionResult::EXPAND)
-                    prepared.emplace(PreparedExpansion { entry, std::move(node), search_node });
+                    prepared.emplace(std::move(node));
             });
 
         if (!claimed)
@@ -437,14 +449,16 @@ private:
         m_execution.notify_if_stopped(*this);
         if (prepared && m_execution.running())
         {
-            worker.successor_generator.get_applicable_action_bindings(prepared->node, worker.applicable_actions);
-            expand_successors(worker, prepared->node, prepared->entry, prepared->search_node);
+            worker.successor_generator->get_applicable_action_bindings(*prepared, worker.applicable_actions);
+            expand_successors(worker, *prepared);
         }
         m_execution.finish_expansion(*this);
         return true;
     }
 
-    AcceptanceResult accept_successor(WorkerData& worker, const Node<Kind>& source_node, const RoutedSuccessor& routed_successor)
+    template<typename EvaluateHeuristic>
+    AcceptanceResult
+    accept_successor(WorkerData& worker, const Node<Kind>& source_node, const RoutedSuccessor& routed_successor, EvaluateHeuristic&& evaluate_heuristic)
     {
         const auto& labeled_successor = routed_successor.labeled_node;
         const auto& successor_node = labeled_successor.node;
@@ -452,7 +466,7 @@ private:
         auto& successor_search_node = worker.get_search_node(successor_state.get_index());
 
         const auto is_new = successor_search_node.status == SearchNodeStatus::NEW;
-        if (is_new && !m_execution.reserve_state(m_options.max_num_states))
+        if (is_new && m_options->search_budget.max_num_states && !m_execution.reserve_state(*m_options->search_budget.max_num_states))
         {
             m_execution.set_terminal(SearchStatus::OUT_OF_STATES);
             return AcceptanceResult::TERMINAL;
@@ -465,12 +479,20 @@ private:
                               [&](auto& handler)
                               { handler.on_generate_transition(source_node, LabeledNode<Kind> { labeled_successor.label, normalized_node }, outcome); });
         };
-        return worker.search.accept_successor(*this, worker, source_node, normalized_node, routed_successor, successor_search_node, is_new, emit_transition);
+        return worker.search.accept_successor(*this,
+                                              worker,
+                                              source_node,
+                                              normalized_node,
+                                              routed_successor,
+                                              successor_search_node,
+                                              is_new,
+                                              std::forward<EvaluateHeuristic>(evaluate_heuristic),
+                                              emit_transition);
     }
 
-    void expand_successors(WorkerData& worker, const Node<Kind>& node, const typename SearchPolicy::PoppedEntry& entry, const SearchNode& search_node)
+    void expand_successors(WorkerData& worker, const Node<Kind>& node)
     {
-        if (m_options.shuffle_labeled_succ_nodes)
+        if (m_options->shuffle_labeled_succ_nodes)
             ygg::portable_shuffle(worker.applicable_actions.begin(), worker.applicable_actions.end(), worker.rng);
 
         for (const auto action : worker.applicable_actions)
@@ -478,19 +500,18 @@ private:
             if (!m_execution.running())
                 break;
 
-            auto successor_state = worker.state_repository.get_state_builder();
-            const auto action_result = worker.successor_generator.generate_successor_state(node, action, *successor_state);
-            auto metadata = worker.search.make_successor_metadata(worker.index, entry.state, search_node, action);
-            if (m_execution.route(*this, worker, node, std::move(successor_state), action_result, action, std::move(metadata)) == AcceptanceResult::TERMINAL
+            auto successor_state = worker.state_repository->get_state_builder();
+            const auto auxiliary_value = worker.successor_generator->generate_successor_state(node, action, *successor_state, worker.successor_delta);
+            auto metadata = worker.search.make_successor_metadata(worker.index, node, action);
+            if (m_execution.route(*this, worker, node, std::move(successor_state), worker.successor_delta, auxiliary_value, action, std::move(metadata))
+                    == AcceptanceResult::TERMINAL
                 || !m_execution.running())
                 break;
         }
     }
 
-    ygg::float_t complete_successor_state(WorkerData& worker, ygg::Builder<State<Kind>>& state, PendingActionResult result)
-    {
-        return planning::complete_successor_state(m_task, worker.axiom_evaluator, state, result.auxiliary_value);
-    }
+    ygg::float_t evaluate_successor_metric(const ygg::Builder<State<Kind>>& state, ygg::float_t auxiliary_value)
+    { return planning::evaluate_successor_metric(*m_task, state, auxiliary_value); }
 
     void solve(WorkerData& worker, const Node<Kind>& node)
     {
@@ -533,16 +554,14 @@ private:
             });
         m_result.statistics.set_num_registered_states(num_registered_states);
         m_result.statistics.set_state_storage_memory_usage(state_storage_memory_usage);
-        snapshot_task_repository_statistics(*m_task.get_repository(), m_result.statistics);
+        snapshot_task_repository_statistics(*m_task->get_repository(), m_result.statistics);
         m_result.statistics.set_search_end_time_point(search_end);
         m_statistics_snapshotted = true;
     }
 
     template<typename Callback>
     void for_each_worker(Callback&& callback)
-    {
-        m_workers.for_each(std::forward<Callback>(callback));
-    }
+    { m_workers.for_each(std::forward<Callback>(callback)); }
 
     SearchResult<Kind> finish_search()
     {
@@ -557,7 +576,7 @@ private:
         {
             const auto goal = m_execution.goal();
             assert(goal);
-            auto [plan, goal_node] = m_workers.reconstruct_solution(*goal, m_options);
+            auto [plan, goal_node] = m_workers.reconstruct_solution(*goal, *m_options);
             m_result.plan = std::move(plan);
             m_result.goal_node = std::move(goal_node);
         }
@@ -582,9 +601,9 @@ private:
             std::forward<Callback>(callback)(*worker.event_handler);
     }
 
-    Task<Kind>& m_task;
-    const Options& m_options;
-    typename SearchPolicy::EventHandlerPtr m_event_handler;
+    Task<Kind>* m_task;
+    const Options* m_options;
+    EventHandlerPtrT<SearchPolicy> m_event_handler;
     std::chrono::steady_clock::time_point m_search_start_time_point;
     Node<Kind> m_start_node;
     ExecutionPolicy m_execution;

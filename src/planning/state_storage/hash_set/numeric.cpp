@@ -21,10 +21,12 @@
 #include "tyr/planning/lifted/state_storage/hash_set/context.hpp"
 #include "tyr/planning/task.hpp"
 
+#include <cmath>
+
 namespace tyr::planning
 {
 template<TaskKind Kind, bool ThreadSafe>
-NumericStorageBackend<Kind, HashSet, ThreadSafe>::NumericStorageBackend(Context& ctx) : m_float_vec_set(ctx.float_vec_set)
+NumericStorageBackend<Kind, HashSet, ThreadSafe>::NumericStorageBackend(Context& ctx) : m_float_vec_set(&ctx.float_vec_set)
 {
 }
 
@@ -34,13 +36,16 @@ typename NumericStorageBackend<Kind, HashSet, ThreadSafe>::Packed NumericStorage
     for (auto& value : unpacked.values)
         value = ygg::FloatTolerance<ygg::float_t>::canonicalize(value);
 
-    return Packed { m_float_vec_set.insert(unpacked.values) };
+    while (!unpacked.values.empty() && std::isnan(unpacked.values.back()))
+        unpacked.values.pop_back();
+
+    return Packed { m_float_vec_set->insert(unpacked.values) };
 }
 
 template<TaskKind Kind, bool ThreadSafe>
 void NumericStorageBackend<Kind, HashSet, ThreadSafe>::unpack(const Packed& packed, Unpacked& unpacked)
 {
-    const auto view = m_float_vec_set[packed.index];
+    const auto view = (*m_float_vec_set)[packed.index];
 
     unpacked.values.resize(view.size());
     for (ygg::uint_t i = 0; i < view.size(); ++i)

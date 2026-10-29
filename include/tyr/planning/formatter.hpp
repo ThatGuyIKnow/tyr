@@ -26,7 +26,7 @@
 #include "tyr/planning/ground/task.hpp"
 #include "tyr/planning/lifted/task.hpp"
 #include "tyr/planning/plan.hpp"
-#include "tyr/planning/state_view.hpp"
+#include "tyr/planning/state_repository.hpp"
 
 #include <fmt/ostream.h>
 #include <fmt/ranges.h>
@@ -47,9 +47,7 @@ struct formatter<tyr::planning::Task<::tyr::LiftedTag>, char>
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
     template<typename FormatContext>
     auto format(const tyr::planning::Task<::tyr::LiftedTag>& value, FormatContext& ctx) const
-    {
-        return fmt::format_to(ctx.out(), "{}", value.get_task());
-    }
+    { return fmt::format_to(ctx.out(), "{}", value.get_task()); }
 };
 
 template<>
@@ -58,9 +56,7 @@ struct formatter<tyr::planning::Task<::tyr::GroundTag>, char>
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
     template<typename FormatContext>
     auto format(const tyr::planning::Task<::tyr::GroundTag>& value, FormatContext& ctx) const
-    {
-        return fmt::format_to(ctx.out(), "{}", value.get_task());
-    }
+    { return fmt::format_to(ctx.out(), "{}", value.get_task()); }
 };
 
 template<>
@@ -69,9 +65,7 @@ struct formatter<ygg::Data<tyr::planning::State<::tyr::LiftedTag>>, char>
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
     template<typename FormatContext>
     auto format(const ygg::Data<tyr::planning::State<::tyr::LiftedTag>>&, FormatContext& ctx) const
-    {
-        return ctx.out();
-    }
+    { return ctx.out(); }
 };
 
 template<>
@@ -80,9 +74,7 @@ struct formatter<ygg::Builder<tyr::planning::State<::tyr::LiftedTag>>, char>
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
     template<typename FormatContext>
     auto format(const ygg::Builder<tyr::planning::State<::tyr::LiftedTag>>&, FormatContext& ctx) const
-    {
-        return ctx.out();
-    }
+    { return ctx.out(); }
 };
 
 template<>
@@ -91,9 +83,7 @@ struct formatter<ygg::Data<tyr::planning::State<::tyr::GroundTag>>, char>
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
     template<typename FormatContext>
     auto format(const ygg::Data<tyr::planning::State<::tyr::GroundTag>>&, FormatContext& ctx) const
-    {
-        return ctx.out();
-    }
+    { return ctx.out(); }
 };
 
 template<>
@@ -102,9 +92,7 @@ struct formatter<ygg::Builder<tyr::planning::State<::tyr::GroundTag>>, char>
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
     template<typename FormatContext>
     auto format(const ygg::Builder<tyr::planning::State<::tyr::GroundTag>>&, FormatContext& ctx) const
-    {
-        return ctx.out();
-    }
+    { return ctx.out(); }
 };
 
 template<>
@@ -119,8 +107,8 @@ struct formatter<tyr::planning::Statistics, char>
                               "[Search] Idle worker time: {} ms ({} ns)\n"
                               "[Search] Number of expanded states: {}\n"
                               "[Search] Number of generated successors: {}\n"
-                              "[Search] Number of accepted successors: {}\n"
-                              "[Search] Number of transferred successors: {}\n"
+                              "[Search] Number of generated candidates: {}\n"
+                              "[Search] Number of transferred candidates: {}\n"
                               "[Search] Communication overhead: {}\n"
                               "[Search] Number of dead-end states: {}\n"
                               "[Search] Number of pruned states: {}\n"
@@ -139,8 +127,8 @@ struct formatter<tyr::planning::Statistics, char>
                               ygg::to_ns(value.get_idle_time()),
                               value.get_num_expanded(),
                               value.get_num_generated_successors(),
-                              value.get_num_accepted_successors(),
-                              value.get_num_transferred_successors(),
+                              value.get_num_generated_candidates(),
+                              value.get_num_transferred_candidates(),
                               value.get_communication_overhead(),
                               value.get_num_deadends(),
                               value.get_num_pruned(),
@@ -173,11 +161,15 @@ struct formatter<tyr::planning::ProgressStatistics, char>
         const auto& last = value.get_snapshots().back();
         return fmt::format_to(ctx.out(),
                               "[Search] Number of expanded states at last snapshot: {}\n"
-                              "[Search] Number of accepted successors at last snapshot: {}\n"
+                              "[Search] Number of generated successors at last snapshot: {}\n"
+                              "[Search] Number of generated candidates at last snapshot: {}\n"
+                              "[Search] Number of transferred candidates at last snapshot: {}\n"
                               "[Search] Number of deadend states at last snapshot: {}\n"
                               "[Search] Number of pruned states at last snapshot: {}",
                               last.get_num_expanded(),
-                              last.get_num_accepted_successors(),
+                              last.get_num_generated_successors(),
+                              last.get_num_generated_candidates(),
+                              last.get_num_transferred_candidates(),
                               last.get_num_deadends(),
                               last.get_num_pruned());
     }
@@ -192,11 +184,15 @@ struct formatter<tyr::planning::ProgressStatistics::Snapshot, char>
     {
         return fmt::format_to(ctx.out(),
                               "[Search] Number of expanded states at snapshot: {}\n"
-                              "[Search] Number of accepted successors at snapshot: {}\n"
+                              "[Search] Number of generated successors at snapshot: {}\n"
+                              "[Search] Number of generated candidates at snapshot: {}\n"
+                              "[Search] Number of transferred candidates at snapshot: {}\n"
                               "[Search] Number of deadend states at snapshot: {}\n"
                               "[Search] Number of pruned states at snapshot: {}",
                               value.get_num_expanded(),
-                              value.get_num_accepted_successors(),
+                              value.get_num_generated_successors(),
+                              value.get_num_generated_candidates(),
+                              value.get_num_transferred_candidates(),
                               value.get_num_deadends(),
                               value.get_num_pruned());
     }
@@ -234,15 +230,15 @@ struct formatter<tyr::planning::siw::Statistics<Kind>, char>
     }
 };
 
-template<::tyr::TaskKind Kind>
-struct formatter<tyr::planning::StateView<Kind>, char>
+template<::tyr::planning::IterableViewStateConcept State>
+struct formatter<State, char>
 {
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
     template<typename FormatContext>
-    auto format(const tyr::planning::StateView<Kind>& value, FormatContext& ctx) const
+    auto format(const State& value, FormatContext& ctx) const
     {
-        auto static_atoms = std::vector<tyr::formalism::planning::GroundAtomView<tyr::formalism::StaticTag>> {};
-        for (auto&& atom : value.get_static_atoms_view())
+        auto static_atoms = std::vector<tyr::formalism::planning::AtomView<::tyr::GroundTag, tyr::formalism::StaticTag>> {};
+        for (auto&& atom : value.template get_atoms_view<::tyr::formalism::StaticTag>())
         {
             static_atoms.push_back(atom);
         }
@@ -256,20 +252,20 @@ struct formatter<tyr::planning::StateView<Kind>, char>
             }
         }
 
-        auto derived_atoms = std::vector<tyr::formalism::planning::GroundAtomView<tyr::formalism::DerivedTag>> {};
-        for (auto&& atom : value.get_derived_atoms_view())
+        auto derived_atoms = std::vector<tyr::formalism::planning::AtomView<::tyr::GroundTag, tyr::formalism::DerivedTag>> {};
+        for (auto&& atom : value.template get_atoms_view<::tyr::formalism::DerivedTag>())
         {
             derived_atoms.push_back(atom);
         }
 
-        auto static_fterm_values = std::vector<tyr::formalism::planning::GroundFunctionTermViewValuePair<tyr::formalism::StaticTag>> {};
-        for (auto&& fterm_value : value.get_static_fterm_values_view())
+        auto static_fterm_values = std::vector<tyr::formalism::planning::FunctionTermViewValuePair<::tyr::GroundTag, tyr::formalism::StaticTag>> {};
+        for (auto&& fterm_value : value.template get_fterm_values_view<::tyr::formalism::StaticTag>())
         {
             static_fterm_values.push_back(fterm_value);
         }
 
-        auto fluent_fterm_values = std::vector<tyr::formalism::planning::GroundFunctionTermViewValuePair<tyr::formalism::FluentTag>> {};
-        for (auto&& fterm_value : value.get_fluent_fterm_values_view())
+        auto fluent_fterm_values = std::vector<tyr::formalism::planning::FunctionTermViewValuePair<::tyr::GroundTag, tyr::formalism::FluentTag>> {};
+        for (auto&& fterm_value : value.template get_fterm_values_view<::tyr::formalism::FluentTag>())
         {
             fluent_fterm_values.push_back(fterm_value);
         }
@@ -278,8 +274,11 @@ struct formatter<tyr::planning::StateView<Kind>, char>
         os << "State(\n";
         {
             ygg::IndentScope scope(os);
-            os << ygg::print_indent;
-            fmt::print(os, "{}{}\n", "index = ", value.get_index());
+            if constexpr (requires { value.get_index(); })
+            {
+                os << ygg::print_indent;
+                fmt::print(os, "{}{}\n", "index = ", value.get_index());
+            }
             os << ygg::print_indent;
             fmt::print(os, "{}{}\n", "static atoms = ", static_atoms);
             os << ygg::print_indent;
@@ -293,16 +292,16 @@ struct formatter<tyr::planning::StateView<Kind>, char>
         }
 
         os << ygg::print_indent << ")";
-        return fmt::format_to(ctx.out(), "{}", os.str());
+        return fmt::format_to(ctx.out(), "{}", os.view());
     }
 };
 
-template<::tyr::TaskKind Kind>
-struct formatter<tyr::planning::Node<Kind>, char>
+template<::tyr::TaskKind Kind, ::tyr::planning::StateViewConcept<Kind> State>
+struct formatter<tyr::planning::Node<Kind, State>, char>
 {
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
     template<typename FormatContext>
-    auto format(const tyr::planning::Node<Kind>& value, FormatContext& ctx) const
+    auto format(const tyr::planning::Node<Kind, State>& value, FormatContext& ctx) const
     {
         auto os = std::stringstream {};
         os << "Node(\n";
@@ -314,16 +313,18 @@ struct formatter<tyr::planning::Node<Kind>, char>
             fmt::print(os, "{}{}\n", "state = ", value.get_state());
         }
         os << ygg::print_indent << ")";
-        return fmt::format_to(ctx.out(), "{}", os.str());
+        return fmt::format_to(ctx.out(), "{}", os.view());
     }
 };
 
-template<::tyr::TaskKind Kind>
-struct formatter<tyr::planning::LabeledNode<Kind>, char>
+template<::tyr::TaskKind Kind,
+         ::tyr::planning::StateViewConcept<Kind> State,
+         ygg::formalism::RelationBindingViewConcept<tyr::formalism::planning::Action<tyr::LiftedTag>, tyr::formalism::ObjectTag> Binding>
+struct formatter<tyr::planning::LabeledNode<Kind, State, Binding>, char>
 {
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
     template<typename FormatContext>
-    auto format(const tyr::planning::LabeledNode<Kind>& value, FormatContext& ctx) const
+    auto format(const tyr::planning::LabeledNode<Kind, State, Binding>& value, FormatContext& ctx) const
     {
         auto os = std::stringstream {};
         os << "LabeledNode(\n";
@@ -335,8 +336,24 @@ struct formatter<tyr::planning::LabeledNode<Kind>, char>
             fmt::print(os, "{}{}\n", "node = ", value.node);
         }
         os << ygg::print_indent << ")";
-        return fmt::format_to(ctx.out(), "{}", os.str());
+        return fmt::format_to(ctx.out(), "{}", os.view());
     }
+};
+
+template<::tyr::TaskKind Kind>
+struct formatter<tyr::planning::PackedNode<Kind>, char> : formatter<tyr::planning::Node<Kind>, char>
+{
+    template<typename FormatContext>
+    auto format(const tyr::planning::PackedNode<Kind>& value, FormatContext& ctx) const
+    { return formatter<tyr::planning::Node<Kind>, char>::format(value.unpack(), ctx); }
+};
+
+template<::tyr::TaskKind Kind>
+struct formatter<tyr::planning::PackedLabeledNode<Kind>, char> : formatter<tyr::planning::LabeledNode<Kind>, char>
+{
+    template<typename FormatContext>
+    auto format(const tyr::planning::PackedLabeledNode<Kind>& value, FormatContext& ctx) const
+    { return formatter<tyr::planning::LabeledNode<Kind>, char>::format(value.unpack(), ctx); }
 };
 
 template<::tyr::TaskKind Kind>
@@ -345,6 +362,22 @@ struct formatter<tyr::planning::Plan<Kind>, char>
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
     template<typename FormatContext>
     auto format(const tyr::planning::Plan<Kind>& value, FormatContext& ctx) const
+    {
+        auto out = ctx.out();
+        for (const auto& labeled_node : value.get_labeled_succ_nodes())
+        {
+            out = fmt::format_to(out, "{}\n", std::make_pair(labeled_node.label, tyr::formalism::planning::PlanFormatting()));
+        }
+        return out;
+    }
+};
+
+template<::tyr::TaskKind Kind>
+struct formatter<tyr::planning::PackedPlan<Kind>, char>
+{
+    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+    template<typename FormatContext>
+    auto format(const tyr::planning::PackedPlan<Kind>& value, FormatContext& ctx) const
     {
         auto out = ctx.out();
         for (const auto& labeled_node : value.get_labeled_succ_nodes())

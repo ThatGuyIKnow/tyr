@@ -18,60 +18,47 @@
 #ifndef TYR_FORMALISM_DATALOG_BOOLEAN_OPERATOR_DATA_HPP_
 #define TYR_FORMALISM_DATALOG_BOOLEAN_OPERATOR_DATA_HPP_
 
-#include "tyr/formalism/datalog/binary_operator_index.hpp"
 #include "tyr/formalism/datalog/declarations.hpp"
 
 #include <stdexcept>
+#include <tuple>
+#include <utility>
 #include <variant>
+#include <yggdrasil/containers/variant.hpp>
 #include <yggdrasil/core/types.hpp>
 #include <yggdrasil/core/types_utils.hpp>
 
 namespace ygg
 {
 
-template<typename T>
+template<::tyr::TaskKind T>
 struct Data<::tyr::formalism::datalog::BooleanOperator<T>>
 {
-    using OperatorType = ::tyr::formalism::BooleanOperatorKind;
-    using Variant = ::cista::offset::variant<ygg::Index<::tyr::formalism::datalog::BinaryOperator<::tyr::formalism::BooleanOperatorKind, T>>>;
+    using Variant = ::cista::offset::variant<ygg::Index<::tyr::formalism::datalog::BinaryOperator<T, ::tyr::formalism::BooleanOperatorKind>>>;
 
-    OperatorType operator_kind = OperatorType::Eq;
-    Variant value;
+    Variant variant;
 
     template<typename C>
-    using ViewVariant = std::variant<::ygg::View<ygg::Index<::tyr::formalism::datalog::BinaryOperator<::tyr::formalism::BooleanOperatorKind, T>>, C>>;
+    using ViewVariant = ::ygg::ViewVariant<Variant, C>;
 
     Data() = default;
-    Data(OperatorType operator_kind_, Variant value_) : operator_kind(operator_kind_), value(value_)
+    explicit Data(Variant variant_) : variant(variant_)
     {
-        if (!value.valid())
-            throw std::invalid_argument("BooleanOperator requires a valid value");
+        if (!variant.valid())
+            throw std::invalid_argument("BooleanOperator requires a valid variant");
     }
     template<typename C>
-    Data(ViewVariant<C> value_) :
-        operator_kind(std::visit([](const auto& view) { return view.get_operator(); }, value_)),
-        value(std::visit([](const auto& view) -> Variant { return Variant(view.get_index()); }, value_))
+    Data(const ViewVariant<C>& variant_) : variant(std::visit([](const auto& view) -> Variant { return Variant(view.get_index()); }, variant_))
     {
     }
 
-    void clear() noexcept
-    {
-        operator_kind = OperatorType::Eq;
-        ygg::clear(value);
-    }
-
-    auto cista_members() const noexcept { return std::tie(operator_kind, value); }
-    auto identifying_members() const noexcept { return std::tie(operator_kind, value); }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::variant> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::variant> {}; }
+    void clear() noexcept { ygg::clear_members(*this); }
 };
 
-static_assert(!ygg::uses_trivial_storage_v<::tyr::formalism::datalog::BooleanOperator<ygg::Data<::tyr::formalism::datalog::FunctionExpression>>>);
+static_assert(!ygg::uses_trivial_storage_v<::tyr::formalism::datalog::BooleanOperator<::tyr::LiftedTag>>);
 
-}
-
-namespace tyr::formalism::datalog
-{
-using BooleanOperatorData = ygg::Data<BooleanOperator<ygg::Data<FunctionExpression>>>;
-using GroundBooleanOperatorData = ygg::Data<BooleanOperator<ygg::Data<GroundFunctionExpression>>>;
 }
 
 #endif

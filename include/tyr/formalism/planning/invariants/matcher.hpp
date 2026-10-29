@@ -18,9 +18,9 @@
 #ifndef TYR_FORMALISM_PLANNING_INVARIANTS_MATCHER_HPP_
 #define TYR_FORMALISM_PLANNING_INVARIANTS_MATCHER_HPP_
 
-#include "tyr/formalism/planning/invariants/invariant.hpp"
-#include "tyr/formalism/planning/mutable/atom.hpp"
 #include "tyr/formalism/planning/declarations.hpp"
+#include "tyr/formalism/planning/mutable/atom.hpp"
+#include "tyr/formalism/planning/mutable/invariant.hpp"
 #include "tyr/formalism/unification/match.hpp"
 #include "tyr/formalism/unification/substitution.hpp"
 
@@ -32,17 +32,19 @@ namespace tyr::formalism::planning::invariant
 struct InvariantMatchData
 {
 public:
-    InvariantMatchData(Invariant inv, std::vector<unification::SubstitutionFunction<ygg::Index<Object>>> rigid_variable_bindings);
+    InvariantMatchData(InvariantView invariant, std::vector<unification::SubstitutionFunction<ygg::Index<Object>>> rigid_variable_bindings);
 
-    const auto& invariant() const noexcept { return m_inv; }
-    const auto& rigid_variable_bindings() const noexcept { return m_rigid_variable_bindings; }
-    const auto& postings() const noexcept { return m_postings; }
+    [[nodiscard]] auto invariant() const noexcept { return m_invariant; }
+    [[nodiscard]] const auto& mutable_invariant() const noexcept { return m_inv; }
+    [[nodiscard]] const auto& rigid_variable_bindings() const noexcept { return m_rigid_variable_bindings; }
+    [[nodiscard]] const auto& postings() const noexcept { return m_postings; }
 
 private:
     void build_postings();
 
 private:
-    Invariant m_inv;
+    InvariantView m_invariant;
+    MutableInvariant m_inv;
     std::vector<unification::SubstitutionFunction<ygg::Index<Object>>> m_rigid_variable_bindings;
 
     /// postings[p][o][b] is true iff the b-th binding binds object o to rigid parameter p.
@@ -75,10 +77,10 @@ public:
 
     void query(const MutableAtom<FluentTag>& atom, QueryResult& result, QueryWorkspace& ws) const;
 
-    void query(GroundAtomView<FluentTag> atom, QueryResult& result, QueryWorkspace& workspace) const;
+    void query(AtomView<GroundTag, FluentTag> atom, QueryResult& result, QueryWorkspace& workspace) const;
 
-    QueryResult query(const MutableAtom<FluentTag>& atom) const;
-    QueryResult query(GroundAtomView<FluentTag> atom) const;
+    [[nodiscard]] QueryResult query(const MutableAtom<FluentTag>& atom) const;
+    [[nodiscard]] QueryResult query(AtomView<GroundTag, FluentTag> atom) const;
 
 private:
     InvariantMatchDataList m_invariant_match_data;

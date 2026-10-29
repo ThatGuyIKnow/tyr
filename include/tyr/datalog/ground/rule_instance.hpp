@@ -26,42 +26,37 @@
 namespace tyr::datalog
 {
 
-template<::tyr::formalism::RelationKind R>
+template<formalism::RelationKind R>
 class RuleInstance<GroundTag, R>
 {
 public:
-    using Task = GroundTag;
-    using Relation = R;
-    using SourceRule = ::tyr::formalism::datalog::GroundRuleView<R>;
+    explicit RuleInstance(formalism::datalog::RuleView<GroundTag, R> rule) : m_rule(rule) {}
 
-    explicit RuleInstance(SourceRule rule) : m_rule(rule) {}
+    [[nodiscard]] formalism::datalog::RuleView<GroundTag, R> get_rule() const noexcept { return m_rule; }
+    [[nodiscard]] auto get_body() const noexcept { return m_rule.get_body(); }
+    [[nodiscard]] auto get_heads() const noexcept { return m_rule.get_heads(); }
+    [[nodiscard]] auto get_head() const noexcept { return m_rule.get_head(); }
 
-    SourceRule get_rule() const noexcept { return m_rule; }
-    auto get_body() const noexcept { return m_rule.get_body(); }
-    auto get_head() const noexcept { return m_rule.get_head(); }
+    [[nodiscard]] auto resolve(formalism::datalog::AtomView<GroundTag, formalism::FluentTag> atom) const noexcept { return atom.get_row(); }
 
-    auto resolve(::tyr::formalism::datalog::GroundAtomView<::tyr::formalism::FluentTag> atom) const noexcept { return atom.get_row(); }
+    [[nodiscard]] auto resolve(formalism::datalog::BooleanOperatorView<GroundTag> constraint) const noexcept { return constraint; }
 
-    auto resolve(::tyr::formalism::datalog::GroundBooleanOperatorView constraint) const noexcept { return constraint; }
-
-    ResolvedNumericEffect resolve(::tyr::formalism::datalog::GroundNumericEffectView<::tyr::formalism::FluentTag> effect) const noexcept
-    {
-        return { effect.get_operator(), effect.get_fterm().get_row(), effect.get_fexpr() };
-    }
+    [[nodiscard]] ResolvedNumericEffect resolve(formalism::datalog::NumericEffectView<GroundTag, formalism::FluentTag> effect) const noexcept
+    { return { effect.get_operator(), effect.get_fterm().get_row().get_index(), effect.get_fexpr() }; }
 
     template<typename Callback>
     bool for_each_resolved_metric_effect(Callback&& callback) const
     {
-        for (const auto& metric_operator : m_rule.get_metric_effects())
-            if (!ygg::visit([&](const auto metric_effect) { return callback(resolve(metric_effect)); }, metric_operator.get_variant()))
+        for (const auto effect : get_rule().get_metric_effects())
+            if (!ygg::visit([&](const auto value) { return callback(resolve(value)); }, effect.get_variant()))
                 return false;
         return true;
     }
 
-    auto witness_key() const noexcept { return m_rule.get_row(); }
+    [[nodiscard]] auto witness_key() const noexcept { return m_rule.get_row(); }
 
 private:
-    SourceRule m_rule;
+    formalism::datalog::RuleView<GroundTag, R> m_rule;
 };
 
 }

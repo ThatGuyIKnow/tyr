@@ -18,14 +18,17 @@
 #ifndef TYR_PLANNING_LIFTED_TASK_GROUNDER_DECL_HPP_
 #define TYR_PLANNING_LIFTED_TASK_GROUNDER_DECL_HPP_
 
+#include "tyr/formalism/planning/invariant_view.hpp"
 #include "tyr/planning/declarations.hpp"
 
-#include <yggdrasil/execution/onetbb.hpp>
+#include <cstdint>
+#include <optional>
+#include <yggdrasil/execution/declarations.hpp>
 
 namespace tyr::planning
 {
 
-enum class GroundTaskInstantiationStatus
+enum class GroundTaskInstantiationStatus : std::uint8_t
 {
     SUCCESS,
     PROVEN_UNSOLVABLE,
@@ -40,6 +43,10 @@ struct GroundTaskInstantiationResult
 struct GroundTaskInstantiationOptions
 {
     bool disable_invariant_synthesis = false;
+    /// Used unless invariant synthesis is disabled. nullopt: greedy cover over all synthesized invariants. Otherwise
+    /// exactly these invariants, in this order (see compute_mutex_groups_in_order). Each must be an invariant
+    /// synthesize_invariants interned into the repository of the task's domain. Unlisted invariants are not used.
+    std::optional<formalism::planning::InvariantViewList> invariant_order = std::nullopt;
 };
 
 }

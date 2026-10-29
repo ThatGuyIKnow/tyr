@@ -29,18 +29,18 @@ namespace tyr::formalism::datalog
 
 void bind_module_definitions(nb::module_& m)
 {
+    using namespace nb::literals;
     bind_formalism(m);
 
     nb::class_<RepositoryFactory>(m, "RepositoryFactory")  //
         .def(nb::new_([]() { return std::make_shared<RepositoryFactory>(); }))
-        .def("create_repository",
-             [](RepositoryFactory& factory, const Repository* parent_repository, std::optional<std::size_t> num_objects)
-             {
-                 return num_objects ? factory.create_shared(*num_objects, parent_repository) : factory.create_shared(parent_repository);
-             },
-             "parent_repository"_a = nullptr,
-             "num_objects"_a = nb::none(),
-             nb::keep_alive<0, 2>());
+        .def(
+            "create_repository",
+            [](RepositoryFactory& factory, const Repository* parent_repository, std::optional<std::size_t> num_objects)
+            { return num_objects ? factory.create_shared(*num_objects, parent_repository) : factory.create_shared(parent_repository); },
+            "parent_repository"_a = nullptr,
+            "num_objects"_a = nb::none(),
+            nb::keep_alive<0, 2>());
 }
 
 }  // namespace tyr::formalism::datalog

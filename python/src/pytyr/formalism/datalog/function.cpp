@@ -17,9 +17,9 @@
 
 #include "binding_utils.hpp"
 #include "bindings.hpp"
+#include "tyr/formalism/declarations.hpp"
 
 #include <tyr/formalism/function_data.hpp>
-#include <tyr/formalism/function_index.hpp>
 #include <tyr/formalism/function_view.hpp>
 
 namespace tyr::formalism::datalog
@@ -44,9 +44,9 @@ void bind_function(nb::module_& m, RepositoryBinding& repository)
     bind_function_view<FluentTag>(m, "FluentFunction");
     bind_function_view<AuxiliaryTag>(m, "AuxiliaryFunction");
 
-    repository.def("get_or_create", &get_or_create_data<Function<StaticTag>>, "data"_a, nb::keep_alive<0, 1>());
-    repository.def("get_or_create", &get_or_create_data<Function<FluentTag>>, "data"_a, nb::keep_alive<0, 1>());
-    repository.def("get_or_create", &get_or_create_data<Function<AuxiliaryTag>>, "data"_a, nb::keep_alive<0, 1>());
+    bind_insert<Function<StaticTag>>(repository);
+    bind_insert<Function<FluentTag>>(repository);
+    bind_insert<Function<AuxiliaryTag>>(repository);
 }
 
 }  // namespace tyr::formalism::datalog

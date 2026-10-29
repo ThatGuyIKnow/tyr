@@ -18,18 +18,16 @@
 #ifndef TYR_SRC_FORMALISM_PLANNING_INVARIANTS_UTILS_HPP_
 #define TYR_SRC_FORMALISM_PLANNING_INVARIANTS_UTILS_HPP_
 
-#include "tyr/formalism/planning/invariants/invariant.hpp"
 #include "tyr/formalism/planning/mutable/atom.hpp"
+#include "tyr/formalism/planning/mutable/invariant.hpp"
 #include "tyr/formalism/planning/repository.hpp"
 
 namespace tyr::formalism::planning::invariant
 {
 
-inline const MutableAtom<FluentTag>* find_part(const Invariant& inv, PredicateView<FluentTag> predicate)
+inline const MutableAtom<FluentTag>* find_part(const MutableInvariant& inv, PredicateView<FluentTag> predicate)
 {
-    const auto it = std::find_if(inv.atoms.begin(),
-                                 inv.atoms.end(),
-                                 [&](const auto& atom) { return atom.predicate == predicate; });
+    const auto it = std::find_if(inv.atoms.begin(), inv.atoms.end(), [&](const auto& atom) { return atom.predicate == predicate; });
 
     return (it == inv.atoms.end()) ? nullptr : &*it;
 }
@@ -41,16 +39,15 @@ inline size_t part_arity(const MutableAtom<FluentTag>& part, size_t num_rigid_va
     for (const auto& term : part.terms)
     {
         std::visit(
-            [&](auto&& arg)
+            [&]<typename T>(const T& arg)
             {
-                using T = std::decay_t<decltype(arg)>;
                 if constexpr (std::is_same_v<T, ParameterIndex>)
                 {
                     if (static_cast<ygg::uint_t>(arg) >= num_rigid_variables)
                         has_counted = true;
                 }
             },
-            term.value);
+            term.variant);
     }
 
     return has_counted ? part.terms.size() - 1 : part.terms.size();
@@ -62,14 +59,13 @@ inline bool atom_uses_counted(const MutableAtom<FluentTag>& atom, size_t num_rig
                                [&](const auto& term)
                                {
                                    return std::visit(
-                                       [&](auto&& arg) -> bool
+                                       [&]<typename T>(const T& arg) -> bool
                                        {
-                                           using T = std::decay_t<decltype(arg)>;
                                            if constexpr (std::is_same_v<T, ParameterIndex>)
                                                return static_cast<ygg::uint_t>(arg) >= num_rigid_variables;
                                            return false;
                                        },
-                                       term.value);
+                                       term.variant);
                                });
 }
 
@@ -83,7 +79,7 @@ inline MutableAtom<FluentTag> make_initial_atom(PredicateView<FluentTag> predica
     if (counted_position == arity)
     {
         for (size_t i = 0; i < arity; ++i)
-            terms.emplace_back(ygg::Data<Term>(ParameterIndex(i)));
+            terms.emplace_back(ParameterIndex(i));
     }
     else
     {
@@ -93,12 +89,12 @@ inline MutableAtom<FluentTag> make_initial_atom(PredicateView<FluentTag> predica
         {
             if (i == counted_position)
             {
-                terms.emplace_back(ygg::Data<Term>(counted_index));
+                terms.emplace_back(counted_index);
             }
             else
             {
                 const auto rigid_index = (i < counted_position) ? ParameterIndex(i) : ParameterIndex(i - 1);
-                terms.emplace_back(ygg::Data<Term>(rigid_index));
+                terms.emplace_back(rigid_index);
             }
         }
     }

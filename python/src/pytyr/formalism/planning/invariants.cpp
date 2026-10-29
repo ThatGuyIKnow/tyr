@@ -18,6 +18,7 @@
 #include "tyr/formalism/planning/invariants/invariants.hpp"
 
 #include "bindings.hpp"
+#include "tyr/formalism/planning/planning_domain.hpp"
 #include "tyr/formalism/unification/formatter.hpp"
 
 #include <nanobind/stl/optional.h>
@@ -34,6 +35,7 @@ namespace
 template<typename T>
 void bind_substitution_function(nb::module_& m, const std::string& name)
 {
+    using namespace nb::literals;
     using V = unification::SubstitutionFunction<T>;
 
     auto cls = nb::class_<V>(m, name.c_str())
@@ -111,28 +113,22 @@ void bind_substitution_function(nb::module_& m, const std::string& name)
     ygg::add_hash(cls);
 }
 
-void bind_invariant(nb::module_& m, const std::string& name)
+void bind_mutex_group(nb::module_& m, const std::string& name)
 {
-    using V = Invariant;
+    using V = MutexGroup;
 
-    auto cls = nb::class_<V>(m, name.c_str())
-                   .def_ro("num_rigid_variables", &V::num_rigid_variables)
-                   .def_ro("num_counted_variables", &V::num_counted_variables)
-                   .def_ro("atoms", &V::atoms)
-                   .def_ro("predicates", &V::predicates);
-    ygg::add_print(cls);
-    ygg::add_comparison(cls);
-    ygg::add_hash(cls);
+    nb::class_<V>(m, name.c_str()).def_ro("invariant", &V::invariant).def_ro("objects", &V::objects).def_ro("atoms", &V::atoms);
 }
 
 void bind_invariant_match_data(nb::module_& m, const std::string& name)
 {
+    using namespace nb::literals;
     using V = InvariantMatchData;
     using ObjectSubstitution = unification::SubstitutionFunction<ygg::Index<Object>>;
 
     nb::class_<V>(m, name.c_str())
-        .def(nb::init<Invariant, std::vector<ObjectSubstitution>>(), "invariant"_a, "rigid_variable_bindings"_a)
-        .def_prop_ro("invariant", &V::invariant, nb::rv_policy::reference_internal)
+        .def(nb::init<InvariantView, std::vector<ObjectSubstitution>>(), "invariant"_a, "rigid_variable_bindings"_a)
+        .def_prop_ro("invariant", &V::invariant)
         .def_prop_ro("rigid_variable_bindings", &V::rigid_variable_bindings);
 }
 
@@ -164,6 +160,7 @@ void bind_query_result(nb::module_& m, const std::string& name)
 
 void bind_matcher(nb::module_& m, const std::string& name)
 {
+    using namespace nb::literals;
     using V = Matcher;
     using MatchDataList = InvariantMatchDataList;
 
@@ -174,9 +171,13 @@ void bind_matcher(nb::module_& m, const std::string& name)
              "atom"_a,
              "result"_a,
              "workspace"_a)
-        .def("query", nb::overload_cast<GroundAtomView<FluentTag>, QueryResult&, QueryWorkspace&>(&V::query, nb::const_), "atom"_a, "result"_a, "workspace"_a)
+        .def("query",
+             nb::overload_cast<AtomView<GroundTag, FluentTag>, QueryResult&, QueryWorkspace&>(&V::query, nb::const_),
+             "atom"_a,
+             "result"_a,
+             "workspace"_a)
         .def("query", nb::overload_cast<const MutableAtom<FluentTag>&>(&V::query, nb::const_), "atom"_a)
-        .def("query", nb::overload_cast<GroundAtomView<FluentTag>>(&V::query, nb::const_), "atom"_a);
+        .def("query", nb::overload_cast<AtomView<GroundTag, FluentTag>>(&V::query, nb::const_), "atom"_a);
 }
 }
 
@@ -186,7 +187,8 @@ void bind_matcher(nb::module_& m, const std::string& name)
 
 void bind_invariants(nb::module_& m)
 {
-    bind_invariant(m, "Invariant");
+    using namespace nb::literals;
+    bind_mutex_group(m, "MutexGroup");
     bind_substitution_function<ygg::Index<Object>>(m, "ObjectSubstitution");
     bind_substitution_function<ygg::Data<Term>>(m, "TermSubstitution");
     bind_invariant_match_data(m, "InvariantMatchData");
@@ -195,6 +197,16 @@ void bind_invariants(nb::module_& m)
     bind_query_result(m, "InvariantQueryResult");
     bind_matcher(m, "InvariantMatcher");
 
-    m.def("synthesize_invariants", &invariant::synthesize_invariants, "domain"_a);
+    m.def(
+        "synthesize_invariants",
+        [](const PlanningDomain& domain) { return invariant::synthesize_invariants(domain.get_domain(), *domain.get_repository()); },
+        "domain"_a,
+        "The domain's invariants, interned into its repository, which must outlive them. Call it before parsing tasks of the "
+        "domain: a repository must not change once tasks branch from it; later calls only find the interned invariants.");
+    nb::enum_<GreedyCriterion>(m, "GreedyCriterion").value("MaxGroupSize", GreedyCriterion::MaxGroupSize).value("MaxCoverage", GreedyCriterion::MaxCoverage);
+    m.def("compute_invariant_order_greedy", &invariant::compute_invariant_order_greedy, "invariants"_a, "criterion"_a = GreedyCriterion::MaxGroupSize);
+    m.def("compute_mutex_groups", &invariant::compute_mutex_groups, "initial_atoms"_a, "all_atoms"_a, "invariants"_a);
+    m.def("compute_mutex_groups_in_order", &invariant::compute_mutex_groups_in_order, "initial_atoms"_a, "all_atoms"_a, "invariant_order"_a);
+    m.def("compute_all_mutex_groups", &invariant::compute_all_mutex_groups, "initial_atoms"_a, "all_atoms"_a, "invariants"_a);
 }
 }

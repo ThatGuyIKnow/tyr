@@ -39,14 +39,14 @@ template<class Tag>
 class FDRFactIterator<LiftedTag, Tag>
 {
 public:
-    using value_type = ygg::Data<::tyr::formalism::planning::FDRFact<Tag>>;
+    using value_type = ygg::Data<formalism::planning::FDRFact<Tag>>;
     using reference = value_type;
     using difference_type = std::ptrdiff_t;
     using iterator_category = std::input_iterator_tag;
     using iterator_concept = std::input_iterator_tag;
     using pointer = void;
 
-    FDRFactIterator() noexcept : m_storage(nullptr), m_i(0) {}
+    FDRFactIterator() noexcept = default;
     FDRFactIterator(const FactUnpackedStorage<LiftedTag>& storage, bool begin) noexcept :
         m_storage(&storage),
         m_i(begin ? m_storage->indices.find_first() : boost::dynamic_bitset<>::npos)
@@ -57,8 +57,8 @@ public:
     {
         assert(m_storage);
         assert(m_storage->indices.test(m_i));
-        return ygg::Data<::tyr::formalism::planning::FDRFact<Tag>> { ygg::Index<::tyr::formalism::planning::FDRVariable<Tag>> { static_cast<ygg::uint_t>(m_i) },
-                                                                     ::tyr::formalism::planning::FDRValue { 1 } };
+        return ygg::Data<formalism::planning::FDRFact<Tag>> { ygg::Index<formalism::planning::FDRVariable<Tag>> { static_cast<ygg::uint_t>(m_i) },
+                                                              formalism::planning::FDRValue { 1 } };
     }
 
     FDRFactIterator& operator++() noexcept
@@ -88,8 +88,8 @@ public:
     FDRFactRange() = default;
     explicit FDRFactRange(const FactUnpackedStorage<LiftedTag>& storage) : m_storage(&storage) {}
 
-    auto begin() const { return FDRFactIterator<LiftedTag, Tag>(*m_storage, true); }
-    auto end() const { return FDRFactIterator<LiftedTag, Tag>(*m_storage, false); }
+    [[nodiscard]] auto begin() const { return FDRFactIterator<LiftedTag, Tag>(*m_storage, true); }
+    [[nodiscard]] auto end() const { return FDRFactIterator<LiftedTag, Tag>(*m_storage, false); }
 
 private:
     const FactUnpackedStorage<LiftedTag>* m_storage { nullptr };

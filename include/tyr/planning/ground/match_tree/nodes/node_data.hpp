@@ -19,38 +19,38 @@
 #define TYR_PLANNING_GROUND_MATCH_TREE_NODES_NODE_DATA_HPP_
 
 #include "tyr/planning/ground/match_tree/declarations.hpp"
-#include "tyr/planning/ground/match_tree/nodes/atom_index.hpp"
-#include "tyr/planning/ground/match_tree/nodes/constraint_index.hpp"
-#include "tyr/planning/ground/match_tree/nodes/generator_index.hpp"
-#include "tyr/planning/ground/match_tree/nodes/negative_fact_index.hpp"
-#include "tyr/planning/ground/match_tree/nodes/variable_index.hpp"
 
+#include <optional>
+#include <tuple>
+#include <utility>
+#include <variant>
+#include <vector>
 #include <yggdrasil/containers/variant.hpp>
 #include <yggdrasil/core/types.hpp>
 #include <yggdrasil/core/types_utils.hpp>
 
 namespace ygg
 {
-using namespace ::tyr;
-
 template<typename Tag>
-struct Data<planning::match_tree::Node<Tag>>
+struct Data<::tyr::planning::match_tree::Node<Tag>>
 {
-    using Variant = ::cista::offset::variant<ygg::Index<planning::match_tree::AtomSelectorNode<Tag>>,
-                                             ygg::Index<planning::match_tree::NumericConstraintSelectorNode<Tag>>,
-                                             ygg::Index<planning::match_tree::VariableSelectorNode<Tag>>,
-                                             ygg::Index<planning::match_tree::NegativeFactSelectorNode<Tag>>,
-                                             ygg::Index<planning::match_tree::ElementGeneratorNode<Tag>>>;
+    using Variant = ::ygg::IndexVariant<::tyr::planning::match_tree::NodeTypes<Tag>>;
 
-    Variant value;
+    Variant variant;
+
+    template<typename C>
+    using ViewVariant = ::ygg::ViewVariant<Variant, C>;
 
     Data() = default;
-    Data(Variant value) : value(value) {}
+    Data(Variant variant_) : variant(variant_) {}
+    template<typename C>
+    Data(const ViewVariant<C>& variant_) : variant(std::visit([](const auto& view) -> Variant { return Variant(view.get_index()); }, variant_))
+    {
+    }
 
-    void clear() noexcept { ygg::clear(value); }
-
-    auto cista_members() const noexcept { return std::tie(value); }
-    auto identifying_members() const noexcept { return std::tie(value); }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::variant> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::variant> {}; }
+    void clear() noexcept { ygg::clear_members(*this); }
 };
 
 }

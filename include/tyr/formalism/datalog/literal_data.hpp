@@ -18,47 +18,41 @@
 #ifndef TYR_FORMALISM_DATALOG_LITERAL_DATA_HPP_
 #define TYR_FORMALISM_DATALOG_LITERAL_DATA_HPP_
 
-#include "tyr/formalism/datalog/atom_index.hpp"
 #include "tyr/formalism/datalog/declarations.hpp"
-#include "tyr/formalism/datalog/literal_index.hpp"
 
+#include <tuple>
+#include <utility>
 #include <yggdrasil/core/types.hpp>
 #include <yggdrasil/core/types_utils.hpp>
 
 namespace ygg
 {
 
-template<::tyr::formalism::FactKind T>
-struct Data<::tyr::formalism::datalog::Literal<T>>
+template<::tyr::TaskKind T, ::tyr::formalism::FactKind F>
+struct Data<::tyr::formalism::datalog::Literal<T, F>>
 {
-    ygg::Index<::tyr::formalism::datalog::Literal<T>> index;
-    ygg::Index<::tyr::formalism::datalog::Atom<T>> atom;
-    bool polarity;
+    ygg::Index<::tyr::formalism::datalog::Literal<T, F>> index;
+    ygg::Index<::tyr::formalism::datalog::Atom<T, F>> atom;
+    bool polarity = false;
 
     Data() = default;
-    Data(ygg::Index<::tyr::formalism::datalog::Atom<T>> atom_, bool polarity_) : index(), atom(atom_), polarity(polarity_) {}
+    Data(ygg::Index<::tyr::formalism::datalog::Atom<T, F>> atom_, bool polarity_) : index(), atom(atom_), polarity(polarity_) {}
     template<typename C>
-    Data(::ygg::View<ygg::Index<::tyr::formalism::datalog::Atom<T>>, C> atom_, bool polarity_) : index(), atom(), polarity(polarity_)
-    {
-        set(atom_, atom);
-    }
+    Data(::ygg::View<ygg::Index<::tyr::formalism::datalog::Atom<T, F>>, C> atom_, bool polarity_) : index(), atom(), polarity(polarity_)
+    { set(atom_, atom); }
     Data(const Data& other) = default;
     Data& operator=(const Data& other) = default;
     Data(Data&& other) = default;
     Data& operator=(Data&& other) = default;
+    ~Data() = default;
 
-    void clear() noexcept
-    {
-        ygg::clear(index);
-        ygg::clear(atom);
-        ygg::clear(polarity);
-    }
-
-    auto cista_members() const noexcept { return std::tie(index, atom, polarity); }
-    auto identifying_members() const noexcept { return std::tie(atom, polarity); }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::atom, &Data::polarity> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::atom, &Data::polarity> {}; }
+    void clear() noexcept { ygg::clear_members(*this); }
 };
 
-static_assert(ygg::uses_trivial_storage_v<::tyr::formalism::datalog::Literal<::tyr::formalism::StaticTag>>);
+static_assert(ygg::uses_trivial_storage_v<::tyr::formalism::datalog::Literal<::tyr::LiftedTag, ::tyr::formalism::StaticTag>>);
+static_assert(ygg::uses_trivial_storage_v<::tyr::formalism::datalog::Literal<::tyr::GroundTag, ::tyr::formalism::StaticTag>>);
 
 }
 

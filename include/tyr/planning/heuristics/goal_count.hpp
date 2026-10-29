@@ -18,11 +18,10 @@
 #ifndef TYR_PLANNING_HEURISTICS_GOAL_COUNT_HPP_
 #define TYR_PLANNING_HEURISTICS_GOAL_COUNT_HPP_
 
-#include "tyr/formalism/planning/ground_conjunctive_condition_view.hpp"
+#include "tyr/formalism/planning/conjunctive_condition_view.hpp"
 #include "tyr/planning/declarations.hpp"
-#include "tyr/planning/ground/state_view.hpp"
 #include "tyr/planning/heuristic.hpp"
-#include "tyr/planning/lifted/state_view.hpp"
+#include "tyr/planning/state_repository.hpp"
 
 #include <memory>
 
@@ -39,16 +38,16 @@ public:
 
     using Heuristic<Kind>::evaluate;
 
-    void set_goal(::tyr::formalism::planning::GroundConjunctiveConditionView goal) override;
+    void set_goal(formalism::planning::ConjunctiveConditionView<GroundTag> goal) override;
 
     ygg::float_t evaluate(const ygg::Builder<State<Kind>>& state) override;
 
     [[nodiscard]] HeuristicPtr<Kind> make_worker(ygg::ExecutionContextPtr execution_context) const override;
 
-protected:
+private:
     std::shared_ptr<const Task<Kind>> m_task;
 
-    ::tyr::formalism::planning::GroundConjunctiveConditionView m_goal;
+    formalism::planning::ConjunctiveConditionView<GroundTag> m_goal;
 };
 
 }

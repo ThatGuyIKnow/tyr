@@ -18,10 +18,13 @@
 #ifndef TYR_FORMALISM_VARIABLE_DATA_HPP_
 #define TYR_FORMALISM_VARIABLE_DATA_HPP_
 
+#include "tyr/formalism/declarations.hpp"
+
+#include <string>
+#include <tuple>
+#include <utility>
 #include <yggdrasil/core/types.hpp>
 #include <yggdrasil/core/types_utils.hpp>
-#include "tyr/formalism/declarations.hpp"
-#include "tyr/formalism/variable_index.hpp"
 
 namespace ygg
 {
@@ -38,17 +41,13 @@ struct Data<::tyr::formalism::Variable>
     Data(const std::string& name_) : index(), name(name_) {}
     Data(const Data& other) = delete;
     Data& operator=(const Data& other) = delete;
-    Data(Data&& other) = default;
-    Data& operator=(Data&& other) = default;
+    Data(Data&& other) noexcept = default;
+    Data& operator=(Data&& other) noexcept = default;
+    ~Data() = default;
 
-    void clear() noexcept
-    {
-        ygg::clear(index);
-        ygg::clear(name);
-    }
-
-    auto cista_members() const noexcept { return std::tie(index, name); }
-    auto identifying_members() const noexcept { return std::tie(name); }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::name> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::name> {}; }
+    void clear() noexcept { ygg::clear_members(*this); }
 };
 
 static_assert(!ygg::uses_trivial_storage_v<::tyr::formalism::Variable>);

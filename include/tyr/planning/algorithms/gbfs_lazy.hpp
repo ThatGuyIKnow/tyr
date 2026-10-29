@@ -20,11 +20,10 @@
 
 #include "tyr/planning/algorithms/utils.hpp"
 #include "tyr/planning/declarations.hpp"
+#include "tyr/planning/search_budget.hpp"
 
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -32,6 +31,9 @@
 
 namespace tyr::planning::gbfs_lazy
 {
+
+/// Default of Options::boost_preferred_queue: the boost given to the preferred queue when search makes progress.
+inline constexpr ygg::uint_t default_boost_preferred_queue = 1000;
 
 template<TaskKind Kind>
 struct Options
@@ -41,13 +43,10 @@ struct Options
     EventHandlerPtr<Kind> event_handler = nullptr;
     PruningStrategyPtr<Kind> pruning_strategy = nullptr;
     GoalStrategyPtr<Kind> goal_strategy = nullptr;
-    /// Maximum solve-local states, including an unsolved start. Existing repository population is ignored, but a pre-interned state counts when first
-    /// encountered, and an over-limit successor may already be interned. A satisfied start may solve even when this is zero.
-    ygg::uint_t max_num_states = std::numeric_limits<ygg::uint_t>::max();
-    std::optional<std::chrono::steady_clock::duration> max_time = std::nullopt;
+    SearchBudget search_budget;
     CostMode cost_mode = CostMode::GENERAL;
     bool use_preferred_actions = true;
-    ygg::uint_t boost_preferred_queue = 1000;
+    ygg::uint_t boost_preferred_queue = default_boost_preferred_queue;
     /// Values above one enable parallel search. A concurrent state repository shares storage; a private one is hash-distributed.
     size_t num_search_workers = 1;
     DistHashMode dist_hash_mode = DistHashMode::RANDOM;
@@ -70,8 +69,6 @@ SearchResult<Kind> find_solution(Task<Kind>& task,
 template<TaskKind Kind>
 struct Solver
 {
-    using EventHandlerType = EventHandler<Kind>;
-
     TaskPtr<Kind> task;
     StateRepositoryPtr<Kind> state_repository;
     AxiomEvaluatorPtr<Kind> axiom_evaluator;

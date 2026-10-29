@@ -24,15 +24,27 @@ option(
 )
 option(TYR_ENABLE_INNER_PARALLELISM "Enable inner parallelism for expensive lifted rule evaluation." OFF)
 option(TYR_ENABLE_SEMI_NAIVE "Enable semi-naive lifted Datalog evaluation." ON)
-set(TYR_STATE_STORAGE_POLICY "Tree" CACHE STRING "Policy used for storing states.")
+set(TYR_STATE_STORAGE_POLICY "TreeBitset" CACHE STRING "Policy used for storing states.")
+set_property(CACHE TYR_STATE_STORAGE_POLICY PROPERTY STRINGS TreeVector TreeBitset Hashset)
 set(TYR_RELATION_STORAGE_POLICY "Word" CACHE STRING "Policy used for storing relation bindings.")
 set_property(CACHE TYR_RELATION_STORAGE_POLICY PROPERTY STRINGS Word Bit)
 option(TYR_BUILD_PYTYR "Build pytyr Python bindings." OFF)
 option(TYR_BUILD_TESTS "Build Tyr tests." OFF)
 option(TYR_BUILD_EXECUTABLES "Build Tyr executables." OFF)
 option(TYR_BUILD_PROFILING "Build Tyr profiling targets." OFF)
+option(TYR_STDLIB_ASSERTIONS "Check bounds and preconditions of the standard library in Debug builds." ON)
 
 # Build configuration
+
+# Debug builds check the standard library's preconditions, such as the bounds of operator[]
+# on std::vector, std::array and std::span (libstdc++; libc++ in its hardened mode). The
+# definitions apply to this project's own targets only and do not change the ABI.
+if(TYR_STDLIB_ASSERTIONS)
+    add_compile_definitions(
+        $<$<CONFIG:Debug>:_GLIBCXX_ASSERTIONS>
+        "$<$<CONFIG:Debug>:_LIBCPP_HARDENING_MODE=(_LIBCPP_HARDENING_MODE_EXTENSIVE)>"
+    )
+endif()
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(
@@ -47,12 +59,14 @@ if(TYR_HEADER_INSTANTIATION)
     add_compile_definitions(TYR_HEADER_INSTANTIATION)
 endif()
 
-if("${TYR_STATE_STORAGE_POLICY}" STREQUAL "Tree")
-    add_compile_definitions(TYR_STATE_STORAGE_TREE)
+if("${TYR_STATE_STORAGE_POLICY}" STREQUAL "TreeVector")
+    add_compile_definitions(TYR_STATE_STORAGE_TREE_VECTOR)
+elseif("${TYR_STATE_STORAGE_POLICY}" STREQUAL "TreeBitset")
+    add_compile_definitions(TYR_STATE_STORAGE_TREE_BITSET)
 elseif("${TYR_STATE_STORAGE_POLICY}" STREQUAL "Hashset")
     add_compile_definitions(TYR_STATE_STORAGE_HASHSET)
 else()
-    message(FATAL_ERROR "TYR_STATE_STORAGE_POLICY must be Tree or Hashset")
+    message(FATAL_ERROR "TYR_STATE_STORAGE_POLICY must be TreeVector, TreeBitset, or Hashset")
 endif()
 
 if(NOT TYR_RELATION_STORAGE_POLICY STREQUAL "Word" AND NOT TYR_RELATION_STORAGE_POLICY STREQUAL "Bit")
@@ -64,7 +78,12 @@ if(MSVC)
     string(APPEND CMAKE_EXE_LINKER_FLAGS " /IGNORE:4006,4044,4075")
 else()
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-    add_compile_options(-Wall -Wextra)
+    # Shadowed names hide the variable a statement meant; CI turns every warning into an error.
+    add_compile_options(-Wall -Wextra -Wshadow)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        # GCC 13+ flags views returned from temporary views; views never refer to the temporary.
+        add_compile_options(-Wno-dangling-reference)
+    endif()
 
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Og -g2 -ggdb")
     set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -g2 -fno-omit-frame-pointer -fno-lto")
@@ -85,11 +104,10 @@ else()
     endif()
 
     if(TYR_ENABLE_LTO AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-        # Cap release LTO parallelism to reduce RAM spikes.
-        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -flto=2")
-        set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -flto=2")
-        set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} -flto=2")
-        set(CMAKE_MODULE_LINKER_FLAGS_RELEASE "${CMAKE_MODULE_LINKER_FLAGS_RELEASE} -flto=2")
+        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -flto=auto")
+        set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -flto=auto")
+        set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} -flto=auto")
+        set(CMAKE_MODULE_LINKER_FLAGS_RELEASE "${CMAKE_MODULE_LINKER_FLAGS_RELEASE} -flto=auto")
     elseif(
         TYR_ENABLE_LTO
         AND (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
@@ -119,8 +137,8 @@ add_definitions(-DROOT_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 
 # Dependencies
 
-set(TYR_YGGDRASIL_REQUIRED_VERSION 0.0.27)
-set(TYR_LOKI_REQUIRED_VERSION 1.0.27)
+set(TYR_YGGDRASIL_REQUIRED_VERSION 0.6.0)
+set(TYR_LOKI_REQUIRED_VERSION 1.7.0)
 
 include("${PROJECT_SOURCE_DIR}/cmake/bootstrap_pyyggdrasil.cmake")
 
@@ -134,10 +152,10 @@ if(yggdrasil_FOUND)
     message(STATUS "Found yggdrasil: ${yggdrasil_DIR} (found version ${yggdrasil_VERSION})")
 endif()
 
-yggdrasil_find_python_native_prefix(pypddl PYPDDL_NATIVE_PREFIX)
+yggdrasil_find_python_native_prefix(pypddl LOKI_NATIVE_PREFIX)
 yggdrasil_register_native_dependency_prefix("${YGGDRASIL_NATIVE_PREFIX}")
-yggdrasil_register_native_dependency_prefix("${PYPDDL_NATIVE_PREFIX}")
-yggdrasil_register_python_native_runtime_prefix("pypddl/native" "${PYPDDL_NATIVE_PREFIX}")
+yggdrasil_register_native_dependency_prefix("${LOKI_NATIVE_PREFIX}")
+yggdrasil_register_python_native_runtime_prefix("pypddl/native" "${LOKI_NATIVE_PREFIX}")
 yggdrasil_register_python_native_runtime_prefix("pyyggdrasil" "${YGGDRASIL_NATIVE_PREFIX}")
 
 find_package(argparse CONFIG REQUIRED PATHS ${CMAKE_PREFIX_PATH} NO_DEFAULT_PATH)
@@ -192,7 +210,7 @@ endif()
 
 if(TYR_BUILD_TESTS OR TYR_BUILD_PROFILING)
     # Benchmark PDDL is resolved from the pypddl-datasets cache and downloaded on demand at configure time.
-    find_package(Python 3.10 REQUIRED COMPONENTS Interpreter)
+    find_package(Python 3.11 REQUIRED COMPONENTS Interpreter)
     execute_process(
         COMMAND
             "${Python_EXECUTABLE}"
@@ -202,7 +220,7 @@ if(TYR_BUILD_TESTS OR TYR_BUILD_PROFILING)
         RESULT_VARIABLE TYR_BENCHMARKS_RESULT
     )
     if(NOT TYR_BENCHMARKS_RESULT EQUAL 0)
-        message(FATAL_ERROR "Could not resolve the benchmark data root; install 'pypddl-datasets>=0.0.9,<0.1' into the configuring Python (${Python_EXECUTABLE}).")
+        message(FATAL_ERROR "Could not resolve the benchmark data root; install 'pypddl-datasets>=0.0.17,<0.1' into the configuring Python (${Python_EXECUTABLE}).")
     endif()
     message(STATUS "Benchmark data: ${TYR_BENCHMARKS_DIR}")
     add_compile_definitions(BENCHMARKS_DIR="${TYR_BENCHMARKS_DIR}")

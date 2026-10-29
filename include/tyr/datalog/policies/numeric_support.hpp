@@ -19,16 +19,17 @@
 #define TYR_DATALOG_POLICIES_NUMERIC_SUPPORT_HPP_
 
 #include "tyr/datalog/fact_sets.hpp"
-#include "tyr/datalog/numeric_utils.hpp"
 #include "tyr/datalog/policies/aggregation.hpp"
 #include "tyr/datalog/policies/annotation_types.hpp"
 #include "tyr/formalism/datalog/repository.hpp"
 #include "tyr/formalism/datalog/views.hpp"
+#include "tyr/formalism/numeric_expression_utils.hpp"
 
 #include <algorithm>
 #include <cassert>
 #include <concepts>
 #include <limits>
+#include <utility>
 #include <vector>
 #include <yggdrasil/core/closed_interval.hpp>
 #include <yggdrasil/core/config.hpp>
@@ -41,7 +42,7 @@ class NumericSupportSelectorWorkspace
 public:
     struct SelectionEntry
     {
-        ::tyr::formalism::datalog::FunctionBindingView<::tyr::formalism::FluentTag> key;
+        formalism::datalog::FunctionBindingIndex<formalism::FluentTag> key;
         ygg::ClosedInterval<ygg::float_t> interval;
         const NumericIntervalAnnotation* annotation;
         Cost cost;
@@ -58,27 +59,27 @@ public:
 /// cost-sorted per-fluent interval annotations.
 class NumericSupportSelector
 {
-public:
-    using Key = ::tyr::formalism::datalog::FunctionBindingView<::tyr::formalism::FluentTag>;
+    using Key = formalism::datalog::FunctionBindingIndex<formalism::FluentTag>;
     using SelectionEntry = NumericSupportSelectorWorkspace::SelectionEntry;
     using Selection = std::vector<SelectionEntry>;
 
+public:
     NumericSupportSelector(const FactSets& fact_sets, const NumericIntervalAnnotations<>& annotations, bool initial_intervals_cost_zero = false);
 
-    Key fluent_key(::tyr::formalism::datalog::GroundFunctionTermView<::tyr::formalism::FluentTag> term) const noexcept;
-    ygg::ClosedInterval<ygg::float_t> lookup_static(::tyr::formalism::datalog::GroundFunctionTermView<::tyr::formalism::StaticTag> term) const;
-    ygg::ClosedInterval<ygg::float_t> current_interval(Key key) const;
-    const NumericIntervalAnnotations<>::Entries* find_entries(Key key) const;
-    Cost missing_entries_cost() const noexcept { return m_initial_intervals_cost_zero ? Cost(0) : std::numeric_limits<Cost>::max(); }
+    [[nodiscard]] Key fluent_key(formalism::datalog::FunctionTermView<GroundTag, formalism::FluentTag> term) const noexcept;
+    [[nodiscard]] ygg::ClosedInterval<ygg::float_t> lookup_static(formalism::datalog::FunctionTermView<GroundTag, formalism::StaticTag> term) const;
+    [[nodiscard]] ygg::ClosedInterval<ygg::float_t> current_interval(Key key) const;
+    [[nodiscard]] const NumericIntervalAnnotations<>::Entries* find_entries(Key key) const;
+    [[nodiscard]] Cost missing_entries_cost() const noexcept { return m_initial_intervals_cost_zero ? static_cast<Cost>(0) : std::numeric_limits<Cost>::max(); }
 
-    ygg::ClosedInterval<ygg::float_t> evaluate_effect_expression(::tyr::formalism::datalog::GroundFunctionExpressionView expression, Selection& selection) const
+    ygg::ClosedInterval<ygg::float_t> evaluate_effect_expression(formalism::datalog::FunctionExpressionView<GroundTag> expression, Selection& selection) const
     {
-        return evaluate_numeric_expression(expression, [&](const auto term) { return evaluate_term(term, selection); });
+        return formalism::evaluate_numeric_expression(expression, [&](const auto term) { return evaluate_term(term, selection); });
     }
 
-    bool is_supported(::tyr::formalism::datalog::GroundBooleanOperatorView constraint, Selection& selection) const
+    bool is_supported(formalism::datalog::BooleanOperatorView<GroundTag> constraint, Selection& selection) const
     {
-        return evaluate_numeric_expression(constraint, [&](const auto term) { return evaluate_term(term, selection); });
+        return formalism::evaluate_numeric_expression(constraint, [&](const auto term) { return evaluate_term(term, selection); });
     }
 
     ygg::ClosedInterval<ygg::float_t> select_fluent_interval(Key key, Selection& selection) const
@@ -86,7 +87,7 @@ public:
         if (const auto* entry = find_selection_entry(key, selection))
             return entry->interval;
 
-        const auto current = current_interval(key);
+        auto current = current_interval(key);
         if (empty(current))
             return ygg::ClosedInterval<ygg::float_t>();
 
@@ -99,7 +100,7 @@ public:
     }
 
     template<typename AggregationFunction>
-    Cost get_constraint_cost(::tyr::formalism::datalog::GroundBooleanOperatorView constraint, Selection& selection, AggregationFunction agg) const
+    Cost get_constraint_cost(formalism::datalog::BooleanOperatorView<GroundTag> constraint, Selection& selection, AggregationFunction agg) const
     {
         return get_greedy_support_cost(selection, agg, [&](auto& selected) { return is_supported(constraint, selected); });
     }
@@ -108,7 +109,7 @@ public:
     /// an exact certificate for the selected interval, or the two certificates attaining its bounds.
     /// Returns whether a complete proof was reported.
     template<typename Callback>
-    bool for_each_entry_support(const SelectionEntry& entry, Callback callback) const
+    [[nodiscard]] bool for_each_entry_support(const SelectionEntry& entry, Callback callback) const
     {
         const auto key = entry.key;
 
@@ -123,8 +124,8 @@ public:
         if (!entries)
             return false;
 
-        auto lower_support = decltype(entry.annotation) {};
-        auto upper_support = decltype(entry.annotation) {};
+        const NumericIntervalAnnotation* lower_support = nullptr;
+        const NumericIntervalAnnotation* upper_support = nullptr;
         for (const auto& candidate : *entries)
         {
             const auto cost = get_cost(candidate.annotation);
@@ -158,12 +159,12 @@ public:
     }
 
     template<typename AggregationFunction, typename Callback>
-    Cost for_each_constraint_support(::tyr::formalism::datalog::GroundBooleanOperatorView constraint,
+    Cost for_each_constraint_support(formalism::datalog::BooleanOperatorView<GroundTag> constraint,
                                      Selection& selection,
                                      AggregationFunction agg,
                                      Callback callback) const
     {
-        const auto cost = get_constraint_cost(constraint, selection, agg);
+        const auto cost = get_constraint_cost(std::move(constraint), selection, agg);
         if (cost == std::numeric_limits<Cost>::max())
             return cost;
 
@@ -178,7 +179,7 @@ public:
     }
 
     /// The cheapest annotation cost at which the achieved interval hull covers `current`.
-    Cost get_current_interval_cost(Key key, ygg::ClosedInterval<ygg::float_t> current) const
+    [[nodiscard]] Cost get_current_interval_cost(Key key, const ygg::ClosedInterval<ygg::float_t>& current) const
     {
         const auto* entries = find_entries(key);
         if (!entries)
@@ -211,25 +212,25 @@ public:
         return best_cost;
     }
 
-    bool is_available(Key key, ygg::ClosedInterval<ygg::float_t> interval) const
+    [[nodiscard]] bool is_available(Key key, const ygg::ClosedInterval<ygg::float_t>& interval) const
     {
         const auto current = current_interval(key);
         return !empty(current) && subset(interval, current);
     }
 
 private:
-    template<::tyr::formalism::FactKind T>
-    ygg::ClosedInterval<ygg::float_t> evaluate_term(::tyr::formalism::datalog::GroundFunctionTermView<T> term, Selection& selection) const
+    template<formalism::FactKind T>
+    ygg::ClosedInterval<ygg::float_t> evaluate_term(formalism::datalog::FunctionTermView<GroundTag, T> term, Selection& selection) const
     {
-        if constexpr (std::same_as<T, ::tyr::formalism::StaticTag>)
+        if constexpr (std::same_as<T, formalism::StaticTag>)
             return lookup_static(term);
-        else if constexpr (std::same_as<T, ::tyr::formalism::FluentTag>)
+        else if constexpr (std::same_as<T, formalism::FluentTag>)
             return select_fluent_interval(fluent_key(term), selection);
         else
             return {};
     }
 
-    const SelectionEntry* find_selection_entry(Key key, const Selection& selection) const
+    [[nodiscard]] const SelectionEntry* find_selection_entry(Key key, const Selection& selection) const
     {
         for (const auto& entry : selection)
             if (entry.key == key)
@@ -294,10 +295,9 @@ private:
     }
 
     FactSets m_fact_sets;
-    const NumericIntervalAnnotations<>& m_annotations;
+    const NumericIntervalAnnotations<>* m_annotations;
     bool m_initial_intervals_cost_zero;
 };
-
 }
 
 #endif

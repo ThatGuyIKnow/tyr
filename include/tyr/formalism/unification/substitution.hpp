@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <cassert>
 #include <optional>
+#include <type_traits>
 #include <vector>
 #include <yggdrasil/containers/associative_containers.hpp>
 #include <yggdrasil/semantics/comparison.hpp>
@@ -41,9 +42,7 @@ public:
     SubstitutionFunction() = default;
 
     explicit SubstitutionFunction(std::vector<ParameterIndex> parameters) : m_parameters(std::move(parameters)), m_data(m_parameters.size())
-    {
-        rebuild_positions();
-    }
+    { rebuild_positions(); }
 
     static SubstitutionFunction from_range(ParameterIndex offset, size_t size)
     {
@@ -51,7 +50,7 @@ public:
         parameters.reserve(size);
 
         for (size_t i = 0; i < size; ++i)
-            parameters.push_back(ParameterIndex(ygg::uint_t(offset) + i));
+            parameters.emplace_back(static_cast<ygg::uint_t>(offset) + i);
 
         return SubstitutionFunction(std::move(parameters));
     }
@@ -129,18 +128,18 @@ public:
     }
 
     template<typename F>
-    void for_each_binding(F&& f) const
+    void for_each_binding(F f) const
     {
         for (size_t i = 0; i < m_parameters.size(); ++i)
         {
-            if (m_data[i].has_value())
-                std::forward<F>(f)(m_parameters[i], *m_data[i]);
+            if (const auto& slot = m_data[i]; slot.has_value())
+                f(m_parameters[i], *slot);
         }
     }
 
     void reset() noexcept { std::fill(m_data.begin(), m_data.end(), std::nullopt); }
 
-    auto identifying_members() const noexcept { return std::tie(m_parameters, m_data); }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&SubstitutionFunction::m_parameters, &SubstitutionFunction::m_data> {}; }
 
 private:
     void rebuild_positions()
@@ -159,9 +158,7 @@ private:
 };
 
 template<typename S, typename V>
-concept SubstitutionFor = requires(S s, const S cs, ParameterIndex p, const V& v) {
-    typename S::value_type;
-    requires std::same_as<typename S::value_type, V>;
+concept SubstitutionFor = requires(std::remove_reference_t<S>& s, const std::remove_reference_t<S>& cs, ParameterIndex p, const V& v) {
     { cs.contains_parameter(p) } -> std::same_as<bool>;
     { cs.is_bound(p) } -> std::same_as<bool>;
     { cs.is_unbound(p) } -> std::same_as<bool>;

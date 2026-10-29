@@ -18,7 +18,7 @@
 #ifndef TYR_PLANNING_SEARCH_SPACE_SEARCH_NODE_HPP_
 #define TYR_PLANNING_SEARCH_SPACE_SEARCH_NODE_HPP_
 
-#include "tyr/planning/state_index.hpp"
+#include "tyr/planning/declarations.hpp"
 
 #include <concepts>
 #include <cstdint>
@@ -26,13 +26,14 @@
 namespace tyr::planning
 {
 
-enum SearchNodeStatus : uint8_t
+enum class SearchNodeStatus : uint8_t
 {
     GOAL = 0,
     DEAD_END = 1,
     CLOSED = 2,
     OPEN = 3,
     NEW = 4,
+    HEURISTIC_PENDING = 5,
 };
 
 template<typename T, typename ParentState>

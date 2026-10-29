@@ -30,6 +30,13 @@ The library consists of a **formalism** and a **planning** component. The formal
 
 Pytyr is available at [PyPI](https://pypi.org/project/pytyr/) and can be installed with `pip install pytyr`. 
 
+[`pytyr.serialization`](docs/serialization/index.md) provides structured native
+representations with caller-selected dictionary tables and reference prefixes.
+
+Formalism repositories publish compatible payloads with `view, inserted = repository.insert(data)`.
+The boolean reports whether publication created a new entity. Returned views retain their
+repository, including views extracted from insertion tuples and iterators.
+
 Detailed examples are available in the `python/examples` directory:
 
 - [`structures.py`](python/examples/formalism/planning/structures.py) – Parse and traverse all planning formalism structures.
@@ -42,14 +49,16 @@ The Python interface for implementing search algorithms is:
 
 ```py
 # Recommended namespace aliases
+from pypddl.formalism import ParserOptions
 from pyyggdrasil.execution import ExecutionContext
 import pytyr.formalism.planning as tfp
 import pytyr.planning.lifted as tpl  # pytyr.planning.ground also exists
 
 # Parse and translate a task over a domain.
-parser = tfp.Parser("domain.pddl")
+parser_options = ParserOptions()
+parser = tfp.Parser("domain.pddl", parser_options)
 # Instantiate a lifted task.
-task = tpl.Task(parser.parse_task("problem.pddl"))
+task = tpl.Task(parser.parse_task("problem.pddl", parser_options))
 
 # Instantiate a single-threaded execution environment.
 execution_context = ExecutionContext(1)
@@ -71,6 +80,30 @@ labeled_successor_nodes = successor_generator.get_labeled_successor_nodes(initia
 ```
 
 ## C++ Interface
+
+Serialized search reporting takes the payload type explicitly: use `serialized::Options<Kind>` and
+`serialized::EventHandler<Kind>` for ordinary `planning::Statistics`, or pass a custom `Stats` as the second
+parameter. `serialized::Statistics<Stats>` no longer takes a task kind or solver type.
+`serialized::find_solution(solver, options, reader)` borrows a reader callable accepting
+`(const Solver&, const SearchResult<Kind>&)` and returning `const Stats*`; the payload must remain valid
+through the immediate reporting callback. Returning `nullptr` skips that callback without changing aggregate
+search statistics or search events. The two-argument overload and `serialized::Solver<Kind, Subsolver>`
+report ordinary result statistics. SIW supplies its IW statistics reader explicitly; generic subsolvers
+need no event-handler metadata. `SolverConcept<Solver, Kind>` requires `solve()` and
+`normalize_start_node(optional<Node<Kind>>)`. `SolverOptionsConcept<Options, Kind>` separately checks
+configuration of the start node, goal strategy, and readable/writable state and time limits. Serialized search combines
+these contracts with solver copyability; the generic solver contract does not require options or copying.
+
+Formalism construction uses `insert(repository, data)` and returns `(view, inserted)`.
+Payload indices must already refer to the destination repository or its ancestors.
+For cross-repository transfer, create `CopyContext context{builder, destination}` and call `copy(source, context)`: indexed entities return the same pair, while inline values return
+a value view. Copy recursively remaps references and reuses the caller's pooled builder.
+`get_builder<T>()` returns raw pooled storage; `checkout<T>()` clears it for construction.
+
+Construct `Node<Kind, State>` and `LabeledNode<Kind, State, Binding>` with an explicit task kind; the state and binding parameters default to indexed views.
+`NodeConcept<T, Kind>` checks const access to a compatible state view and metric without requiring nested type aliases or a particular state return reference.
+Concrete `Node::get_state()` still returns a const reference. Numeric binary expression adapters provide `get_operator()`, `get_lhs()`, and `get_rhs()`;
+the operator getter determines Boolean or arithmetic evaluation, without an `OperatorType` alias.
 
 The C++ interface for implementing search algorithms is:
 
@@ -111,9 +144,9 @@ auto labeled_successor_nodes = successor_generator->get_labeled_successor_nodes(
 
 Tyr consumes native dependencies from Python packages:
 
-- `pyyggdrasil >= 0.0.27, < 0.1` for shared third-party native dependencies.
-- `pypddl >= 1.0.27, < 1.1` for Loki's PDDL parser library, headers, and CMake package.
-- `pypddl-datasets >= 0.0.9, < 0.1` for the PDDL benchmark data used by the C++ test and profiling fixtures (resolved from its cache at CMake configure time).
+- `pyyggdrasil >= 0.6.0, < 0.7` for shared third-party native dependencies.
+- `pypddl >= 1.4.1, < 1.5` for Loki's PDDL parser library, headers, and CMake package.
+- `pypddl-datasets >= 0.0.17, < 0.1` for the PDDL benchmark data used by the C++ test and profiling fixtures (resolved from its cache at CMake configure time).
 
 The shared workspace layout, layered install order, and the common
 build-from-source and CMake-integration patterns are documented in the
@@ -126,7 +159,7 @@ Install Tyr's native dependency providers into the active Python environment,
 then configure CMake with their native prefixes:
 
 ```console
-python -m pip install 'pyyggdrasil>=0.0.27,<0.1' 'pypddl>=1.0.27,<1.1' 'pypddl-datasets>=0.0.9,<0.1'
+python -m pip install 'pyyggdrasil>=0.6.0,<0.7' 'pypddl>=1.7.0,<1.8' 'pypddl-datasets>=0.0.17,<0.1'
 
 cmake -S . -B build \
   -DPython_EXECUTABLE="$(python -c 'import sys; print(sys.executable)')"
@@ -158,7 +191,7 @@ CMake options:
 | `TYR_ENABLE_SEMI_NAIVE` | `ON` | Enable semi-naive lifted Datalog evaluation. |
 | `TYR_USE_LLD` | `ON` | Use LLVM `lld` with Clang when available. |
 | `TYR_ENABLE_LTO` | `ON` | Enable link-time optimization for Release builds. |
-| `TYR_STATE_STORAGE_POLICY` | `Tree` | State storage backend; accepted values are `Tree` and `Hashset`. |
+| `TYR_STATE_STORAGE_POLICY` | `TreeBitset` | State storage backend; accepted values are `TreeVector`, `TreeBitset`, and `Hashset`. `TreeBitset` stores fluent facts and derived atoms as position-stable bitset trees and inserts successors as deltas to their parent. |
 | `TYR_RELATION_STORAGE_POLICY` | `Word` | Relation storage backend; accepted values are `Word` and `Bit`. Bit packing uses `num_objects` supplied when creating repositories. |
 
 `RepositoryFactory.create_repository(parent_repository=None, num_objects=None)` accepts the total object count for the repository. `None` keeps the full object-index width; child counts include the parent object universe.

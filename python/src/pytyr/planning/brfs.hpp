@@ -29,16 +29,14 @@ class PyEventHandler : public EventHandler<Kind>
 public:
     using Base = EventHandler<Kind>;
 
-    NB_TRAMPOLINE(Base, 4);
+    NB_TRAMPOLINE(Base);
 
     void on_start_search(const Node<Kind>& node) override { NB_OVERRIDE_PURE(on_start_search, node); }
 
     void on_finish_layer(ygg::uint_t layer, const tyr::planning::Statistics& statistics) override { NB_OVERRIDE_PURE(on_finish_layer, layer, statistics); }
 
     void on_end_search(tyr::planning::SearchStatus status, const tyr::planning::Statistics& statistics) override
-    {
-        NB_OVERRIDE_PURE(on_end_search, status, statistics);
-    }
+    { NB_OVERRIDE_PURE(on_end_search, status, statistics); }
 
     void on_solved(const Plan<Kind>& plan) override { NB_OVERRIDE_PURE(on_solved, plan); }
 };
@@ -54,8 +52,7 @@ void bind_options(nb::module_& m, const std::string& name)
         .def_rw("event_handler", &T::event_handler)
         .def_rw("pruning_strategy", &T::pruning_strategy)
         .def_rw("goal_strategy", &T::goal_strategy)
-        .def_rw("max_num_states", &T::max_num_states)
-        .def_rw("max_time", &T::max_time)
+        .def_rw("search_budget", &T::search_budget)
         .def_rw("num_search_workers", &T::num_search_workers)
         .def_rw("dist_hash_mode", &T::dist_hash_mode)
         .def_rw("collect_destination_lock_statistics", &T::collect_destination_lock_statistics)
@@ -81,6 +78,7 @@ void bind_solver(nb::module_& m, const std::string& name)
 template<TaskKind Kind>
 void bind_find_solution(nb::module_& m, const std::string& py_name)
 {
+    using namespace nb::literals;
     m.def(
         py_name.c_str(),
         [](Task<Kind>& task,
@@ -99,6 +97,7 @@ void bind_find_solution(nb::module_& m, const std::string& py_name)
 template<TaskKind Kind>
 void bind_event_handler(nb::module_& m, const std::string& name)
 {
+    using namespace nb::literals;
     using T = EventHandler<Kind>;
 
     nb::class_<T, PyEventHandler<Kind>>(m, name.c_str())
@@ -112,6 +111,7 @@ void bind_event_handler(nb::module_& m, const std::string& name)
 template<TaskKind Kind>
 void bind_default_event_handler(nb::module_& m, const std::string& name)
 {
+    using namespace nb::literals;
     using T = DefaultEventHandler<Kind>;
 
     nb::class_<T, EventHandler<Kind>>(m, name.c_str())  //

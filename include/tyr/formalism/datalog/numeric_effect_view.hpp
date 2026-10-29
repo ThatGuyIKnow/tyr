@@ -21,32 +21,24 @@
 #include "tyr/formalism/datalog/declarations.hpp"
 #include "tyr/formalism/datalog/function_expression_view.hpp"
 #include "tyr/formalism/datalog/function_term_view.hpp"
-#include "tyr/formalism/datalog/numeric_effect_index.hpp"
 
 #include <yggdrasil/core/types.hpp>
 
 namespace ygg
 {
-template<::tyr::formalism::FactKind T, ::tyr::formalism::datalog::Context C>
-class View<ygg::Index<::tyr::formalism::datalog::NumericEffect<T>>, C>
+
+template<::tyr::TaskKind T, ::tyr::formalism::FactKind F, ygg::formalism::SymbolContextFor<::tyr::formalism::datalog::NumericEffect<T, F>> C>
+class View<ygg::Index<::tyr::formalism::datalog::NumericEffect<T, F>>, C> : public ygg::IndexViewBase<::tyr::formalism::datalog::NumericEffect<T, F>, C>
 {
-private:
-    const C* m_context;
-    ygg::Index<::tyr::formalism::datalog::NumericEffect<T>> m_handle;
-
 public:
-    View(ygg::Index<::tyr::formalism::datalog::NumericEffect<T>> handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
+    View(ygg::Index<::tyr::formalism::datalog::NumericEffect<T, F>> handle, const C& context) noexcept :
+        ygg::IndexViewBase<::tyr::formalism::datalog::NumericEffect<T, F>, C>(handle, context)
+    {
+    }
 
-    const auto& get_data() const noexcept { return get_repository(*m_context)[m_handle]; }
-    const auto& get_context() const noexcept { return *m_context; }
-    const auto& get_handle() const noexcept { return m_handle; }
-
-    auto get_index() const noexcept { return m_handle; }
-    auto get_operator() const noexcept { return get_data().operator_kind; }
-    auto get_fterm() const noexcept { return ygg::make_view(get_data().fterm, *m_context); }
-    auto get_fexpr() const noexcept { return ygg::make_view(get_data().fexpr, *m_context); }
-
-    auto identifying_members() const noexcept { return std::tie(m_handle, m_context->get_index()); }
+    auto get_operator() const noexcept { return this->get_data().operator_kind; }
+    auto get_fterm() const noexcept { return ygg::make_view(this->get_data().fterm, this->get_context()); }
+    auto get_fexpr() const noexcept { return ygg::make_view(this->get_data().fexpr, this->get_context()); }
 };
 
 }

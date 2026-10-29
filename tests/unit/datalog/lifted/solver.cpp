@@ -15,372 +15,29 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "tyr/datalog/solver.hpp"
-
-#include "planning/parser.hpp"
-#include "tyr/datalog/applicability_lifted.hpp"
-#include "tyr/datalog/ground/program.hpp"
-#include "tyr/datalog/lifted/consistency_graph.hpp"
-#include "tyr/datalog/lifted/contexts/program.hpp"
-#include "tyr/datalog/lifted/program.hpp"
-#include "tyr/datalog/policies/annotation.hpp"
-#include "tyr/formalism/datalog/canonicalization.hpp"
-#include "tyr/formalism/datalog/datas.hpp"
-#include "tyr/formalism/datalog/grounder.hpp"
-#include "tyr/formalism/datalog/merge.hpp"
-#include "tyr/planning/lifted/programs/ground.hpp"
-#include "tyr/planning/planning.hpp"
+#include "solver_fixtures.hpp"
+#include "tyr/formalism/datalog/interning.hpp"
 
 #include <algorithm>
-#include <array>
-#include <boost/iostreams/copy.hpp>
-#include <boost/iostreams/filter/gzip.hpp>
-#include <boost/iostreams/filtering_stream.hpp>
-#include <boost/json.hpp>
-#include <cstdint>
-#include <filesystem>
-#include <fstream>
 #include <gtest/gtest.h>
-#include <initializer_list>
-#include <memory>
-#include <oneapi/tbb/parallel_for.h>
-#include <oneapi/tbb/task_arena.h>
-#include <ostream>
-#include <ranges>
-#include <sstream>
-#include <stdexcept>
+#include <set>
 #include <string>
-#include <string_view>
-#include <tuple>
-#include <type_traits>
-#include <utility>
-#include <variant>
-#include <vector>
-#include <yggdrasil/serialization/json.hpp>
-#include <yggdrasil/serialization/json_suite.hpp>
-
-namespace d = tyr::datalog;
-namespace f = tyr::formalism;
-namespace fd = tyr::formalism::datalog;
-namespace p = tyr::planning;
+#include <yggdrasil/execution/onetbb.hpp>
 
 namespace tyr::tests
 {
-static_assert(fd::Repository::thread_safe);
-
 namespace
 {
-inline constexpr const char* kBottomUpFixture = "tests/fixtures/datalog/algorithms/lifted/bottom_up.json.gz";
-inline constexpr const char* kBenchmarksFixture = "tests/fixtures/planning/benchmarks.json";
-inline constexpr auto kConfigNames = std::array<std::string_view, 3> { "applicable_action", "axiom_evaluator", "ground_task" };
-
-struct AtomBinding
-{
-    std::string objects;
-
-    friend bool operator==(const AtomBinding&, const AtomBinding&) = default;
-};
-
-struct PredicateAtoms
-{
-    std::string predicate;
-    ygg::uint_t arity;
-    std::vector<AtomBinding> bindings;
-
-    friend bool operator==(const PredicateAtoms&, const PredicateAtoms&) = default;
-};
-
-using AtomsByPredicate = std::vector<PredicateAtoms>;
-
-struct BottomUpCase
-{
-    std::string name;
-    std::filesystem::path domain_file;
-    std::filesystem::path task_file;
-    std::array<AtomsByPredicate, kConfigNames.size()> configs;
-};
-
-void PrintTo(const BottomUpCase& test_case, std::ostream* os) { *os << test_case.name << " (" << test_case.task_file << ')'; }
-
-AtomBinding parse_atom_binding(const boost::json::object& object) { return AtomBinding { ygg::common::as_string(object, "objects", "atom binding") }; }
-
-PredicateAtoms parse_predicate_atoms(const boost::json::object& object)
-{
-    auto bindings = std::vector<AtomBinding> {};
-    for (const auto& value : ygg::common::as_array(object, "bindings", "predicate atoms"))
-        bindings.push_back(parse_atom_binding(ygg::common::as_object(value, "atom binding")));
-    std::ranges::sort(bindings, {}, &AtomBinding::objects);
-
-    return PredicateAtoms { ygg::common::as_string(object, "predicate", "predicate atoms"),
-                            boost::json::value_to<ygg::uint_t>(object.at("arity")),
-                            std::move(bindings) };
-}
-
-AtomsByPredicate parse_atoms_by_predicate(const boost::json::object& object)
-{
-    auto result = AtomsByPredicate {};
-    for (const auto& value : ygg::common::as_array(object, "atoms", "configuration"))
-        result.push_back(parse_predicate_atoms(ygg::common::as_object(value, "predicate atoms")));
-    return result;
-}
-
-size_t get_config_index(std::string_view config)
-{
-    const auto it = std::ranges::find(kConfigNames, config);
-    if (it == kConfigNames.end())
-        throw std::runtime_error("unknown bottom-up configuration: " + std::string(config));
-    return static_cast<size_t>(it - kConfigNames.begin());
-}
-
-BottomUpCase parse_case(const boost::json::object& object)
-{
-    auto result = BottomUpCase { ygg::common::as_string(object, "name", "case"),
-                                 ygg::common::resolve_path(std::filesystem::path(BENCHMARKS_DIR), ygg::common::as_string(object, "domain_file", "case")),
-                                 ygg::common::resolve_path(std::filesystem::path(BENCHMARKS_DIR), ygg::common::as_string(object, "task_file", "case")),
-                                 {} };
-
-    auto seen = std::array<bool, kConfigNames.size()> {};
-
-    if (const auto* configs = object.if_contains("configs"))
-        for (const auto& [name, value] : configs->as_object())
-        {
-            const auto config = std::string(name);
-            const auto index = get_config_index(config);
-            if (seen[index])
-                throw std::runtime_error("duplicate bottom-up configuration in " + result.name + ": " + config);
-            seen[index] = true;
-            result.configs[index] = parse_atoms_by_predicate(value.as_object());
-        }
-
-    if (!std::ranges::all_of(seen, [](bool value) { return value; }))
-        throw std::runtime_error("bottom-up configurations do not match the three-config matrix in " + result.name);
-
-    return result;
-}
-
-std::vector<BottomUpCase> load_cases()
-{
-    const auto fixture_path = ygg::common::root_path() / kBottomUpFixture;
-    auto file = std::ifstream(fixture_path, std::ios::binary);
-    if (!file)
-        throw std::runtime_error("failed to open gzip JSON fixture: " + fixture_path.string());
-
-    auto input = boost::iostreams::filtering_istream {};
-    input.push(boost::iostreams::gzip_decompressor {});
-    input.push(file);
-    auto contents = std::ostringstream {};
-    boost::iostreams::copy(input, contents);
-
-    const auto suite = boost::json::parse(contents.str());
-    const auto& suite_object = ygg::common::as_object(suite, "suite");
-    const auto benchmarks = ygg::common::load_json_file(ygg::common::root_path() / kBenchmarksFixture);
-    const auto& benchmark_object = ygg::common::as_object(benchmarks, "benchmark suite");
-    const auto& fixture_cases = ygg::common::as_array(suite_object, "cases", "suite");
-    const auto& benchmark_cases = ygg::common::as_array(benchmark_object, "cases", "benchmark suite");
-    if (fixture_cases.size() != benchmark_cases.size())
-        throw std::runtime_error("bottom-up fixture does not cover the benchmark manifest");
-
-    auto result = std::vector<BottomUpCase> {};
-    for (size_t i = 0; i < fixture_cases.size(); ++i)
-    {
-        const auto& fixture_case = ygg::common::as_object(fixture_cases[i], "case");
-        const auto& benchmark_case = ygg::common::as_object(benchmark_cases[i], "benchmark case");
-        for (const auto key : { "name", "domain_file", "task_file" })
-            if (ygg::common::as_string(fixture_case, key, "case") != ygg::common::as_string(benchmark_case, key, "benchmark case"))
-                throw std::runtime_error("bottom-up fixture case does not match the benchmark manifest at index " + std::to_string(i));
-        result.push_back(parse_case(fixture_case));
-    }
-    return result;
-}
-
-void append_atoms_by_predicate(const d::TaggedFactSets<f::FluentTag>& fact_sets, AtomsByPredicate& result)
-{
-    for (const auto& set : fact_sets.predicate.get_sets())
-    {
-        auto bindings = std::vector<AtomBinding> {};
-        for (const auto binding : set.get_bindings())
-            bindings.push_back(AtomBinding { ygg::to_string(binding.get_objects()) });
-        std::ranges::sort(bindings, {}, &AtomBinding::objects);
-
-        const auto predicate = set.get_predicate();
-        result.push_back(PredicateAtoms { predicate.get_name().str(), predicate.get_arity(), std::move(bindings) });
-    }
-}
-
-template<typename Workspace>
-AtomsByPredicate collect_atoms_by_predicate(const Workspace& workspace)
-{
-    auto result = AtomsByPredicate {};
-    append_atoms_by_predicate(workspace.facts.fact_sets, result);
-    return result;
-}
-
-struct LiftedNumericProgram
-{
-    fd::PredicateBindingView<f::FluentTag> goal;
-    fd::GroundConjunctiveConditionView goals;
-    fd::FunctionBindingView<f::FluentTag> source;
-    fd::FunctionBindingView<f::FluentTag> target;
-    fd::RepositoryFactoryPtr factory;
-    fd::RepositoryPtr repository;
-    d::Program<LiftedTag> program;
-
-    LiftedNumericProgram(fd::RepositoryFactoryPtr factory_,
-                         fd::RepositoryPtr repository_,
-                         fd::ProgramView<LiftedTag> program_view,
-                         fd::PredicateBindingView<f::FluentTag> goal_,
-                         fd::GroundConjunctiveConditionView goals_,
-                         fd::FunctionBindingView<f::FluentTag> source_,
-                         fd::FunctionBindingView<f::FluentTag> target_) :
-        goal(goal_),
-        goals(goals_),
-        source(source_),
-        target(target_),
-        factory(std::move(factory_)),
-        repository(std::move(repository_)),
-        program(program_view, repository, factory)
-    {
-    }
-};
-
-LiftedNumericProgram
-make_lifted_numeric_program(bool include_source_rule = true, std::initializer_list<ygg::float_t> initial_source_values = {}, bool general_goal_rule = false)
-{
-    auto factory = std::make_shared<fd::RepositoryFactory>();
-    auto repository = factory->create_shared();
-    const auto intern = [&]<typename T>(ygg::Data<T> data)
-    {
-        if constexpr (requires { fd::canonicalize(data); })
-            fd::canonicalize(data);
-        else
-            f::canonicalize(data);
-        return repository->get_or_create(data).first;
-    };
-    const auto bind_function = [&](auto function)
-    {
-        auto data = ygg::Data<f::RelationBinding<f::Function<f::FluentTag>>>();
-        data.relation = function.get_index();
-        return intern(std::move(data));
-    };
-    const auto make_function_term = [&](auto function)
-    {
-        auto data = ygg::Data<fd::FunctionTerm<f::FluentTag>>();
-        data.function = function.get_index();
-        return intern(std::move(data));
-    };
-
-    const auto source_function = intern(ygg::Data<f::Function<f::FluentTag>>(std::string("source"), 0));
-    const auto target_function = intern(ygg::Data<f::Function<f::FluentTag>>(std::string("target"), 0));
-    const auto source = bind_function(source_function);
-    const auto target = bind_function(target_function);
-    const auto source_term = make_function_term(source_function);
-    const auto target_term = make_function_term(target_function);
-    const auto empty_body = intern(ygg::Data<fd::ConjunctiveCondition>());
-
-    const auto source_assign_effect = intern(ygg::Data<fd::NumericEffect<f::FluentTag>>(f::NumericEffectOperatorKind::Assign,
-                                                                                        source_term.get_index(),
-                                                                                        ygg::Data<fd::FunctionExpression>(ygg::float_t(3))));
-    const auto source_metric_effect = intern(ygg::Data<fd::NumericEffect<f::FluentTag>>(f::NumericEffectOperatorKind::Increase,
-                                                                                        source_term.get_index(),
-                                                                                        ygg::Data<fd::FunctionExpression>(ygg::float_t(2))));
-    const auto target_assign_effect = intern(ygg::Data<fd::NumericEffect<f::FluentTag>>(f::NumericEffectOperatorKind::Assign,
-                                                                                        target_term.get_index(),
-                                                                                        ygg::Data<fd::FunctionExpression>(source_term.get_index())));
-    const auto target_metric_effect = intern(ygg::Data<fd::NumericEffect<f::FluentTag>>(f::NumericEffectOperatorKind::Increase,
-                                                                                        target_term.get_index(),
-                                                                                        ygg::Data<fd::FunctionExpression>(source_term.get_index())));
-    auto target_rule_data = ygg::Data<fd::Rule<f::FunctionTag>>();
-    target_rule_data.body = empty_body.get_index();
-    target_rule_data.head =
-        ygg::Data<fd::NumericEffectOperator<f::FluentTag>>(f::NumericEffectOperatorKind::Assign,
-                                                           ygg::Data<fd::NumericEffectOperator<f::FluentTag>>::Variant(target_assign_effect.get_index()));
-    target_rule_data.metric_effects.emplace_back(f::NumericEffectOperatorKind::Increase,
-                                                 ygg::Data<fd::NumericEffectOperator<f::FluentTag>>::Variant(target_metric_effect.get_index()));
-    const auto target_rule = intern(std::move(target_rule_data));
-
-    auto source_rule_data = ygg::Data<fd::Rule<f::FunctionTag>>();
-    source_rule_data.body = empty_body.get_index();
-    source_rule_data.head =
-        ygg::Data<fd::NumericEffectOperator<f::FluentTag>>(f::NumericEffectOperatorKind::Assign,
-                                                           ygg::Data<fd::NumericEffectOperator<f::FluentTag>>::Variant(source_assign_effect.get_index()));
-    source_rule_data.metric_effects.emplace_back(f::NumericEffectOperatorKind::Increase,
-                                                 ygg::Data<fd::NumericEffectOperator<f::FluentTag>>::Variant(source_metric_effect.get_index()));
-    const auto source_rule = intern(std::move(source_rule_data));
-
-    const auto goal_predicate = intern(ygg::Data<f::Predicate<f::FluentTag>>(std::string("goal"), 0));
-    auto goal_binding_data = ygg::Data<f::RelationBinding<f::Predicate<f::FluentTag>>>();
-    goal_binding_data.relation = goal_predicate.get_index();
-    const auto goal = intern(std::move(goal_binding_data));
-    auto goal_atom_data = ygg::Data<fd::Atom<f::FluentTag>>();
-    goal_atom_data.predicate = goal_predicate.get_index();
-    const auto goal_atom = intern(std::move(goal_atom_data));
-    const auto ground_goal = intern(ygg::Data<fd::GroundAtom<f::FluentTag>>(goal.get_index()));
-    const auto goal_literal = intern(ygg::Data<fd::GroundLiteral<f::FluentTag>>(ground_goal.get_index(), true));
-    auto goals_data = ygg::Data<fd::GroundConjunctiveCondition>();
-    goals_data.fluent_literals.push_back(goal_literal.get_index());
-    const auto goals = intern(std::move(goals_data));
-
-    const auto seed_predicate = intern(ygg::Data<f::Predicate<f::FluentTag>>(std::string("seed"), 1));
-    const auto object = intern(ygg::Data<f::Object>(std::string("a")));
-    const auto variable = intern(ygg::Data<f::Variable>(std::string("x")));
-    auto seed_atom_data = ygg::Data<fd::Atom<f::FluentTag>>();
-    seed_atom_data.predicate = seed_predicate.get_index();
-    seed_atom_data.terms.emplace_back(f::ParameterIndex(0));
-    const auto seed_atom = intern(std::move(seed_atom_data));
-    const auto seed_literal = intern(ygg::Data<fd::Literal<f::FluentTag>>(seed_atom.get_index(), true));
-    auto seed_body_data = ygg::Data<fd::ConjunctiveCondition>();
-    seed_body_data.variables.push_back(variable.get_index());
-    seed_body_data.fluent_literals.push_back(seed_literal.get_index());
-    const auto seed_body = intern(std::move(seed_body_data));
-    auto seed_binding_data = ygg::Data<f::RelationBinding<f::Predicate<f::FluentTag>>>();
-    seed_binding_data.relation = seed_predicate.get_index();
-    seed_binding_data.objects.push_back(object.get_index());
-    const auto seed_binding = intern(std::move(seed_binding_data));
-    const auto ground_seed = intern(ygg::Data<fd::GroundAtom<f::FluentTag>>(seed_binding.get_index()));
-
-    auto predicate_rule_data = ygg::Data<fd::Rule<f::PredicateTag>>();
-    if (general_goal_rule)
-        predicate_rule_data.variables.push_back(variable.get_index());
-    predicate_rule_data.body = (general_goal_rule ? seed_body : empty_body).get_index();
-    predicate_rule_data.head = goal_atom.get_index();
-    predicate_rule_data.metric_effects.emplace_back(f::NumericEffectOperatorKind::Increase,
-                                                    ygg::Data<fd::NumericEffectOperator<f::FluentTag>>::Variant(target_metric_effect.get_index()));
-    const auto predicate_rule = intern(std::move(predicate_rule_data));
-
-    auto program_data = ygg::Data<fd::Program>();
-    program_data.fluent_predicates.push_back(goal_predicate.get_index());
-    if (general_goal_rule)
-    {
-        program_data.objects.push_back(object.get_index());
-        program_data.fluent_predicates.push_back(seed_predicate.get_index());
-        program_data.fluent_atoms.push_back(ground_seed.get_index());
-    }
-    program_data.fluent_functions.push_back(source_function.get_index());
-    program_data.fluent_functions.push_back(target_function.get_index());
-    if (initial_source_values.size() != 0)
-    {
-        const auto ground_source_term = intern(ygg::Data<fd::GroundFunctionTerm<f::FluentTag>>(source));
-        for (const auto value : initial_source_values)
-            program_data.fluent_fterm_values.push_back(intern(ygg::Data<fd::GroundFunctionTermValue<f::FluentTag>>(ground_source_term, value)).get_index());
-    }
-    program_data.predicate_rules.push_back(predicate_rule.get_index());
-    if (include_source_rule)
-        program_data.function_rules.push_back(source_rule.get_index());
-    program_data.function_rules.push_back(target_rule.get_index());
-    const auto program = intern(std::move(program_data));
-
-    return LiftedNumericProgram(factory, repository, program, goal, goals, source, target);
-}
 
 TEST(TyrDatalogLiftedBottomUpTest, FullEnumerationIsLimitedToNumericListeners)
 {
     auto fixture = make_lifted_numeric_program(true, { 3 }, true);
-    auto workspace = d::ProgramWorkspace<LiftedTag>(fixture.program);
+    auto workspace = tyr::datalog::ProgramWorkspace<LiftedTag>(fixture.program);
     ASSERT_EQ(workspace.schedulers.size(), 1);
 
-    const auto rule = fixture.program.get_program().get_rules<f::PredicateTag>().front();
-    const auto seed = rule.get_body().get_literals<f::FluentTag>().front().get_atom().get_predicate().get_index();
-    auto& scheduler = workspace.schedulers.front().get<f::PredicateTag>();
+    const auto rule = fixture.program.get_program().get_rules<tyr::formalism::PredicateTag>().front();
+    const auto seed = rule.get_body().get_literals<tyr::formalism::FluentTag>().front().get_atom().get_predicate().get_index();
+    auto& scheduler = workspace.schedulers.front().get<tyr::formalism::PredicateTag>();
 
     scheduler.on_start_iteration();
     scheduler.on_generate(seed);
@@ -395,203 +52,71 @@ TEST(TyrDatalogLiftedBottomUpTest, FullEnumerationIsLimitedToNumericListeners)
     EXPECT_TRUE(scheduler.requires_full_enumeration(rule.get_index()));
 }
 
-struct LiftedPredicateProgram
-{
-    fd::RepositoryFactoryPtr factory;
-    fd::RepositoryPtr repository;
-    fd::PredicateBindingView<f::FluentTag> goal;
-    fd::GroundConjunctiveConditionView goals;
-    fd::RuleBindingView<f::PredicateTag> first_binding;
-    fd::RuleBindingView<f::PredicateTag> second_binding;
-    fd::FunctionBindingView<f::FluentTag> metric;
-    fd::FunctionBindingView<f::FluentTag> first_lifted_metric;
-    fd::FunctionBindingView<f::FluentTag> second_lifted_metric;
-    d::Program<LiftedTag> program;
-
-    LiftedPredicateProgram(fd::RepositoryFactoryPtr factory_,
-                           fd::RepositoryPtr repository_,
-                           fd::ProgramView<LiftedTag> program_view,
-                           fd::PredicateBindingView<f::FluentTag> goal_,
-                           fd::GroundConjunctiveConditionView goals_,
-                           fd::RuleBindingView<f::PredicateTag> first_binding_,
-                           fd::RuleBindingView<f::PredicateTag> second_binding_,
-                           fd::FunctionBindingView<f::FluentTag> metric_,
-                           fd::FunctionBindingView<f::FluentTag> first_lifted_metric_,
-                           fd::FunctionBindingView<f::FluentTag> second_lifted_metric_) :
-        factory(std::move(factory_)),
-        repository(std::move(repository_)),
-        goal(goal_),
-        goals(goals_),
-        first_binding(first_binding_),
-        second_binding(second_binding_),
-        metric(metric_),
-        first_lifted_metric(first_lifted_metric_),
-        second_lifted_metric(second_lifted_metric_),
-        program(program_view, repository, factory)
-    {
-    }
-};
-
-LiftedPredicateProgram make_lifted_predicate_program(bool include_lifted_metric_effect = false)
-{
-    auto factory = std::make_shared<fd::RepositoryFactory>();
-    auto repository = factory->create_shared();
-    const auto intern = [&]<typename T>(ygg::Data<T> data)
-    {
-        if constexpr (requires { fd::canonicalize(data); })
-            fd::canonicalize(data);
-        else
-            f::canonicalize(data);
-        return repository->get_or_create(data).first;
-    };
-    const auto source_predicate = intern(ygg::Data<f::Predicate<f::FluentTag>>(std::string("source"), 1));
-    const auto goal_predicate = intern(ygg::Data<f::Predicate<f::FluentTag>>(std::string("goal"), 0));
-    const auto metric_function = intern(ygg::Data<f::Function<f::FluentTag>>(std::string("metric"), 0));
-    const auto lifted_metric_function = intern(ygg::Data<f::Function<f::FluentTag>>(std::string("lifted-metric"), 1));
-    const auto first_object = intern(ygg::Data<f::Object>(std::string("a")));
-    const auto second_object = intern(ygg::Data<f::Object>(std::string("b")));
-    const auto variable = intern(ygg::Data<f::Variable>(std::string("x")));
-
-    auto source_atom_data = ygg::Data<fd::Atom<f::FluentTag>>();
-    source_atom_data.predicate = source_predicate.get_index();
-    source_atom_data.terms.emplace_back(f::ParameterIndex(0));
-    const auto source_atom = intern(std::move(source_atom_data));
-    const auto source_literal = intern(ygg::Data<fd::Literal<f::FluentTag>>(source_atom.get_index(), true));
-    auto goal_atom_data = ygg::Data<fd::Atom<f::FluentTag>>();
-    goal_atom_data.predicate = goal_predicate.get_index();
-    const auto goal_atom = intern(std::move(goal_atom_data));
-    auto metric_term_data = ygg::Data<fd::FunctionTerm<f::FluentTag>>();
-    metric_term_data.function = metric_function.get_index();
-    const auto metric_term = intern(std::move(metric_term_data));
-    auto lifted_metric_term_data = ygg::Data<fd::FunctionTerm<f::FluentTag>>();
-    lifted_metric_term_data.function = lifted_metric_function.get_index();
-    lifted_metric_term_data.terms.emplace_back(f::ParameterIndex(0));
-    const auto lifted_metric_term = intern(std::move(lifted_metric_term_data));
-    const auto metric_effect = intern(ygg::Data<fd::NumericEffect<f::FluentTag>>(f::NumericEffectOperatorKind::Increase,
-                                                                                 metric_term.get_index(),
-                                                                                 ygg::Data<fd::FunctionExpression>(ygg::float_t(2))));
-    const auto lifted_metric_effect = intern(ygg::Data<fd::NumericEffect<f::FluentTag>>(f::NumericEffectOperatorKind::Increase,
-                                                                                        lifted_metric_term.get_index(),
-                                                                                        ygg::Data<fd::FunctionExpression>(ygg::float_t(3))));
-    const auto lifted_rhs_metric_effect = intern(ygg::Data<fd::NumericEffect<f::FluentTag>>(f::NumericEffectOperatorKind::Increase,
-                                                                                            metric_term.get_index(),
-                                                                                            ygg::Data<fd::FunctionExpression>(lifted_metric_term.get_index())));
-
-    auto body_data = ygg::Data<fd::ConjunctiveCondition>();
-    body_data.variables.push_back(variable.get_index());
-    body_data.fluent_literals.push_back(source_literal.get_index());
-    const auto body = intern(std::move(body_data));
-    auto rule_data = ygg::Data<fd::Rule<f::PredicateTag>>();
-    rule_data.variables.push_back(variable.get_index());
-    rule_data.body = body.get_index();
-    rule_data.head = goal_atom.get_index();
-    rule_data.metric_effects.emplace_back(f::NumericEffectOperatorKind::Increase,
-                                          ygg::Data<fd::NumericEffectOperator<f::FluentTag>>::Variant(metric_effect.get_index()));
-    if (include_lifted_metric_effect)
-    {
-        rule_data.metric_effects.emplace_back(f::NumericEffectOperatorKind::Increase,
-                                              ygg::Data<fd::NumericEffectOperator<f::FluentTag>>::Variant(metric_effect.get_index()));
-        rule_data.metric_effects.emplace_back(f::NumericEffectOperatorKind::Increase,
-                                              ygg::Data<fd::NumericEffectOperator<f::FluentTag>>::Variant(lifted_metric_effect.get_index()));
-        rule_data.metric_effects.emplace_back(f::NumericEffectOperatorKind::Increase,
-                                              ygg::Data<fd::NumericEffectOperator<f::FluentTag>>::Variant(lifted_rhs_metric_effect.get_index()));
-    }
-    const auto rule = intern(std::move(rule_data));
-
-    const auto bind_rule = [&](auto object)
-    {
-        auto data = ygg::Data<f::RelationBinding<fd::Rule<f::PredicateTag>>>();
-        data.relation = rule.get_index();
-        data.objects.push_back(object.get_index());
-        return intern(std::move(data));
-    };
-    const auto first_binding = bind_rule(first_object);
-    const auto second_binding = bind_rule(second_object);
-
-    const auto bind_function = [&](auto function, auto... objects)
-    {
-        auto data = ygg::Data<f::RelationBinding<f::Function<f::FluentTag>>>();
-        data.relation = function.get_index();
-        (data.objects.push_back(objects.get_index()), ...);
-        return intern(std::move(data));
-    };
-    const auto metric = bind_function(metric_function);
-    const auto first_lifted_metric = bind_function(lifted_metric_function, first_object);
-    const auto second_lifted_metric = bind_function(lifted_metric_function, second_object);
-
-    const auto bind_source = [&](auto object)
-    {
-        auto data = ygg::Data<f::RelationBinding<f::Predicate<f::FluentTag>>>();
-        data.relation = source_predicate.get_index();
-        data.objects.push_back(object.get_index());
-        return intern(std::move(data));
-    };
-    const auto ground_first_source = intern(ygg::Data<fd::GroundAtom<f::FluentTag>>(bind_source(first_object).get_index()));
-    const auto ground_second_source = intern(ygg::Data<fd::GroundAtom<f::FluentTag>>(bind_source(second_object).get_index()));
-    auto goal_binding_data = ygg::Data<f::RelationBinding<f::Predicate<f::FluentTag>>>();
-    goal_binding_data.relation = goal_predicate.get_index();
-    const auto goal = intern(std::move(goal_binding_data));
-    const auto ground_goal = intern(ygg::Data<fd::GroundAtom<f::FluentTag>>(goal.get_index()));
-    const auto goal_literal = intern(ygg::Data<fd::GroundLiteral<f::FluentTag>>(ground_goal.get_index(), true));
-    auto goals_data = ygg::Data<fd::GroundConjunctiveCondition>();
-    goals_data.fluent_literals.push_back(goal_literal.get_index());
-    const auto goals = intern(std::move(goals_data));
-
-    auto program_data = ygg::Data<fd::Program>();
-    program_data.objects = { first_object.get_index(), second_object.get_index() };
-    program_data.fluent_predicates = { source_predicate.get_index(), goal_predicate.get_index() };
-    program_data.fluent_functions = { metric_function.get_index() };
-    if (include_lifted_metric_effect)
-    {
-        program_data.fluent_functions.push_back(lifted_metric_function.get_index());
-        const auto first_term = intern(ygg::Data<fd::GroundFunctionTerm<f::FluentTag>>(first_lifted_metric));
-        const auto second_term = intern(ygg::Data<fd::GroundFunctionTerm<f::FluentTag>>(second_lifted_metric));
-        program_data.fluent_fterm_values = { intern(ygg::Data<fd::GroundFunctionTermValue<f::FluentTag>>(first_term, ygg::float_t(5))).get_index(),
-                                             intern(ygg::Data<fd::GroundFunctionTermValue<f::FluentTag>>(second_term, ygg::float_t(7))).get_index() };
-    }
-    program_data.fluent_atoms = { ground_first_source.get_index(), ground_second_source.get_index() };
-    program_data.predicate_rules = { rule.get_index() };
-    const auto program = intern(std::move(program_data));
-
-    return LiftedPredicateProgram(factory, repository, program, goal, goals, first_binding, second_binding, metric, first_lifted_metric, second_lifted_metric);
-}
-
-TEST(TyrDatalogLiftedBottomUpTest, ConstRuleWorkspacePartitionsMetricEffectsByParameters)
+TEST(TyrDatalogLiftedBottomUpTest, PreparedContextMatchesOrdinaryContextAfterWorkspaceReuse)
 {
     auto fixture = make_lifted_predicate_program(true);
-    const auto& workspace = fixture.program.get_const_program_workspace().get_rules<f::PredicateTag>().front().value();
+    using AnnotationPolicy = tyr::datalog::MinCostAnnotationPolicy<tyr::datalog::SumAggregation>;
+    using Context = tyr::datalog::ProgramExecutionContext<LiftedTag, AnnotationPolicy>;
+    auto workspace = tyr::datalog::ProgramWorkspace<LiftedTag, AnnotationPolicy>(fixture.program);
+    auto initial = Context(workspace);
+    tyr::datalog::compute_model(initial);
+    const auto expected_atoms = collect_atoms_by_predicate(workspace);
+    const auto* expected_annotation = workspace.annotations.find(fixture.goal.get_index());
+    ASSERT_NE(expected_annotation, nullptr);
+    const auto expected_cost = tyr::datalog::get_cost(*expected_annotation);
 
-    EXPECT_EQ(workspace.get_rule().get_metric_effects().size(), 4);
-    ASSERT_EQ(workspace.get_lifted_effects().size(), 2);
-    ASSERT_EQ(workspace.get_nullary_effects().size(), 2);
-    EXPECT_EQ(&workspace.get_lifted_effects().front().get_context(), &fixture.program.get_program_repository());
-    EXPECT_EQ(&workspace.get_nullary_effects().front().get_context(), &fixture.program.get_program_repository());
+    const auto insert_inputs = [&]
+    {
+        for (const auto atom : fixture.program.get_program().get_atoms<tyr::formalism::FluentTag>())
+            workspace.facts.fact_sets.predicate.insert(atom);
+        workspace.facts.fact_sets.function.insert(fixture.program.get_program().get_fterm_values<tyr::formalism::FluentTag>());
+    };
+    for (size_t iteration = 0; iteration < 2; ++iteration)
+    {
+        workspace.cost_buckets.insert(99, fixture.goal.get_index());
+        workspace.reset_evaluation();
+        EXPECT_TRUE(workspace.cost_buckets.is_empty());
+        insert_inputs();
+        auto prepared = Context::from_reset_workspace(workspace, workspace.schedulers);
+        tyr::datalog::compute_model(prepared);
+        EXPECT_EQ(collect_atoms_by_predicate(workspace), expected_atoms);
+        const auto* annotation = workspace.annotations.find(fixture.goal.get_index());
+        ASSERT_NE(annotation, nullptr);
+        EXPECT_EQ(tyr::datalog::get_cost(*annotation), expected_cost);
+
+        // LM-cut also rebuilds a context with new facts without resetting its repository.
+        workspace.facts.reset();
+        insert_inputs();
+        auto ordinary = Context(workspace);
+        tyr::datalog::compute_model(ordinary);
+        EXPECT_EQ(collect_atoms_by_predicate(workspace), expected_atoms);
+        annotation = workspace.annotations.find(fixture.goal.get_index());
+        ASSERT_NE(annotation, nullptr);
+        EXPECT_EQ(tyr::datalog::get_cost(*annotation), expected_cost);
+    }
 }
 
-TEST(TyrDatalogLiftedBottomUpTest, MixedMetricEffectsRespectExactTargetsAndRetainEvidence)
+TEST(TyrDatalogLiftedBottomUpTest, PreparedBindingSurvivesNestedGrounding)
 {
-    auto fixture = make_lifted_predicate_program(true);
-    auto metric_targets = d::RuleCostPolicy::MetricTargets {};
-    metric_targets.insert(fixture.metric.get_index());
-    metric_targets.insert(fixture.first_lifted_metric.get_index());
-    using AnnotationPolicy = d::MinCostAnnotationPolicy<d::SumAggregation>;
-    using Workspace = d::ProgramWorkspace<LiftedTag, AnnotationPolicy, d::NoTerminationPolicy, d::RuleCostPolicy>;
-    auto workspace = Workspace(fixture.program, AnnotationPolicy(), d::NoTerminationPolicy(), d::RuleCostPolicy(&metric_targets));
-    auto context = d::ProgramExecutionContext(workspace);
+    auto fixture = make_lifted_predicate_program();
+    auto builder = tyr::formalism::datalog::Builder {};
+    const auto program = fixture.program.get_program();
+    const auto atom = program.get_rules<tyr::formalism::PredicateTag>()[0].get_body().get_literals<tyr::formalism::FluentTag>()[0].get_atom();
+    const auto objects = program.get_objects();
+    ASSERT_EQ(objects.size(), 2);
+    auto indices = ygg::IndexList<tyr::formalism::Object> { objects[0].get_index() };
+    auto context = tyr::formalism::datalog::GrounderContext { builder, *fixture.repository, indices };
+    auto prepared = tyr::formalism::datalog::checkout<tyr::formalism::RelationBinding<tyr::formalism::Predicate<tyr::formalism::FluentTag>>>(builder);
+    prepared->relation = atom.get_predicate().get_index();
+    tyr::formalism::datalog::ground(atom.get_terms(), context, prepared->objects);
 
-    d::compute_model(context);
-
-    const auto* annotation = workspace.annotations.find(fixture.goal);
-    ASSERT_NE(annotation, nullptr);
-    const auto* witness = std::get_if<d::WitnessAnnotation<f::PredicateTag>>(annotation);
-    ASSERT_NE(witness, nullptr);
-    EXPECT_EQ(witness->get_rule_key(), fixture.second_binding);
-    EXPECT_EQ(witness->get_cost(), 11);  // b: 2 + 2 + 0 (filtered target) + 7; a: 2 + 2 + 3 + 5 = 12.
-    EXPECT_EQ(witness->get_metric(), ygg::ClosedInterval<ygg::float_t>(11, 11));
-    ASSERT_EQ(witness->get_numeric_supports().size(), 1);
-    EXPECT_EQ(witness->get_numeric_supports().front().get_key(), fixture.second_lifted_metric);
-    EXPECT_EQ(witness->get_numeric_supports().front().get_interval(), ygg::ClosedInterval<ygg::float_t>(7, 7));
-    EXPECT_EQ(witness->get_numeric_supports().front().get_cost(), d::Cost(0));
+    indices[0] = objects[1].get_index();
+    const auto nested = tyr::formalism::datalog::ground_binding(atom, context).first;
+    EXPECT_EQ(nested.get_objects()[0], objects[1]);
+    ASSERT_EQ(prepared->objects.size(), 1);
+    EXPECT_EQ(prepared->objects[0], objects[0].get_index());
+    const auto retained = tyr::formalism::datalog::insert(*fixture.repository, *prepared).first;
+    EXPECT_EQ(retained.get_objects()[0], objects[0]);
 }
 
 class BottomUpFixtureTest : public ::testing::TestWithParam<BottomUpCase>
@@ -602,17 +127,27 @@ TEST_P(BottomUpFixtureTest, InitialStateAtomsMatchFixture)
 {
     const auto& test_case = GetParam();
     auto execution_context = ygg::ExecutionContext::create(1);
-    auto task = p::Task<::tyr::LiftedTag>::create(make_test_parser(test_case.domain_file).parse_task(test_case.task_file));
+    auto task = tyr::planning::Task<LiftedTag>::create(make_test_parser(test_case.domain_file).parse_task(test_case.task_file));
 
     const auto solve_workspace = [&](auto& workspace)
     {
-        auto context = d::ProgramExecutionContext(workspace);
-        d::execute_model(context, *execution_context);
+        auto context = tyr::datalog::ProgramExecutionContext(workspace);
+        tyr::datalog::execute_model(context, *execution_context);
+    };
+
+    // The fixtures predate the predicates of the conditional effects, which are internal to the action and ground task programs.
+    const auto without_effect_predicates = [](AtomsByPredicate atoms, const auto& effect_to_predicate)
+    {
+        auto effect_predicates = std::set<std::string> {};
+        for (const auto& [_, predicate] : effect_to_predicate)
+            effect_predicates.insert(predicate.get_name().str());
+        std::erase_if(atoms, [&](const auto& entry) { return effect_predicates.contains(entry.predicate); });
+        return atoms;
     };
 
     const auto solve_program = [&](const auto& program)
     {
-        auto workspace = d::ProgramWorkspace<::tyr::LiftedTag>(program);
+        auto workspace = tyr::datalog::ProgramWorkspace<LiftedTag>(program);
         solve_workspace(workspace);
         return collect_atoms_by_predicate(workspace);
     };
@@ -633,37 +168,37 @@ TEST_P(BottomUpFixtureTest, InitialStateAtomsMatchFixture)
         {
             if (config == "axiom_evaluator")
             {
-                const auto program = p::AxiomEvaluatorProgram<::tyr::LiftedTag>(task->get_task());
+                const auto program = tyr::planning::AxiomEvaluatorProgram<LiftedTag>(task->get_task());
                 return solve_program(program.get_datalog_program());
             }
 
             if (config == "applicable_action")
             {
-                const auto action_program = p::ApplicableActionProgram<::tyr::LiftedTag>(task->get_task());
-                auto action_workspace = d::ProgramWorkspace<::tyr::LiftedTag>(action_program.get_datalog_program());
+                const auto action_program = tyr::planning::ApplicableActionProgram<LiftedTag>(task->get_task());
+                auto action_workspace = tyr::datalog::ProgramWorkspace<LiftedTag>(action_program.get_datalog_program());
                 if (task->has_axioms())
                 {
-                    const auto axiom_program = p::AxiomEvaluatorProgram<::tyr::LiftedTag>(task->get_task());
-                    auto axiom_workspace = d::ProgramWorkspace<::tyr::LiftedTag>(axiom_program.get_datalog_program());
+                    const auto axiom_program = tyr::planning::AxiomEvaluatorProgram<LiftedTag>(task->get_task());
+                    auto axiom_workspace = tyr::datalog::ProgramWorkspace<LiftedTag>(axiom_program.get_datalog_program());
                     solve_workspace(axiom_workspace);
 
-                    auto merge_context = fd::MergeContext { action_workspace.datalog_builder, action_workspace.workspace_repository };
+                    auto merge_context = tyr::formalism::datalog::CopyContext { action_workspace.datalog_builder, *action_workspace.workspace_repository };
                     for (const auto& set : axiom_workspace.facts.fact_sets.predicate.get_sets())
                         for (const auto binding : set.get_bindings())
-                            action_workspace.facts.fact_sets.predicate.insert(fd::merge_d2d(binding, merge_context).first);
+                            action_workspace.facts.fact_sets.predicate.insert(tyr::formalism::datalog::copy(binding, merge_context).first);
                 }
 
                 solve_workspace(action_workspace);
-                return collect_atoms_by_predicate(action_workspace);
+                return without_effect_predicates(collect_atoms_by_predicate(action_workspace), action_program.get_conditional_effect_to_predicate_mapping());
             }
 
             if (config == "ground_task")
             {
-                auto program = p::GroundTaskProgram(task->get_task());
-                auto workspace = d::ProgramWorkspace<::tyr::LiftedTag>(program.get_datalog_program());
-                auto context = d::ProgramExecutionContext(workspace);
-                d::execute_model(context, *execution_context);
-                return collect_atoms_by_predicate(workspace);
+                auto program = tyr::planning::GroundTaskProgram(task->get_task());
+                auto workspace = tyr::datalog::ProgramWorkspace<LiftedTag>(program.get_datalog_program());
+                auto context = tyr::datalog::ProgramExecutionContext(workspace);
+                tyr::datalog::execute_model(context, *execution_context);
+                return without_effect_predicates(collect_atoms_by_predicate(workspace), program.get_conditional_effect_to_predicate_mapping());
             }
 
             throw std::runtime_error("unknown bottom-up fixture configuration: " + std::string(config));
@@ -673,709 +208,10 @@ TEST_P(BottomUpFixtureTest, InitialStateAtomsMatchFixture)
     }
 }
 
-TEST(TyrDatalogLiftedBottomUpTest, NoAnnotationPolicyComputesZeroCostNumericReachability)
-{
-    auto fixture = make_lifted_numeric_program();
-    auto workspace = d::ProgramWorkspace<LiftedTag>(fixture.program);
-    auto context = d::ProgramExecutionContext(workspace);
-
-    d::compute_model(context);
-
-    const auto expected = ygg::ClosedInterval<ygg::float_t>(3, 3);
-    EXPECT_TRUE(workspace.facts.fact_sets.predicate.contains(fixture.goal));
-    EXPECT_EQ(workspace.facts.fact_sets.function[fixture.target], expected);
-    EXPECT_EQ(workspace.annotations.find(fixture.goal), nullptr);
-    EXPECT_EQ(workspace.numeric_annotations.size(), 0);
-}
-
-TEST(TyrDatalogLiftedBottomUpTest, NoAnnotationPolicyIgnoresUnavailableMetricInputs)
-{
-    auto fixture = make_lifted_numeric_program(false);
-    auto workspace = d::ProgramWorkspace<LiftedTag>(fixture.program);
-    auto context = d::ProgramExecutionContext(workspace);
-
-    d::compute_model(context);
-
-    EXPECT_TRUE(workspace.facts.fact_sets.predicate.contains(fixture.goal));
-    EXPECT_TRUE(empty(workspace.facts.fact_sets.function[fixture.target]));
-}
-
-TEST(TyrDatalogLiftedBottomUpTest, SingleCoreTerminationExposesOnlyOptimalGoalFrontierAchievers)
-{
-    auto fixture = make_lifted_predicate_program();
-    auto termination_policy = d::TerminationPolicy<d::MaxAggregation>();
-    termination_policy.set_goals(fixture.goals);
-    auto cost_policy = d::RuleCostOverridePolicy<LiftedTag>();
-    cost_policy.set_cost(fixture.first_binding, d::Cost(1));
-    using Workspace = d::ProgramWorkspace<LiftedTag,
-                                          d::MinCostAnnotationWithAchieversPolicy<d::MaxAggregation>,
-                                          d::TerminationPolicy<d::MaxAggregation>,
-                                          d::RuleCostOverridePolicy<LiftedTag>>;
-    auto workspace = Workspace(fixture.program, d::MinCostAnnotationWithAchieversPolicy<d::MaxAggregation>(), termination_policy, cost_policy);
-    auto context = d::ProgramExecutionContext(workspace);
-    auto execution_context = ygg::ExecutionContext::create(1);
-
-    d::execute_model(context, *execution_context);
-
-    ASSERT_TRUE(workspace.facts.fact_sets.predicate.contains(fixture.goal));
-    const auto* achievers = workspace.annotation_policy.find_achievers(fixture.goal);
-    ASSERT_NE(achievers, nullptr);
-    ASSERT_EQ(achievers->size(), 1);
-    EXPECT_EQ(achievers->front().get_rule_key().get_index(), fixture.first_binding.get_index());
-}
-
-TEST(TyrDatalogLiftedBottomUpTest, SingleCoreRetainsFirstEqualCostWitness)
-{
-    auto fixture = make_lifted_predicate_program();
-    using Workspace = d::ProgramWorkspace<LiftedTag, d::MinCostAnnotationPolicy<d::MaxAggregation>, d::NoTerminationPolicy>;
-    auto workspace = Workspace(fixture.program);
-    auto context = d::ProgramExecutionContext(workspace);
-    auto execution_context = ygg::ExecutionContext::create(1);
-
-    d::execute_model(context, *execution_context);
-
-    const auto* annotation = workspace.annotations.find(fixture.goal);
-    ASSERT_NE(annotation, nullptr);
-    const auto* witness = std::get_if<d::WitnessAnnotation<f::PredicateTag>>(annotation);
-    ASSERT_NE(witness, nullptr);
-    EXPECT_EQ(witness->get_rule_key().get_index(), fixture.first_binding.get_index());
-}
-
-TEST(TyrDatalogLiftedBottomUpTest, MissingLiteralBindingUsesClosedWorldPolarityWithoutInterning)
-{
-    auto fixture = make_lifted_predicate_program();
-    auto object_data = ygg::Data<f::Object>(std::string("missing"));
-    f::canonicalize(object_data);
-    const auto object = fixture.repository->get_or_create(object_data).first;
-
-    const auto rule = fixture.program.get_program().get_rules<f::PredicateTag>().front();
-    const auto positive = rule.get_body().get_literals<f::FluentTag>().front();
-    auto negative_data = ygg::Data<fd::Literal<f::FluentTag>>(positive.get_atom().get_index(), false);
-    fd::canonicalize(negative_data);
-    const auto negative = fixture.repository->get_or_create(negative_data).first;
-
-    auto workspace = d::ProgramWorkspace<LiftedTag>(fixture.program);
-    workspace.binding.push_back(object.get_index());
-    auto grounder = fd::GrounderContext { workspace.datalog_builder, workspace.workspace_repository, workspace.binding };
-    const auto fact_sets = d::FactSets { workspace.const_workspace.facts.fact_sets, workspace.facts.fact_sets };
-    const auto applicability_context = d::ApplicabilityContext { fact_sets, grounder };
-    const auto relation = positive.get_atom().get_predicate().get_index();
-    const auto num_bindings = workspace.workspace_repository.size(relation);
-
-    EXPECT_FALSE(d::is_applicable(positive, applicability_context));
-    EXPECT_TRUE(d::is_applicable(negative, applicability_context));
-    EXPECT_EQ(workspace.workspace_repository.size(relation), num_bindings);
-}
-
-TEST(TyrDatalogLiftedBottomUpTest, SumAnnotationPricesEachNumericSupportOccurrence)
-{
-    auto fixture = make_lifted_numeric_program();
-    using AnnotationPolicy = d::MinCostAnnotationPolicy<d::SumAggregation>;
-    using Workspace = d::ProgramWorkspace<LiftedTag, AnnotationPolicy, d::NoTerminationPolicy>;
-    auto workspace = Workspace(fixture.program);
-    auto context = d::ProgramExecutionContext(workspace);
-
-    d::compute_model(context);
-
-    const auto interval = ygg::ClosedInterval<ygg::float_t>(3, 3);
-    const auto* annotation = workspace.numeric_annotations.find(fixture.target, interval);
-    ASSERT_NE(annotation, nullptr);
-    const auto* witness = std::get_if<d::WitnessAnnotation<f::FunctionTag>>(annotation);
-    ASSERT_NE(witness, nullptr);
-    EXPECT_EQ(witness->get_cost(), 7);
-    EXPECT_EQ(witness->get_metric(), ygg::ClosedInterval<ygg::float_t>(5, 5));
-    ASSERT_EQ(witness->get_numeric_supports().size(), 1);
-    EXPECT_EQ(witness->get_numeric_supports().front().get_key(), fixture.source);
-    EXPECT_EQ(witness->get_numeric_supports().front().get_interval(), interval);
-    EXPECT_EQ(witness->get_numeric_supports().front().get_cost(), 2);
-}
-
-TEST(TyrDatalogLiftedBottomUpTest, StoredNumericCertificateCanStillBecomeAvailable)
-{
-    auto fixture = make_lifted_numeric_program();
-    using AnnotationPolicy = d::MinCostAnnotationPolicy<d::SumAggregation>;
-    using Workspace = d::ProgramWorkspace<LiftedTag, AnnotationPolicy, d::NoTerminationPolicy>;
-    auto workspace = Workspace(fixture.program);
-    auto context = d::ProgramExecutionContext(workspace);
-    const auto source_interval = ygg::ClosedInterval<ygg::float_t>(3, 3);
-    workspace.numeric_annotations.insert(fixture.source, source_interval, d::BaseAnnotation(2));
-
-    d::compute_model(context);
-
-    EXPECT_EQ(workspace.facts.fact_sets.function[fixture.source], source_interval);
-    EXPECT_EQ(workspace.facts.fact_sets.function[fixture.target], source_interval);
-}
-
-TEST(TyrDatalogLiftedBottomUpTest, RepricesTentativePredicateAfterAvailableNumericCertificateImproves)
-{
-    auto fixture = make_lifted_numeric_program(true, { 3 }, true);
-    ASSERT_EQ(fixture.program.get_program().get_rules<f::PredicateTag>().front().get_arity(), 1);
-    using AnnotationPolicy = d::MinCostAnnotationPolicy<d::SumAggregation>;
-    using TerminationPolicy = d::TerminationPolicy<d::SumAggregation>;
-    using Workspace = d::ProgramWorkspace<LiftedTag, AnnotationPolicy, TerminationPolicy>;
-    auto termination_policy = TerminationPolicy();
-    termination_policy.set_goals(fixture.goals);
-    auto workspace = Workspace(fixture.program, AnnotationPolicy(), termination_policy);
-    auto context = d::ProgramExecutionContext(workspace);
-    const auto source_interval = ygg::ClosedInterval<ygg::float_t>(3, 3);
-    workspace.numeric_annotations.clear();
-    workspace.numeric_annotations.insert(fixture.source, source_interval, d::BaseAnnotation(5));
-
-    d::compute_model(context);
-
-    const auto* source = workspace.numeric_annotations.find(fixture.source, source_interval);
-    const auto* goal = workspace.annotations.find(fixture.goal);
-    ASSERT_NE(source, nullptr);
-    ASSERT_NE(goal, nullptr);
-    EXPECT_TRUE(workspace.facts.fact_sets.predicate.contains(fixture.goal));
-    EXPECT_EQ(d::get_cost(*source), 2);
-    EXPECT_EQ(d::get_cost(*goal), 5);
-}
-
-TEST(TyrDatalogLiftedBottomUpTest, GroundAndLiftedShareResolvedNumericCandidateSemantics)
-{
-    auto fixture = make_lifted_numeric_program(false, { 1, 10 });
-    const auto source_interval = ygg::ClosedInterval<ygg::float_t>(1, 10);
-    const auto low_support_interval = ygg::ClosedInterval<ygg::float_t>(1, 2);
-    const auto interior_support_interval = ygg::ClosedInterval<ygg::float_t>(4, 6);
-    const auto high_support_interval = ygg::ClosedInterval<ygg::float_t>(8, 10);
-    const auto low_support_metric = ygg::ClosedInterval<ygg::float_t>(3, 3);
-    const auto interior_support_metric = ygg::ClosedInterval<ygg::float_t>(100, 100);
-    const auto high_support_metric = ygg::ClosedInterval<ygg::float_t>(5, 5);
-    const auto expected_target_metric = ygg::ClosedInterval<ygg::float_t>(6, 6);
-    const auto expect_source_annotation_order = [&](const auto* entries)
-    {
-        ASSERT_NE(entries, nullptr);
-        ASSERT_EQ(entries->size(), 3);
-        EXPECT_EQ(entries->at(0).interval, interior_support_interval);
-        EXPECT_EQ(d::get_cost(entries->at(0).annotation), 1);
-        EXPECT_EQ(entries->at(1).interval, low_support_interval);
-        EXPECT_EQ(d::get_cost(entries->at(1).annotation), 2);
-        EXPECT_EQ(entries->at(2).interval, high_support_interval);
-        EXPECT_EQ(d::get_cost(entries->at(2).annotation), 2);
-    };
-
-    using LiftedAnnotationPolicy = d::MinCostAnnotationPolicy<d::SumAggregation>;
-    using LiftedWorkspace = d::ProgramWorkspace<LiftedTag, LiftedAnnotationPolicy, d::NoTerminationPolicy>;
-    auto lifted_workspace = LiftedWorkspace(fixture.program);
-    auto lifted_context = d::ProgramExecutionContext(lifted_workspace);
-    lifted_workspace.numeric_annotations.clear();
-    lifted_workspace.numeric_annotations.insert(fixture.source, high_support_interval, d::BaseAnnotation(high_support_metric, d::Cost(2)));
-    lifted_workspace.numeric_annotations.insert(fixture.source, interior_support_interval, d::BaseAnnotation(interior_support_metric, d::Cost(1)));
-    lifted_workspace.numeric_annotations.insert(fixture.source, low_support_interval, d::BaseAnnotation(low_support_metric, d::Cost(2)));
-    expect_source_annotation_order(lifted_workspace.numeric_annotations.find_entries(fixture.source.get_index().relation, fixture.source.get_index().row));
-
-    d::compute_model(lifted_context);
-
-    EXPECT_EQ(lifted_workspace.workspace_repository.template size<fd::GroundRule<f::PredicateTag>>(), 0);
-    EXPECT_EQ(lifted_workspace.workspace_repository.template size<fd::GroundRule<f::FunctionTag>>(), 0);
-
-    auto builder = fd::Builder {};
-    auto binding = ygg::IndexList<f::Object> {};
-    auto grounder = fd::GrounderContext { builder, *fixture.repository, binding };
-    auto ground_program_data = ygg::Data<fd::GroundProgram> {};
-    const auto lifted_program = fixture.program.get_program();
-    for (const auto predicate : lifted_program.get_predicates<f::FluentTag>())
-        ground_program_data.fluent_predicates.push_back(predicate.get_index());
-    for (const auto function : lifted_program.get_functions<f::FluentTag>())
-        ground_program_data.fluent_functions.push_back(function.get_index());
-    for (const auto value : lifted_program.get_fterm_values<f::FluentTag>())
-        ground_program_data.fluent_fterm_values.push_back(value.get_index());
-    for (const auto rule : lifted_program.get_rules<f::PredicateTag>())
-        ground_program_data.predicate_ground_rules.push_back(fd::ground(rule, grounder).first.get_index());
-    for (const auto rule : lifted_program.get_rules<f::FunctionTag>())
-        ground_program_data.function_ground_rules.push_back(fd::ground(rule, grounder).first.get_index());
-    fd::canonicalize(ground_program_data);
-    const auto ground_program_view = fixture.repository->get_or_create(ground_program_data).first;
-    auto ground_program = d::Program<GroundTag>(ground_program_view, fixture.repository, fixture.factory);
-
-    using GroundAnnotationPolicy = d::MinCostAnnotationPolicy<d::SumAggregation>;
-    using GroundWorkspace = d::ProgramWorkspace<GroundTag, GroundAnnotationPolicy, d::NoTerminationPolicy>;
-    auto ground_workspace = GroundWorkspace(ground_program);
-    auto ground_context = d::ProgramExecutionContext(ground_workspace);
-
-    auto ground_source_data = ygg::Data<fd::GroundFunctionTerm<f::FluentTag>>(fixture.source);
-    auto ground_target_data = ygg::Data<fd::GroundFunctionTerm<f::FluentTag>>(fixture.target);
-    const auto ground_source = fixture.repository->get_or_create(ground_source_data).first;
-    const auto ground_target = fixture.repository->get_or_create(ground_target_data).first;
-    ground_workspace.numeric_annotations.clear();
-    ground_workspace.numeric_annotations.insert(ground_source.get_row(), high_support_interval, d::BaseAnnotation(high_support_metric, d::Cost(2)));
-    ground_workspace.numeric_annotations.insert(ground_source.get_row(), interior_support_interval, d::BaseAnnotation(interior_support_metric, d::Cost(1)));
-    ground_workspace.numeric_annotations.insert(ground_source.get_row(), low_support_interval, d::BaseAnnotation(low_support_metric, d::Cost(2)));
-    expect_source_annotation_order(ground_workspace.numeric_annotations.find_entries(ground_source.get_row()));
-
-    d::compute_model(ground_context);
-
-    EXPECT_TRUE(lifted_workspace.facts.fact_sets.predicate.contains(fixture.goal));
-    EXPECT_TRUE(ground_workspace.facts.fact_sets.predicate.contains(fixture.goal));
-    EXPECT_EQ(lifted_workspace.facts.fact_sets.function[fixture.source], source_interval);
-    EXPECT_EQ(ground_workspace.facts.fact_sets.function[ground_source], source_interval);
-    EXPECT_EQ(lifted_workspace.facts.fact_sets.function[fixture.target], source_interval);
-    EXPECT_EQ(ground_workspace.facts.fact_sets.function[ground_target], source_interval);
-
-    const auto* lifted_annotation = lifted_workspace.numeric_annotations.find(fixture.target, source_interval);
-    const auto* ground_annotation = ground_workspace.numeric_annotations.find(ground_target.get_row(), source_interval);
-    ASSERT_NE(lifted_annotation, nullptr);
-    ASSERT_NE(ground_annotation, nullptr);
-    const auto* lifted_witness = std::get_if<d::WitnessAnnotation<f::FunctionTag>>(lifted_annotation);
-    const auto* ground_witness = std::get_if<d::WitnessAnnotation<f::FunctionTag>>(ground_annotation);
-    ASSERT_NE(lifted_witness, nullptr);
-    ASSERT_NE(ground_witness, nullptr);
-    EXPECT_EQ(lifted_witness->get_cost(), 5);
-    EXPECT_EQ(ground_witness->get_cost(), 5);
-    EXPECT_EQ(lifted_witness->get_metric(), expected_target_metric);
-    EXPECT_EQ(ground_witness->get_metric(), expected_target_metric);
-    ASSERT_EQ(lifted_witness->get_numeric_supports().size(), 2);
-    ASSERT_EQ(ground_witness->get_numeric_supports().size(), 2);
-    for (size_t i = 0; i < ground_witness->get_numeric_supports().size(); ++i)
-    {
-        const auto& ground_support = ground_witness->get_numeric_supports()[i];
-        const auto& lifted_support = lifted_witness->get_numeric_supports()[i];
-        EXPECT_EQ(ground_support.get_key(), lifted_support.get_key());
-        EXPECT_EQ(ground_support.get_key(), ground_source.get_row());
-        EXPECT_EQ(ground_support.get_interval(), lifted_support.get_interval());
-        EXPECT_EQ(ground_support.get_cost(), lifted_support.get_cost());
-    }
-    EXPECT_EQ(lifted_witness->get_numeric_supports()[0].get_interval(), low_support_interval);
-    EXPECT_EQ(lifted_witness->get_numeric_supports()[0].get_cost(), 2);
-    EXPECT_EQ(lifted_witness->get_numeric_supports()[1].get_interval(), high_support_interval);
-    EXPECT_EQ(lifted_witness->get_numeric_supports()[1].get_cost(), 2);
-}
-
-TEST(TyrDatalogLiftedBottomUpTest, RepeatedArgumentsRetryPendingExistingHeadAchiever)
-{
-    auto factory = std::make_shared<fd::RepositoryFactory>();
-    auto repository = factory->create_shared();
-    const auto intern = [&]<typename T>(ygg::Data<T> data)
-    {
-        if constexpr (requires { fd::canonicalize(data); })
-            fd::canonicalize(data);
-        else
-            f::canonicalize(data);
-        return repository->get_or_create(data).first;
-    };
-
-    const auto diagonal = intern(ygg::Data<f::Predicate<f::FluentTag>>(std::string("diagonal"), 2));
-    const auto seed = intern(ygg::Data<f::Predicate<f::FluentTag>>(std::string("seed"), 1));
-    const auto goal_predicate = intern(ygg::Data<f::Predicate<f::FluentTag>>(std::string("goal"), 0));
-    const auto a = intern(ygg::Data<f::Object>(std::string("a")));
-    const auto b = intern(ygg::Data<f::Object>(std::string("b")));
-    const auto x = intern(ygg::Data<f::Variable>(std::string("x")));
-    const auto y = intern(ygg::Data<f::Variable>(std::string("y")));
-
-    const auto make_atom = [&](auto predicate, std::initializer_list<f::ParameterIndex> terms)
-    {
-        auto data = ygg::Data<fd::Atom<f::FluentTag>>();
-        data.predicate = predicate.get_index();
-        for (const auto term : terms)
-            data.terms.emplace_back(term);
-        return intern(std::move(data));
-    };
-    const auto make_literal = [&](auto atom) { return intern(ygg::Data<fd::Literal<f::FluentTag>>(atom.get_index(), true)); };
-    const auto make_initial_atom = [&](auto predicate, std::initializer_list<ygg::Index<f::Object>> objects)
-    {
-        auto binding_data = ygg::Data<f::RelationBinding<f::Predicate<f::FluentTag>>>();
-        binding_data.relation = predicate.get_index();
-        binding_data.objects.insert(binding_data.objects.end(), objects.begin(), objects.end());
-        return intern(ygg::Data<fd::GroundAtom<f::FluentTag>>(intern(std::move(binding_data)).get_index()));
-    };
-
-    const auto derive_seed_atom = make_atom(seed, { f::ParameterIndex(0) });
-    const auto derive_diagonal_atom = make_atom(diagonal, { f::ParameterIndex(0), f::ParameterIndex(0) });
-    auto derive_body_data = ygg::Data<fd::ConjunctiveCondition>();
-    derive_body_data.variables.push_back(y.get_index());
-    derive_body_data.fluent_literals.push_back(make_literal(derive_seed_atom).get_index());
-    const auto derive_body = intern(std::move(derive_body_data));
-    auto derive_rule_data = ygg::Data<fd::Rule<f::PredicateTag>>();
-    derive_rule_data.variables.push_back(y.get_index());
-    derive_rule_data.body = derive_body.get_index();
-    derive_rule_data.head = derive_diagonal_atom.get_index();
-    const auto derive_rule = intern(std::move(derive_rule_data));
-
-    const auto goal_diagonal_atom = make_atom(diagonal, { f::ParameterIndex(0), f::ParameterIndex(0) });
-    const auto goal_pair_atom = make_atom(diagonal, { f::ParameterIndex(0), f::ParameterIndex(1) });
-    const auto goal_seed_atom = make_atom(seed, { f::ParameterIndex(1) });
-    const auto goal_atom = make_atom(goal_predicate, {});
-    auto goal_body_data = ygg::Data<fd::ConjunctiveCondition>();
-    goal_body_data.variables.push_back(x.get_index());
-    goal_body_data.variables.push_back(y.get_index());
-    goal_body_data.fluent_literals.push_back(make_literal(goal_diagonal_atom).get_index());
-    goal_body_data.fluent_literals.push_back(make_literal(goal_pair_atom).get_index());
-    goal_body_data.fluent_literals.push_back(make_literal(goal_seed_atom).get_index());
-    const auto goal_body = intern(std::move(goal_body_data));
-    auto goal_rule_data = ygg::Data<fd::Rule<f::PredicateTag>>();
-    goal_rule_data.variables.push_back(x.get_index());
-    goal_rule_data.variables.push_back(y.get_index());
-    goal_rule_data.body = goal_body.get_index();
-    goal_rule_data.head = goal_atom.get_index();
-    const auto goal_rule = intern(std::move(goal_rule_data));
-    const auto conflicting_goal_condition = d::create_overapproximation_conflicting_conjunctive_condition(2, goal_rule.get_body(), *repository).first;
-    const auto conflicting_literals = conflicting_goal_condition.get_literals<f::FluentTag>();
-    ASSERT_EQ(conflicting_literals.size(), 1);
-    EXPECT_EQ(conflicting_literals.front().get_atom().get_index(), goal_diagonal_atom.get_index());
-
-    const auto initial_aa = make_initial_atom(diagonal, { a.get_index(), a.get_index() });
-    const auto initial_ab = make_initial_atom(diagonal, { a.get_index(), b.get_index() });
-    const auto initial_ba = make_initial_atom(diagonal, { b.get_index(), a.get_index() });
-    const auto initial_seed = make_initial_atom(seed, { b.get_index() });
-
-    auto goal_binding_data = ygg::Data<f::RelationBinding<f::Predicate<f::FluentTag>>>();
-    goal_binding_data.relation = goal_predicate.get_index();
-    const auto goal = intern(std::move(goal_binding_data));
-
-    auto program_data = ygg::Data<fd::Program>();
-    program_data.objects = { a.get_index(), b.get_index() };
-    program_data.fluent_predicates = { diagonal.get_index(), seed.get_index(), goal_predicate.get_index() };
-    program_data.fluent_atoms = { initial_aa.get_index(), initial_ab.get_index(), initial_ba.get_index(), initial_seed.get_index() };
-    program_data.predicate_rules = { derive_rule.get_index(), goal_rule.get_index() };
-    const auto program_view = intern(std::move(program_data));
-    auto program = d::Program<LiftedTag>(program_view, repository, factory);
-
-    using AnnotationPolicy = d::MinCostAnnotationWithAchieversPolicy<d::MaxAggregation>;
-    using TerminationPolicy = d::TerminationPolicy<d::MaxAggregation>;
-    auto workspace = d::ProgramWorkspace<LiftedTag, AnnotationPolicy, TerminationPolicy>(program);
-    auto context = d::ProgramExecutionContext(workspace);
-    d::compute_model(context);
-
-    ASSERT_TRUE(workspace.facts.fact_sets.predicate.contains(goal));
-    const auto* achievers = workspace.annotation_policy.find_achievers(goal);
-    ASSERT_NE(achievers, nullptr);
-    ASSERT_EQ(achievers->size(), 2);
-
-    auto bindings = std::vector<std::vector<ygg::Index<f::Object>>>();
-    for (const auto& achiever : *achievers)
-    {
-        EXPECT_EQ(achiever.get_rule_key().get_relation(), goal_rule);
-        auto& binding = bindings.emplace_back();
-        for (const auto object : achiever.get_rule_key().get_objects())
-            binding.push_back(object.get_index());
-    }
-    std::ranges::sort(bindings);
-    const auto expected = std::vector<std::vector<ygg::Index<f::Object>>> { { a.get_index(), b.get_index() }, { b.get_index(), b.get_index() } };
-    EXPECT_EQ(bindings, expected);
-}
-
-TEST(TyrDatalogLiftedBottomUpTest, RejectedCanonicalTiesDoNotInternUnneededBindings)
-{
-    auto factory = std::make_shared<fd::RepositoryFactory>();
-    auto repository = factory->create_shared();
-    const auto intern = [&]<typename T>(ygg::Data<T> data)
-    {
-        if constexpr (requires { fd::canonicalize(data); })
-            fd::canonicalize(data);
-        else
-            f::canonicalize(data);
-        return repository->get_or_create(data).first;
-    };
-
-    const auto source = intern(ygg::Data<f::Predicate<f::FluentTag>>(std::string("source"), 1));
-    const auto goal = intern(ygg::Data<f::Predicate<f::FluentTag>>(std::string("goal"), 0));
-    const auto variable = intern(ygg::Data<f::Variable>(std::string("x")));
-
-    auto source_atom_data = ygg::Data<fd::Atom<f::FluentTag>>();
-    source_atom_data.predicate = source.get_index();
-    source_atom_data.terms.emplace_back(f::ParameterIndex(0));
-    const auto source_atom = intern(std::move(source_atom_data));
-
-    const auto source_literal = intern(ygg::Data<fd::Literal<f::FluentTag>>(source_atom.get_index(), true));
-    auto body_data = ygg::Data<fd::ConjunctiveCondition>();
-    body_data.variables.push_back(variable.get_index());
-    body_data.fluent_literals.push_back(source_literal.get_index());
-    const auto body = intern(std::move(body_data));
-
-    auto goal_atom_data = ygg::Data<fd::Atom<f::FluentTag>>();
-    goal_atom_data.predicate = goal.get_index();
-    const auto goal_atom = intern(std::move(goal_atom_data));
-
-    auto rule_data = ygg::Data<fd::Rule<f::PredicateTag>>();
-    rule_data.variables.push_back(variable.get_index());
-    rule_data.body = body.get_index();
-    rule_data.head = goal_atom.get_index();
-    const auto rule = intern(std::move(rule_data));
-
-    auto program_data = ygg::Data<fd::Program>();
-    program_data.fluent_predicates.push_back(source.get_index());
-    program_data.fluent_predicates.push_back(goal.get_index());
-    program_data.predicate_rules.push_back(rule.get_index());
-    for (const auto* name : { "a", "b", "c", "d" })
-    {
-        const auto object = intern(ygg::Data<f::Object>(std::string(name)));
-        program_data.objects.push_back(object.get_index());
-
-        auto binding_data = ygg::Data<f::RelationBinding<f::Predicate<f::FluentTag>>>();
-        binding_data.relation = source.get_index();
-        binding_data.objects.push_back(object.get_index());
-        const auto binding = intern(std::move(binding_data));
-        program_data.fluent_atoms.push_back(intern(ygg::Data<fd::GroundAtom<f::FluentTag>>(binding.get_index())).get_index());
-    }
-    const auto program_view = intern(std::move(program_data));
-
-    auto program = d::Program<LiftedTag>(program_view, repository, factory);
-    const auto& const_rule_workspace = program.get_const_program_workspace().get_rules<f::PredicateTag>().front().value();
-    EXPECT_EQ(&const_rule_workspace.get_nullary_condition().get_context(), &program.get_program_repository());
-
-    using AnnotationPolicy = d::MinCostAnnotationPolicy<d::SumAggregation>;
-    using Termination = d::NoTerminationPolicy;
-    auto workspace = d::ProgramWorkspace<LiftedTag, AnnotationPolicy, Termination>(program);
-    auto context = d::ProgramExecutionContext(workspace);
-    d::compute_model(context);
-
-    EXPECT_EQ(workspace.workspace_repository.size(rule.get_index()), 1);
-    EXPECT_EQ(workspace.workspace_repository.size(goal.get_index()), 1);
-}
-
-TEST(TyrDatalogLiftedBottomUpTest, ProgramWorkspacesOwnIndependentRepositories)
-{
-    auto factory = std::make_shared<fd::RepositoryFactory>();
-    auto repository = factory->create_shared();
-    const auto intern = [&]<typename T>(ygg::Data<T> data)
-    {
-        f::canonicalize(data);
-        return repository->get_or_create(data).first;
-    };
-
-    const auto predicate = intern(ygg::Data<f::Predicate<f::FluentTag>>(std::string("workspace-predicate"), 1));
-    const auto object = intern(ygg::Data<f::Object>(std::string("workspace-object")));
-    auto program_data = ygg::Data<fd::Program> {};
-    program_data.fluent_predicates.push_back(predicate.get_index());
-    program_data.objects.push_back(object.get_index());
-    fd::canonicalize(program_data);
-    const auto program_view = repository->get_or_create(program_data).first;
-    const auto program = d::Program<LiftedTag>(program_view, repository, factory);
-
-    auto first = d::ProgramWorkspace<LiftedTag>(program);
-    auto second = d::ProgramWorkspace<LiftedTag>(program);
-
-    EXPECT_NE(&first.workspace_repository, &second.workspace_repository);
-    EXPECT_EQ(&first.workspace_repository.get_root(), &program.get_program_repository());
-    EXPECT_EQ(&second.workspace_repository.get_root(), &program.get_program_repository());
-
-    auto variable = ygg::Data<f::Variable>(std::string("workspace-only"));
-    EXPECT_TRUE(first.workspace_repository.get_or_create(variable).second);
-    EXPECT_FALSE(second.workspace_repository.find(variable).has_value());
-
-    auto second_variable = ygg::Data<f::Variable>(std::string("second-workspace-only"));
-    EXPECT_TRUE(second.workspace_repository.get_or_create(second_variable).second);
-
-    auto binding_data = ygg::Data<f::RelationBinding<f::Predicate<f::FluentTag>>>();
-    binding_data.relation = predicate.get_index();
-    binding_data.objects.push_back(object.get_index());
-    const auto binding = first.workspace_repository.get_or_create(binding_data).first;
-    const auto binding_index = binding.get_index();
-    first.annotations.insert_or_assign(binding, d::BaseAnnotation(3));
-
-    first.reset_evaluation();
-
-    EXPECT_FALSE(first.workspace_repository.find(ygg::Data<f::Variable>(std::string("workspace-only"))).has_value());
-    EXPECT_TRUE(second.workspace_repository.find(ygg::Data<f::Variable>(std::string("second-workspace-only"))).has_value());
-    EXPECT_EQ(&first.workspace_repository.get_root(), &program.get_program_repository());
-
-    auto reused_binding_data = ygg::Data<f::RelationBinding<f::Predicate<f::FluentTag>>>();
-    reused_binding_data.relation = predicate.get_index();
-    reused_binding_data.objects.push_back(object.get_index());
-    const auto reused_binding = first.workspace_repository.get_or_create(reused_binding_data).first;
-    EXPECT_EQ(reused_binding.get_index(), binding_index);
-    EXPECT_EQ(first.annotations.find(reused_binding), nullptr);
-}
-
-TEST(TyrDatalogLiftedBottomUpTest, PredicateAnnotationsUseRelationAndRowIndices)
-{
-    auto factory = std::make_shared<fd::RepositoryFactory>();
-    auto repository = factory->create_shared();
-    const auto intern = [&]<typename T>(ygg::Data<T> data)
-    {
-        f::canonicalize(data);
-        return repository->get_or_create(data).first;
-    };
-
-    const auto first_predicate = intern(ygg::Data<f::Predicate<f::FluentTag>>(std::string("first"), 1));
-    const auto second_predicate = intern(ygg::Data<f::Predicate<f::FluentTag>>(std::string("second"), 1));
-    const auto first_object = intern(ygg::Data<f::Object>(std::string("a")));
-    const auto second_object = intern(ygg::Data<f::Object>(std::string("b")));
-    const auto make_binding = [&](auto predicate, auto object)
-    {
-        auto data = ygg::Data<f::RelationBinding<f::Predicate<f::FluentTag>>>();
-        data.relation = predicate.get_index();
-        data.objects.push_back(object.get_index());
-        return intern(std::move(data));
-    };
-
-    const auto first = make_binding(first_predicate, first_object);
-    const auto hole = make_binding(first_predicate, second_object);
-    const auto second = make_binding(second_predicate, first_object);
-    auto annotations = d::PredicateAnnotations<>();
-
-    annotations.insert_or_assign(first, d::BaseAnnotation(3));
-    annotations.insert_or_assign(second, d::BaseAnnotation(5));
-    EXPECT_EQ(d::get_cost(*annotations.find(first)), 3);
-    EXPECT_EQ(d::get_cost(*std::as_const(annotations).find(second)), 5);
-    EXPECT_EQ(annotations.find(hole), nullptr);
-
-    annotations.insert_or_assign(first, d::BaseAnnotation(2));
-    EXPECT_EQ(d::get_cost(*annotations.find(first)), 2);
-
-    annotations.clear();
-    EXPECT_EQ(annotations.find(first), nullptr);
-    EXPECT_EQ(annotations.find(second), nullptr);
-}
-
-TEST(TyrDatalogLiftedBottomUpTest, DeltaAnnotationsAreConcurrentAndReusable)
-{
-    auto factory = std::make_shared<fd::RepositoryFactory>();
-    auto repository = factory->create_shared();
-    const auto intern = [&]<typename T>(ygg::Data<T> data)
-    {
-        f::canonicalize(data);
-        return repository->get_or_create(data).first;
-    };
-
-    const auto first_predicate = intern(ygg::Data<f::Predicate<f::FluentTag>>(std::string("first"), 1));
-    const auto second_predicate = intern(ygg::Data<f::Predicate<f::FluentTag>>(std::string("second"), 1));
-    const auto function = intern(ygg::Data<f::Function<f::FluentTag>>(std::string("value"), 1));
-
-    auto first_bindings = std::vector<fd::PredicateBindingView<f::FluentTag>> {};
-    auto second_bindings = std::vector<fd::PredicateBindingView<f::FluentTag>> {};
-    auto function_bindings = std::vector<fd::FunctionBindingView<f::FluentTag>> {};
-    for (size_t i = 0; i < 64; ++i)
-    {
-        const auto object = intern(ygg::Data<f::Object>("o" + std::to_string(i)));
-        const auto make_predicate_binding = [&](auto predicate)
-        {
-            auto data = ygg::Data<f::RelationBinding<f::Predicate<f::FluentTag>>> {};
-            data.relation = predicate.get_index();
-            data.objects.push_back(object.get_index());
-            return intern(std::move(data));
-        };
-        const auto make_function_binding = [&](auto function_)
-        {
-            auto data = ygg::Data<f::RelationBinding<f::Function<f::FluentTag>>> {};
-            data.relation = function_.get_index();
-            data.objects.push_back(object.get_index());
-            return intern(std::move(data));
-        };
-        first_bindings.push_back(make_predicate_binding(first_predicate));
-        second_bindings.push_back(make_predicate_binding(second_predicate));
-        function_bindings.push_back(make_function_binding(function));
-    }
-
-    using SequentialMap = d::DenseRelationMap<f::PredicateTag, d::Cost>;
-    using ConcurrentMap = d::DenseRelationMap<f::PredicateTag, d::Cost, true>;
-    static_assert(!SequentialMap::thread_safe);
-    static_assert(ConcurrentMap::thread_safe);
-    static_assert(!d::PredicateAnnotations<>::thread_safe);
-    static_assert(d::PredicateAnnotations<true>::thread_safe);
-    static_assert(!d::FunctionAnnotations<>::thread_safe);
-    static_assert(d::FunctionAnnotations<true>::thread_safe);
-    static_assert(std::is_default_constructible_v<d::PredicateAnnotations<>>);
-    static_assert(!std::is_default_constructible_v<d::PredicateAnnotations<true>>);
-    static_assert(std::is_default_constructible_v<d::FunctionAnnotations<>>);
-    static_assert(!std::is_default_constructible_v<d::FunctionAnnotations<true>>);
-    static_assert(std::is_copy_constructible_v<SequentialMap>);
-    static_assert(!std::is_copy_constructible_v<ConcurrentMap>);
-    static_assert(std::is_nothrow_move_constructible_v<ConcurrentMap>);
-    static_assert(std::is_nothrow_move_assignable_v<ConcurrentMap>);
-    const auto retain_min = [](auto& map, auto binding, d::Cost candidate)
-    {
-        map.update(binding,
-                   [&](auto& incumbent, bool initialized)
-                   {
-                       if (!initialized || candidate < incumbent)
-                           incumbent = candidate;
-                   });
-    };
-    auto sequential_map = SequentialMap(2);
-    auto concurrent_map = ConcurrentMap(2);
-    for (size_t worker = 0; worker < 8; ++worker)
-        retain_min(sequential_map, first_bindings.front(), d::Cost(8 - worker));
-
-    auto delta_annotations = d::PredicateAnnotations<true>(2);
-    auto delta_numeric_annotations = d::FunctionAnnotations<true>(1);
-    const auto interval = ygg::ClosedInterval<ygg::float_t>(0, 1);
-    auto arena = oneapi::tbb::task_arena(8);
-    arena.execute(
-        [&]
-        {
-            oneapi::tbb::parallel_for(size_t(0),
-                                      size_t(8),
-                                      [&](size_t worker)
-                                      {
-                                          const auto predicate_cost = d::Cost(8 - worker);
-                                          const auto function_cost = d::Cost(worker < 4 ? 3 : 5);
-                                          retain_min(concurrent_map, first_bindings.front(), predicate_cost);
-                                          for (size_t i = first_bindings.size(); i-- > 0;)
-                                          {
-                                              delta_annotations.insert_if_better(first_bindings[i], d::BaseAnnotation(predicate_cost));
-                                              delta_annotations.insert_if_better(second_bindings[i], d::BaseAnnotation(predicate_cost));
-                                              delta_numeric_annotations.insert(function_bindings[i], interval, d::BaseAnnotation(function_cost));
-                                          }
-                                      });
-        });
-
-    ASSERT_NE(sequential_map.find(first_bindings.front()), nullptr);
-    ASSERT_NE(concurrent_map.find(first_bindings.front()), nullptr);
-    EXPECT_EQ(*sequential_map.find(first_bindings.front()), *concurrent_map.find(first_bindings.front()));
-
-    for (size_t i = 0; i < first_bindings.size(); ++i)
-    {
-        ASSERT_NE(delta_annotations.find(first_bindings[i]), nullptr);
-        ASSERT_NE(delta_annotations.find(second_bindings[i]), nullptr);
-        EXPECT_EQ(d::get_cost(*delta_annotations.find(first_bindings[i])), 1);
-        EXPECT_EQ(d::get_cost(*delta_annotations.find(second_bindings[i])), 1);
-
-        const auto* entries = delta_numeric_annotations.find_entries(function_bindings[i]);
-        ASSERT_NE(entries, nullptr);
-        ASSERT_EQ(entries->size(), 1);
-        EXPECT_EQ(d::get_cost(entries->at(0).annotation), 3);
-    }
-
-    const auto second_interval = ygg::ClosedInterval<ygg::float_t>(1, 2);
-    EXPECT_TRUE(delta_numeric_annotations.insert(function_bindings.back(), second_interval, d::BaseAnnotation(4)));
-    EXPECT_FALSE(delta_numeric_annotations.insert(function_bindings.back(), second_interval, d::BaseAnnotation(5)));
-    EXPECT_TRUE(delta_numeric_annotations.insert(function_bindings.back(), second_interval, d::BaseAnnotation(2)));
-    ASSERT_EQ(delta_numeric_annotations.find_entries(function_bindings.back())->size(), 2);
-    ASSERT_NE(delta_numeric_annotations.find(function_bindings.back(), second_interval), nullptr);
-    EXPECT_EQ(d::get_cost(*delta_numeric_annotations.find(function_bindings.back(), second_interval)), 2);
-
-    auto numeric_annotations = d::FunctionAnnotations<>();
-    numeric_annotations.insert(function_bindings.back(), interval, d::BaseAnnotation(5));
-    numeric_annotations.insert(function_bindings.back(), interval, d::BaseAnnotation(3));
-    numeric_annotations.insert(function_bindings.back(), interval, d::BaseAnnotation(4));
-    numeric_annotations.insert(function_bindings.back(), interval, d::BaseAnnotation(ygg::ClosedInterval<ygg::float_t>(1, 1), 3));
-    numeric_annotations.insert(function_bindings.back(), second_interval, d::BaseAnnotation(2));
-    numeric_annotations.insert(function_bindings.back(), interval, d::BaseAnnotation(1));
-    const auto* numeric_entries = numeric_annotations.find_entries(function.get_index(), function_bindings.back().get_index().row);
-    ASSERT_NE(numeric_entries, nullptr);
-    ASSERT_EQ(numeric_entries->size(), 2);
-    EXPECT_EQ(numeric_entries->at(0).interval, interval);
-    EXPECT_EQ(d::get_cost(numeric_entries->at(0).annotation), 1);
-    EXPECT_EQ(numeric_entries->at(1).interval, second_interval);
-    EXPECT_EQ(d::get_cost(numeric_entries->at(1).annotation), 2);
-    EXPECT_EQ(d::get_cost(*numeric_annotations.find(function_bindings.back(), interval)), 1);
-    EXPECT_EQ(d::get_metric(*numeric_annotations.find(function_bindings.back(), interval)), ygg::ClosedInterval<ygg::float_t>());
-
-    delta_annotations.clear();
-    delta_numeric_annotations.clear();
-    sequential_map.clear();
-    concurrent_map.clear();
-    EXPECT_EQ(delta_annotations.find(first_bindings.back()), nullptr);
-    EXPECT_EQ(delta_numeric_annotations.find_entries(function_bindings.back()), nullptr);
-    EXPECT_EQ(sequential_map.find(first_bindings.front()), nullptr);
-    EXPECT_EQ(concurrent_map.find(first_bindings.front()), nullptr);
-
-    delta_annotations.insert_if_better(first_bindings.back(), d::BaseAnnotation(7));
-    delta_numeric_annotations.insert(function_bindings.back(), interval, d::BaseAnnotation(7));
-    retain_min(sequential_map, first_bindings.front(), d::Cost(7));
-    retain_min(concurrent_map, first_bindings.front(), d::Cost(7));
-    EXPECT_EQ(d::get_cost(*delta_annotations.find(first_bindings.back())), 7);
-    ASSERT_NE(delta_numeric_annotations.find_entries(function_bindings.back()), nullptr);
-    EXPECT_EQ(delta_numeric_annotations.find_entries(function_bindings.back())->size(), 1);
-    EXPECT_EQ(*sequential_map.find(first_bindings.front()), *concurrent_map.find(first_bindings.front()));
-}
-
 INSTANTIATE_TEST_SUITE_P(TyrDatalogLiftedBottomUpFixture,
                          BottomUpFixtureTest,
                          ::testing::ValuesIn(load_cases()),
-                         [](const testing::TestParamInfo<BottomUpCase>& info) { return info.param.name; });
+                         [](const testing::TestParamInfo<BottomUpCase>& param_info) { return param_info.param.name; });
 
 }
 }

@@ -42,20 +42,20 @@ template<class Tag>
 class AtomIterator
 {
 public:
-    using value_type = ygg::Index<::tyr::formalism::planning::GroundAtom<Tag>>;
+    using value_type = ygg::Index<formalism::planning::Atom<GroundTag, Tag>>;
     using reference = value_type;
     using difference_type = std::ptrdiff_t;
     using iterator_category = std::input_iterator_tag;
     using iterator_concept = std::input_iterator_tag;
     using pointer = void;
 
-    AtomIterator() noexcept : m_data(nullptr), m_i(0) {}
+    AtomIterator() noexcept = default;
     AtomIterator(const boost::dynamic_bitset<>& data, bool begin) noexcept : m_data(&data), m_i(begin ? m_data->find_first() : boost::dynamic_bitset<>::npos) {}
 
     value_type operator*() const noexcept
     {
         assert(m_data);
-        return ygg::Index<::tyr::formalism::planning::GroundAtom<Tag>> { static_cast<ygg::uint_t>(m_i) };
+        return ygg::Index<formalism::planning::Atom<GroundTag, Tag>> { static_cast<ygg::uint_t>(m_i) };
     }
 
     AtomIterator& operator++() noexcept
@@ -90,8 +90,8 @@ public:
     {
     }
 
-    auto begin() const { return AtomIterator<Tag>(*m_data, true); }
-    auto end() const { return AtomIterator<Tag>(*m_data, false); }
+    [[nodiscard]] auto begin() const { return AtomIterator<Tag>(*m_data, true); }
+    [[nodiscard]] auto end() const { return AtomIterator<Tag>(*m_data, false); }
 
 private:
     const boost::dynamic_bitset<>* m_data { nullptr };
@@ -115,7 +115,7 @@ template<class Tag>
 class FunctionTermValueIterator
 {
 public:
-    using value_type = std::pair<ygg::Index<::tyr::formalism::planning::GroundFunctionTerm<Tag>>, ygg::float_t>;
+    using value_type = std::pair<ygg::Index<formalism::planning::FunctionTerm<GroundTag, Tag>>, ygg::float_t>;
     using reference = value_type;
     using difference_type = std::ptrdiff_t;
     using iterator_category = std::input_iterator_tag;
@@ -129,7 +129,7 @@ public:
             ++m_i;
     }
 
-    FunctionTermValueIterator() noexcept : m_data(nullptr), m_i(0) {}
+    FunctionTermValueIterator() noexcept = default;
     FunctionTermValueIterator(const std::vector<ygg::float_t>& data, bool begin) noexcept : m_data(&data), m_i(begin ? 0 : m_data->size())
     {
         if (begin)
@@ -139,7 +139,7 @@ public:
     value_type operator*() const noexcept
     {
         assert(m_data);
-        return { ygg::Index<::tyr::formalism::planning::GroundFunctionTerm<Tag>> { static_cast<ygg::uint_t>(m_i) }, (*m_data)[m_i] };
+        return { ygg::Index<formalism::planning::FunctionTerm<GroundTag, Tag>> { static_cast<ygg::uint_t>(m_i) }, (*m_data)[m_i] };
     }
 
     FunctionTermValueIterator& operator++() noexcept
@@ -156,9 +156,7 @@ public:
     }
 
     friend bool operator==(const FunctionTermValueIterator& lhs, const FunctionTermValueIterator& rhs) noexcept
-    {
-        return lhs.m_data == rhs.m_data && lhs.m_i == rhs.m_i;
-    }
+    { return lhs.m_data == rhs.m_data && lhs.m_i == rhs.m_i; }
     friend bool operator!=(const FunctionTermValueIterator& lhs, const FunctionTermValueIterator& rhs) noexcept { return !(lhs == rhs); }
 
 private:
@@ -177,8 +175,8 @@ public:
     {
     }
 
-    auto begin() const { return FunctionTermValueIterator<Tag>(*m_data, true); }
-    auto end() const { return FunctionTermValueIterator<Tag>(*m_data, false); }
+    [[nodiscard]] auto begin() const { return FunctionTermValueIterator<Tag>(*m_data, true); }
+    [[nodiscard]] auto end() const { return FunctionTermValueIterator<Tag>(*m_data, false); }
 
 private:
     const std::vector<ygg::float_t>* m_data { nullptr };

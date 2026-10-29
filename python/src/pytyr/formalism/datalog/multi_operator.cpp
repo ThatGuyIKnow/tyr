@@ -17,55 +17,49 @@
 
 #include "binding_utils.hpp"
 #include "bindings.hpp"
+#include "tyr/formalism/datalog/declarations.hpp"
 
 #include <tyr/formalism/datalog/multi_operator_data.hpp>
-#include <tyr/formalism/datalog/multi_operator_index.hpp>
 #include <tyr/formalism/datalog/multi_operator_view.hpp>
 
 namespace tyr::formalism::datalog
 {
 
+namespace
+{
+template<TaskKind T>
+void bind_multi_operator_kind(nb::module_& m, RepositoryBinding& repository, const std::string& name)
+{
+    using namespace nb::literals;
+    using Tag = MultiOperator<T>;
+    ygg::bind_index<ygg::Index<Tag>>(m, name + "Index");
+
+    {
+        using V = ygg::Data<Tag>;
+        auto cls = nb::class_<V>(m, (name + "Data").c_str())
+                       .def(nb::init<ArithmeticOperatorKind, const std::vector<FunctionExpressionView<T>>&>(), "operator"_a, "args"_a);
+        cls.def(nb::init<ArithmeticOperatorKind, ygg::DataList<FunctionExpression<T>>>(), "operator"_a, "args"_a);
+        ygg::add_print(cls);
+        ygg::add_comparison(cls);
+        ygg::add_hash(cls);
+    }
+
+    {
+        using V = MultiOperatorView<T>;
+        auto cls = nb::class_<V>(m, name.c_str()).def("get_index", &V::get_index).def("get_operator", &V::get_operator).def("get_args", &V::get_args);
+        ygg::add_print(cls);
+        ygg::add_comparison(cls);
+        ygg::add_hash(cls);
+    }
+
+    bind_insert<Tag>(repository);
+}
+}  // namespace
+
 void bind_multi_operator(nb::module_& m, RepositoryBinding& repository)
 {
-    ygg::bind_index<ygg::Index<MultiOperator<ygg::Data<FunctionExpression>>>>(m, "MultiOperatorIndex");
-    ygg::bind_index<ygg::Index<MultiOperator<ygg::Data<GroundFunctionExpression>>>>(m, "GroundMultiOperatorIndex");
-
-    {
-        using ExpressionData = ygg::Data<FunctionExpression>;
-        using ExpressionView = ygg::View<ExpressionData, Repository>;
-        using V = ygg::Data<MultiOperator<ExpressionData>>;
-        auto cls = nb::class_<V>(m, "MultiOperatorData").def(nb::init<ArithmeticOperatorKind, const std::vector<ExpressionView>&>(), "operator"_a, "args"_a);
-        ygg::add_print(cls);
-        ygg::add_comparison(cls);
-        ygg::add_hash(cls);
-    }
-    {
-        using ExpressionData = ygg::Data<GroundFunctionExpression>;
-        using ExpressionView = ygg::View<ExpressionData, Repository>;
-        using V = ygg::Data<MultiOperator<ExpressionData>>;
-        auto cls =
-            nb::class_<V>(m, "GroundMultiOperatorData").def(nb::init<ArithmeticOperatorKind, const std::vector<ExpressionView>&>(), "operator"_a, "args"_a);
-        ygg::add_print(cls);
-        ygg::add_comparison(cls);
-        ygg::add_hash(cls);
-    }
-    {
-        using V = MultiOperatorView<ygg::Data<FunctionExpression>>;
-        auto cls = nb::class_<V>(m, "MultiOperator").def("get_index", &V::get_index).def("get_operator", &V::get_operator).def("get_args", &V::get_args);
-        ygg::add_print(cls);
-        ygg::add_comparison(cls);
-        ygg::add_hash(cls);
-    }
-    {
-        using V = MultiOperatorView<ygg::Data<GroundFunctionExpression>>;
-        auto cls = nb::class_<V>(m, "GroundMultiOperator").def("get_index", &V::get_index).def("get_operator", &V::get_operator).def("get_args", &V::get_args);
-        ygg::add_print(cls);
-        ygg::add_comparison(cls);
-        ygg::add_hash(cls);
-    }
-
-    repository.def("get_or_create", &get_or_create_data<MultiOperator<ygg::Data<FunctionExpression>>>, "data"_a, nb::keep_alive<0, 1>());
-    repository.def("get_or_create", &get_or_create_data<MultiOperator<ygg::Data<GroundFunctionExpression>>>, "data"_a, nb::keep_alive<0, 1>());
+    bind_multi_operator_kind<LiftedTag>(m, repository, "MultiOperator");
+    bind_multi_operator_kind<GroundTag>(m, repository, "GroundMultiOperator");
 }
 
 }  // namespace tyr::formalism::datalog

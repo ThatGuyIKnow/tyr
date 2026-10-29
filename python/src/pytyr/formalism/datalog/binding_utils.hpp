@@ -18,6 +18,7 @@
 #ifndef PYTHON_SRC_PYTYR_FORMALISM_DATALOG_BINDING_UTILS_HPP_
 #define PYTHON_SRC_PYTYR_FORMALISM_DATALOG_BINDING_UTILS_HPP_
 
+#include "../binding_utils.hpp"
 #include "bindings.hpp"
 
 #include <nanobind/stl/optional.h>
@@ -26,8 +27,10 @@
 #include <nanobind/stl/variant.h>
 #include <nanobind/stl/vector.h>
 #include <tyr/formalism/datalog/formatter.hpp>
+#include <tyr/formalism/datalog/interning.hpp>
 #include <tyr/formalism/datalog/repository.hpp>
 #include <yggdrasil/python/bindings.hpp>
+#include <yggdrasil/python/owner.hpp>
 #include <yggdrasil/python/type_casters.hpp>
 
 namespace tyr::formalism::datalog
@@ -37,22 +40,20 @@ template<typename T>
 using Data = ygg::Data<T>;
 
 template<typename T>
-ygg::View<ygg::Index<T>, Repository> get_or_create_data(Repository& repository, Data<T>& data)
+void bind_insert(RepositoryBinding& repository)
 {
-    return ::tyr::formalism::datalog::get_or_create(repository, data).first;
-}
-
-template<typename T>
-ygg::View<ygg::Index<RelationBinding<T>>, Repository> get_or_create_relation_data(Repository& repository, Data<RelationBinding<T>>& data)
-{
-    return ::tyr::formalism::datalog::get_or_create(repository, data).first;
+    using View = ygg::View<ygg::Index<T>, Repository>;
+    const auto retain_owner = ygg::python::make_owner_retainer();
+    repository.def(
+        "insert",
+        [retain_owner](nb::typed<nb::handle, Repository> owner, Data<T>& data) -> nb::typed<nb::tuple, View, bool>
+        { return nb::borrow<nb::typed<nb::tuple, View, bool>>(ygg::python::cast_with_owner(insert(nb::cast<Repository&>(owner), data), owner, retain_owner)); },
+        nb::arg("data"));
 }
 
 template<typename T>
 ygg::View<ygg::Data<T>, Repository> create_data(Repository& repository, const Data<T>& data)
-{
-    return make_view(data, repository);
-}
+{ return make_view(data, repository); }
 
 }  // namespace tyr::formalism::datalog
 

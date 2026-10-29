@@ -22,8 +22,8 @@
 #include "tyr/planning/applicability.hpp"
 #include "tyr/planning/ground/axiom_stratification.hpp"
 #include "tyr/planning/ground/match_tree/match_tree.hpp"
-#include "tyr/planning/ground/state_builder.hpp"
 #include "tyr/planning/ground/task.hpp"
+#include "tyr/planning/state_builder.hpp"
 
 #include <atomic>
 #include <memory>
@@ -31,8 +31,6 @@
 #include <vector>
 #include <yggdrasil/core/config.hpp>
 #include <yggdrasil/semantics/comparators.hpp>
-
-namespace fp = tyr::formalism::planning;
 
 namespace tyr::planning
 {
@@ -46,11 +44,12 @@ struct AxiomEvaluator<GroundTag>::Impl
             auto axiom_strata = compute_ground_axiom_stratification(task->get_task());
             match_tree_prototypes.reserve(axiom_strata.data.size());
             for (const auto& stratum : axiom_strata.data)
-                match_tree_prototypes.emplace_back(match_tree::MatchTree<fp::GroundAxiom>::create(stratum, task->get_task().get_context()));
+                match_tree_prototypes.emplace_back(
+                    match_tree::MatchTree<formalism::planning::Axiom<GroundTag>>::create(stratum, task->get_task().get_context()));
         }
 
         TaskPtr<GroundTag> task;
-        std::vector<match_tree::MatchTreePtr<fp::GroundAxiom>> match_tree_prototypes;
+        std::vector<match_tree::MatchTreePtr<formalism::planning::Axiom<GroundTag>>> match_tree_prototypes;
     };
 
     struct Evaluator
@@ -66,8 +65,8 @@ struct AxiomEvaluator<GroundTag>::Impl
         }
 
         ygg::ExecutionContextPtr execution_context;
-        std::vector<match_tree::MatchTreePtr<fp::GroundAxiom>> match_tree_workers;
-        fp::GroundAxiomViewList applicable_axioms;
+        std::vector<match_tree::MatchTreePtr<formalism::planning::Axiom<GroundTag>>> match_tree_workers;
+        formalism::planning::AxiomViewList<GroundTag> applicable_axioms;
     };
 
     Impl(ygg::uint_t index_, TaskPtr<GroundTag> task, ygg::ExecutionContextPtr execution_context_, std::shared_ptr<std::atomic<ygg::uint_t>> next_index_) :
@@ -117,13 +116,13 @@ AxiomEvaluatorPtr<GroundTag> AxiomEvaluator<GroundTag>::make_worker(ygg::Executi
 
 void AxiomEvaluator<GroundTag>::compute_extended_state(ygg::Builder<State<GroundTag>>& state_builder)
 {
-    auto state_context = StateContext<GroundTag> { *m_impl->definition->task, state_builder, ygg::float_t(0) };
+    auto state_context = StateContext<GroundTag> { *m_impl->definition->task, state_builder, static_cast<ygg::float_t>(0) };
 
     for (const auto& match_tree : m_impl->evaluator.match_tree_workers)
     {
         while (true)
         {
-            auto discovered_new_atom = bool { false };
+            auto discovered_new_atom = false;
 
             m_impl->evaluator.applicable_axioms.clear();
             match_tree->generate(state_context, m_impl->evaluator.applicable_axioms);

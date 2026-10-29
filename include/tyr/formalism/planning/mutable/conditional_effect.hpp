@@ -18,8 +18,6 @@
 #ifndef TYR_FORMALISM_PLANNING_MUTABLE_CONDITIONAL_EFFECT_HPP_
 #define TYR_FORMALISM_PLANNING_MUTABLE_CONDITIONAL_EFFECT_HPP_
 
-#include <yggdrasil/semantics/comparison.hpp>
-#include <yggdrasil/semantics/hash.hpp>
 #include "tyr/formalism/planning/mutable/conjunctive_condition.hpp"
 #include "tyr/formalism/planning/mutable/conjunctive_effect.hpp"
 #include "tyr/formalism/planning/repository.hpp"
@@ -30,33 +28,41 @@
 #include <tuple>
 #include <utility>
 #include <vector>
+#include <yggdrasil/semantics/comparison.hpp>
+#include <yggdrasil/semantics/hash.hpp>
 
 namespace tyr::formalism::planning
 {
 struct MutableConditionalEffect : ygg::comparison::Mixin<MutableConditionalEffect>
 {
-    size_t num_parent_variables;
-    size_t num_variables;
+    size_t num_parent_variables = 0;
+    size_t num_variables = 0;
     MutableConjunctiveCondition condition;
     MutableConjunctiveEffect effect;
 
     MutableConditionalEffect() = default;
-    MutableConditionalEffect(size_t num_parent_variables, size_t num_variables, MutableConjunctiveCondition condition, MutableConjunctiveEffect effect) :
-        num_parent_variables(num_parent_variables),
-        num_variables(num_variables),
-        condition(std::move(condition)),
-        effect(std::move(effect))
+    MutableConditionalEffect(size_t num_parent_variables_, size_t num_variables_, MutableConjunctiveCondition condition_, MutableConjunctiveEffect effect_) :
+        num_parent_variables(num_parent_variables_),
+        num_variables(num_variables_),
+        condition(std::move(condition_)),
+        effect(std::move(effect_))
     {
     }
-    MutableConditionalEffect(size_t num_parent_variables, ConditionalEffectView element) :
-        num_parent_variables(num_parent_variables),
+    MutableConditionalEffect(size_t num_parent_variables_, ConditionalEffectView<LiftedTag> element) :
+        num_parent_variables(num_parent_variables_),
         num_variables(element.get_arity()),
-        condition(num_parent_variables, element.get_condition()),
-        effect(num_parent_variables, num_variables, element.get_effect())
+        condition(num_parent_variables_, element.get_condition()),
+        effect(num_parent_variables_, num_variables, element.get_effect())
     {
     }
 
-    auto identifying_members() const noexcept { return std::tie(num_parent_variables, num_variables, condition, effect); }
+    static constexpr auto identifying_members() noexcept
+    {
+        return ygg::Members<&MutableConditionalEffect::num_parent_variables,
+                            &MutableConditionalEffect::num_variables,
+                            &MutableConditionalEffect::condition,
+                            &MutableConditionalEffect::effect> {};
+    }
 };
 
 using MutableConditionalEffectList = std::vector<MutableConditionalEffect>;
@@ -65,12 +71,12 @@ using MutableConditionalEffectList = std::vector<MutableConditionalEffect>;
 namespace tyr::formalism::unification
 {
 template<>
-struct structure_traits<tyr::formalism::planning::MutableConditionalEffect>
+struct structure_traits<planning::MutableConditionalEffect>
 {
-    using Type = tyr::formalism::planning::MutableConditionalEffect;
+    using Type = planning::MutableConditionalEffect;
 
     template<typename F>
-    static bool zip_terms(const Type& lhs, const Type& rhs, F&& f)
+    static bool zip_terms(const Type& lhs, const Type& rhs, F f)
     {
         if (lhs.num_parent_variables != rhs.num_parent_variables)
             return false;
@@ -78,16 +84,16 @@ struct structure_traits<tyr::formalism::planning::MutableConditionalEffect>
         if (lhs.num_variables != rhs.num_variables)
             return false;
 
-        return tyr::formalism::unification::zip_terms(lhs.condition, rhs.condition, f) && tyr::formalism::unification::zip_terms(lhs.effect, rhs.effect, f);
+        return unification::zip_terms(lhs.condition, rhs.condition, f) && unification::zip_terms(lhs.effect, rhs.effect, f);
     }
 
     template<typename F>
-    static Type transform_terms(const Type& value, F&& f)
+    static Type transform_terms(const Type& value, F f)
     {
         return Type(value.num_parent_variables,
                     value.num_variables,
-                    tyr::formalism::unification::transform_terms(value.condition, f),
-                    tyr::formalism::unification::transform_terms(value.effect, f));
+                    unification::transform_terms(value.condition, f),
+                    unification::transform_terms(value.effect, f));
     }
 };
 }

@@ -42,7 +42,6 @@ class LazyGBFSPolicy
 {
 public:
     using ParentPolicy = ParentStatePolicy<Kind, Search>;
-    using TaskTag = Kind;
     using SearchTag = Search;
     using Options = gbfs_lazy::Options<Kind>;
     using EventHandlerPtr = gbfs_lazy::EventHandlerPtr<Kind>;
@@ -77,8 +76,8 @@ public:
         ygg::Index<State<Kind>> state;
         ygg::uint_t step;
 
-        KeyType get_key() const { return std::make_tuple(h_value, g_value, step); }
-        ItemType get_item() const { return state; }
+        [[nodiscard]] KeyType get_key() const { return std::make_tuple(h_value, g_value, step); }
+        [[nodiscard]] ItemType get_item() const { return state; }
     };
 
     struct PoppedEntry
@@ -87,8 +86,8 @@ public:
     };
 
     LazyGBFSPolicy(Heuristic<Kind>& heuristic, const Options& options) :
-        m_heuristic(heuristic),
-        m_options(options),
+        m_heuristic(&heuristic),
+        m_options(&options),
         m_openlist(m_preferred_openlist, m_standard_openlist, std::array<size_t, 2> { 1, 1 })
     {
     }
@@ -102,14 +101,12 @@ public:
         return search_node;
     }
 
-    ygg::float_t get_start_priority() const noexcept { return m_start_h_value; }
+    [[nodiscard]] ygg::float_t get_start_priority() const noexcept { return m_start_h_value; }
 
     void open_start(ygg::Index<State<Kind>> state, const SearchNode& search_node)
-    {
-        m_standard_openlist.insert(QueueEntry { search_node.g_value, m_start_h_value, state, m_step++ });
-    }
+    { m_standard_openlist.insert(QueueEntry { search_node.g_value, m_start_h_value, state, m_step++ }); }
 
-    bool empty() const { return m_openlist.empty(); }
+    [[nodiscard]] bool empty() const { return m_openlist.empty(); }
 
     PoppedEntry pop()
     {
@@ -124,7 +121,7 @@ public:
     // Best-h progress is detected while another worker may own this queue, so defer the local weight update without nesting worker locks.
     void queue_preferred_boost(size_t boost) noexcept { m_pending_preferred_boost.fetch_add(boost, std::memory_order_relaxed); }
 
-    bool should_discard(const PoppedEntry&, ygg::float_t) const noexcept { return false; }
+    [[nodiscard]] bool should_discard(const PoppedEntry&, ygg::float_t) const noexcept { return false; }
 
     SearchNode& get_search_node(ygg::Index<State<Kind>> state)
     {
@@ -146,9 +143,15 @@ public:
         std::forward<EmitEvent>(emit_event)([&](auto& handler) { handler.on_expand_node(node); });
 
         m_state_h_value = std::forward<EvaluateUnlocked>(evaluate_unlocked)(
-            [&] { return ygg::FloatTolerance<ygg::float_t>::canonicalize(m_heuristic.evaluate(node.get_state())); });
-        if (std::isnan(m_state_h_value))
-            throw std::runtime_error("GBFS heuristic value is NaN.");
+            [&]
+            {
+                const auto h_value = ygg::FloatTolerance<ygg::float_t>::canonicalize(m_heuristic->evaluate(node.get_state()));
+                if (std::isnan(h_value))
+                    throw std::runtime_error("GBFS heuristic value is NaN.");
+                if (h_value != std::numeric_limits<ygg::float_t>::infinity())
+                    static_cast<void>(std::forward<ImproveBestH>(improve_best_h)(h_value, [&](auto& handler) { handler.on_new_best_h_value(h_value); }));
+                return h_value;
+            });
         if (m_state_h_value == std::numeric_limits<ygg::float_t>::infinity())
         {
             statistics.increment_num_deadends();
@@ -156,23 +159,18 @@ public:
             return ExpansionResult::SKIP;
         }
 
-        static_cast<void>(std::forward<ImproveBestH>(improve_best_h)(m_state_h_value, [&](auto& handler) { handler.on_new_best_h_value(m_state_h_value); }));
-
-        m_preferred_actions = m_options.use_preferred_actions ? &m_heuristic.get_preferred_actions() : nullptr;
+        m_relaxed_plan = m_options->use_preferred_actions ? m_heuristic->get_relaxed_plan() : nullptr;
         search_node.status = SearchNodeStatus::CLOSED;
         return ExpansionResult::EXPAND;
     }
 
-    SuccessorMetadata make_successor_metadata(ygg::Index<Worker> worker,
-                                              ygg::Index<State<Kind>> state,
-                                              const SearchNode& search_node,
-                                              ::tyr::formalism::planning::ActionBindingView action) const
+    [[nodiscard]] SuccessorMetadata
+    make_successor_metadata(ygg::Index<Worker> worker, const Node<Kind>& node, formalism::planning::ActionBindingView action) const
     {
-        const auto preferred = m_preferred_actions && m_preferred_actions->contains(action);
-        return SuccessorMetadata { WorkerStateIndex<Kind> { worker, state }, search_node.g_value, m_state_h_value, preferred };
+        // Successors are applicable in the evaluated state, so the preferred ones are its relaxed plan's applicable actions.
+        const auto preferred = m_relaxed_plan && m_relaxed_plan->contains(action);
+        return SuccessorMetadata { WorkerStateIndex<Kind> { worker, node.get_state().get_index() }, node.get_metric(), m_state_h_value, preferred };
     }
-
-    static constexpr void prepare_routed_successor(Heuristic<Kind>&, const ygg::Builder<State<Kind>>&, bool, SuccessorMetadata&) noexcept {}
 
     static void set_parent(SearchNode& search_node, WorkerStateIndex<Kind> parent) noexcept { search_node.parent_state = ParentPolicy::make_parent(parent); }
 
@@ -184,15 +182,16 @@ public:
             m_standard_openlist.insert(QueueEntry { g_value, h_value, state, m_step++ });
     }
 
-    template<typename Engine, typename WorkerData, typename EmitTransition>
+    template<typename Engine, typename WorkerData, typename EvaluateHeuristic, typename EmitTransition>
     AcceptanceResult accept_successor(Engine& engine,
                                       WorkerData& worker,
                                       const Node<Kind>& source_node,
                                       const Node<Kind>& successor_node,
-                                      const typename Engine::RoutedSuccessor& routed_successor,
+                                      const RoutedSuccessorT<Engine>& routed_successor,
                                       SearchNode& successor_search_node,
                                       bool is_new,
-                                      EmitTransition&& emit_transition)
+                                      EvaluateHeuristic&&,
+                                      EmitTransition emit_transition)
     {
         if (!is_new)
         {
@@ -208,7 +207,7 @@ public:
         successor_search_node.g_value = g_value;
         if (engine.m_execution.is_generated_goal(engine, worker, routed_successor, successor_state))
         {
-            worker.statistics.increment_num_accepted_successors();
+            worker.statistics.increment_num_generated_successors();
             successor_search_node.status = SearchNodeStatus::GOAL;
             emit_transition(TransitionOutcome::GOAL);
             engine.solve(worker, successor_node);
@@ -223,7 +222,7 @@ public:
             return AcceptanceResult::DISCARDED;
         }
 
-        worker.statistics.increment_num_accepted_successors();
+        worker.statistics.increment_num_generated_successors();
         open_successor(successor_state.get_index(),
                        g_value,
                        routed_successor.metadata.inherited_h_value,
@@ -233,18 +232,14 @@ public:
         return AcceptanceResult::QUEUED;
     }
 
-    const ygg::SegmentedVector<SearchNode>& get_search_nodes() const noexcept { return m_search_nodes; }
+    [[nodiscard]] const ygg::SegmentedVector<SearchNode>& get_search_nodes() const noexcept { return m_search_nodes; }
 
     static WorkerEventHandlerPtr make_worker_event_handler(const EventHandlerPtr& event_handler, ygg::Index<Worker> index)
-    {
-        return event_handler ? event_handler->make_worker(index) : nullptr;
-    }
+    { return event_handler ? event_handler->make_worker(index) : nullptr; }
 
     template<typename Handler>
     static void on_start_search(Handler& handler, const Node<Kind>& node, ygg::float_t priority)
-    {
-        handler.on_start_search(node, priority);
-    }
+    { handler.on_start_search(node, priority); }
 
     template<typename Handler>
     static constexpr void on_finish_priority_layer(Handler&, ygg::float_t, const Statistics&) noexcept
@@ -254,13 +249,13 @@ public:
     template<typename Engine>
     static void boost_preferred_queues(Engine& engine)
     {
-        if (!engine.m_options.use_preferred_actions)
+        if (!engine.m_options->use_preferred_actions)
             return;
 
         const auto num_workers = engine.num_workers();
         for (size_t i = 0; i < num_workers; ++i)
         {
-            engine.get_worker(ygg::Index<Worker>(static_cast<ygg::uint_t>(i))).search.queue_preferred_boost(engine.m_options.boost_preferred_queue);
+            engine.get_worker(ygg::Index<Worker>(static_cast<ygg::uint_t>(i))).search.queue_preferred_boost(engine.m_options->boost_preferred_queue);
         }
     }
 
@@ -269,12 +264,12 @@ private:
 
     static constexpr ParentState no_parent() noexcept { return ParentPolicy::no_parent(); }
 
-    Heuristic<Kind>& m_heuristic;
-    const Options& m_options;
+    Heuristic<Kind>* m_heuristic;
+    const Options* m_options;
     ygg::uint_t m_step { 0 };
     ygg::float_t m_start_h_value { 0 };
     ygg::float_t m_state_h_value { 0 };
-    const ygg::UnorderedSet<::tyr::formalism::planning::ActionBindingView>* m_preferred_actions { nullptr };
+    const ygg::UnorderedSet<formalism::planning::ActionBindingView>* m_relaxed_plan { nullptr };
     ygg::SegmentedVector<SearchNode> m_search_nodes;
     Queue m_preferred_openlist;
     Queue m_standard_openlist;
@@ -282,10 +277,11 @@ private:
     std::atomic<size_t> m_pending_preferred_boost { 0 };
 };
 
-static_assert(sizeof(LazyGBFSPolicy<LiftedTag, SequentialSearch>::SearchNode) == 16);
-static_assert(sizeof(LazyGBFSPolicy<GroundTag, SequentialSearch>::SearchNode) == 16);
-static_assert(sizeof(LazyGBFSPolicy<LiftedTag, SequentialSearch>::QueueEntry) == 24);
-static_assert(sizeof(LazyGBFSPolicy<GroundTag, SequentialSearch>::QueueEntry) == 24);
+// Search nodes and queue entries are dense in hot loops; these sizes guard their layout.
+static_assert(sizeof(LazyGBFSPolicy<LiftedTag, SequentialSearch>::SearchNode) == 2 * sizeof(ygg::float_t));
+static_assert(sizeof(LazyGBFSPolicy<GroundTag, SequentialSearch>::SearchNode) == 2 * sizeof(ygg::float_t));
+static_assert(sizeof(LazyGBFSPolicy<LiftedTag, SequentialSearch>::QueueEntry) == 3 * sizeof(ygg::float_t));
+static_assert(sizeof(LazyGBFSPolicy<GroundTag, SequentialSearch>::QueueEntry) == 3 * sizeof(ygg::float_t));
 
 }
 

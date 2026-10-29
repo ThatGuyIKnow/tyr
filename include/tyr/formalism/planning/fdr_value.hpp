@@ -18,9 +18,10 @@
 #ifndef TYR_FORMALISM_PLANNING_FDR_VALUE_HPP_
 #define TYR_FORMALISM_PLANNING_FDR_VALUE_HPP_
 
+#include "tyr/formalism/planning/declarations.hpp"
+
 #include <yggdrasil/core/types.hpp>
 #include <yggdrasil/ids/uint_mixins.hpp>
-#include "tyr/formalism/planning/declarations.hpp"
 
 namespace tyr::formalism::planning
 {
@@ -29,7 +30,7 @@ struct FDRValue : ygg::FixedUintMixin<FDRValue>
     using Base = ygg::FixedUintMixin<FDRValue>;
     using Base::Base;
 
-    bool is_none() const noexcept { return *this == none(); }
+    [[nodiscard]] bool is_none() const noexcept { return *this == none(); }
 
     static constexpr FDRValue none() noexcept { return FDRValue { 0 }; }
 };

@@ -18,13 +18,19 @@
 #ifndef TYR_PLANNING_LIFTED_STATE_STORAGE_HPP_
 #define TYR_PLANNING_LIFTED_STATE_STORAGE_HPP_
 
+#include "tyr/formalism/planning/declarations.hpp"
+#include "tyr/formalism/planning/fdr_fact_data.hpp"
 #include "tyr/planning/declarations.hpp"
 #include "tyr/planning/state_storage.hpp"
 #include "tyr/planning/state_storage/tags.hpp"
 
 #include <boost/dynamic_bitset.hpp>
+#include <cassert>
+#include <cstddef>
 #include <tuple>
+#include <yggdrasil/containers/dynamic_bitset.hpp>
 #include <yggdrasil/core/config.hpp>
+#include <yggdrasil/semantics/containers/dynamic_bitset_hash.hpp>
 
 namespace tyr::planning
 {
@@ -34,7 +40,13 @@ struct AtomUnpackedStorage<LiftedTag>
 {
     boost::dynamic_bitset<> indices;
 
-    auto identifying_members() const noexcept { return std::tie(indices); }
+    [[nodiscard]] bool test(ygg::Index<formalism::planning::Atom<GroundTag, formalism::DerivedTag>> index) const
+    { return ygg::test(static_cast<ygg::uint_t>(index), indices); }
+    void set(ygg::Index<formalism::planning::Atom<GroundTag, formalism::DerivedTag>> index) { ygg::set(static_cast<ygg::uint_t>(index), true, indices); }
+    void clear() { indices.clear(); }
+    void swap(AtomUnpackedStorage& other) noexcept { indices.swap(other.indices); }
+
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&AtomUnpackedStorage::indices> {}; }
 };
 
 template<>
@@ -42,7 +54,25 @@ struct FactUnpackedStorage<LiftedTag>
 {
     boost::dynamic_bitset<> indices;
 
-    auto identifying_members() const noexcept { return std::tie(indices); }
+    [[nodiscard]] formalism::planning::FDRValue get(ygg::Index<formalism::planning::FDRVariable<formalism::FluentTag>> index) const
+    { return formalism::planning::FDRValue(ygg::test(static_cast<ygg::uint_t>(index), indices)); }
+    void set(ygg::Data<formalism::planning::FDRFact<formalism::FluentTag>> fact)
+    {
+        assert(static_cast<ygg::uint_t>(fact.value) < 2);  // Lifted fluent variables are binary.
+        const auto index = static_cast<ygg::uint_t>(fact.variable);
+        if (!fact.value.is_none())
+            ygg::set(index, true, indices);
+        else if (index < indices.size())
+        {
+            indices.reset(index);
+            if (index + 1 == indices.size())
+                ygg::trim_trailing_zeros(indices);
+        }
+    }
+    void clear() { indices.clear(); }
+    void swap(FactUnpackedStorage& other) noexcept { indices.swap(other.indices); }
+
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&FactUnpackedStorage::indices> {}; }
 };
 
 }

@@ -26,6 +26,7 @@
 #include "tyr/planning/declarations.hpp"
 #include "tyr/planning/lifted/programs/translation_context.hpp"
 
+#include <utility>
 #include <vector>
 #include <yggdrasil/containers/associative_containers.hpp>
 #include <yggdrasil/semantics/equal_to.hpp>
@@ -37,24 +38,31 @@ namespace tyr::planning
 class GroundTaskProgram
 {
 public:
-    using AppPredicateToActionMapping =
-        ygg::UnorderedMap<::tyr::formalism::datalog::PredicateView<::tyr::formalism::FluentTag>, ::tyr::formalism::planning::ActionView>;
+    using AppPredicateToActionMapping = ygg::UnorderedMap<formalism::datalog::PredicateView<formalism::FluentTag>, formalism::planning::ActionView<LiftedTag>>;
     using AppPredicateToAxiomMapping =
-        ygg::UnorderedMap<::tyr::formalism::datalog::PredicateView<::tyr::formalism::FluentTag>, std::vector<::tyr::formalism::planning::AxiomView>>;
+        ygg::UnorderedMap<formalism::datalog::PredicateView<formalism::FluentTag>, std::vector<formalism::planning::AxiomView<LiftedTag>>>;
+    /// The predicate of each conditional effect with variables or a condition, whose atoms are the relaxed reachable bindings of its
+    /// action followed by the objects of the effect's variables for which the effect fires.
+    /// Keyed by the action too, since actions can share an interned conditional effect.
+    using ConditionalEffectToPredicateMapping =
+        ygg::UnorderedMap<std::pair<formalism::planning::ActionView<LiftedTag>, formalism::planning::ConditionalEffectView<LiftedTag>>,
+                          formalism::datalog::PredicateView<formalism::FluentTag>>;
 
-    explicit GroundTaskProgram(::tyr::formalism::planning::TaskView task);
+    explicit GroundTaskProgram(formalism::planning::TaskView<LiftedTag> task);
 
-    const TranslationContext<LiftedTag>& get_translation_context() const noexcept;
-    const AppPredicateToActionMapping& get_predicate_to_action_mapping() const noexcept;
-    const AppPredicateToAxiomMapping& get_predicate_to_axiom_mapping() const noexcept;
+    [[nodiscard]] const TranslationContext<LiftedTag>& get_translation_context() const noexcept;
+    [[nodiscard]] const AppPredicateToActionMapping& get_predicate_to_action_mapping() const noexcept;
+    [[nodiscard]] const AppPredicateToAxiomMapping& get_predicate_to_axiom_mapping() const noexcept;
+    [[nodiscard]] const ConditionalEffectToPredicateMapping& get_conditional_effect_to_predicate_mapping() const noexcept;
     datalog::Program<LiftedTag>& get_datalog_program() noexcept;
-    const datalog::Program<LiftedTag>& get_datalog_program() const noexcept;
-    const datalog::ConstProgramWorkspace<LiftedTag>& get_const_program_workspace() const noexcept;
+    [[nodiscard]] const datalog::Program<LiftedTag>& get_datalog_program() const noexcept;
+    [[nodiscard]] const datalog::ConstProgramWorkspace<LiftedTag>& get_const_program_workspace() const noexcept;
 
 private:
     TranslationContext<LiftedTag> m_translation_context;
     AppPredicateToActionMapping m_predicate_to_actions;
     AppPredicateToAxiomMapping m_predicate_to_axioms;
+    ConditionalEffectToPredicateMapping m_conditional_effect_to_predicate;
 
     datalog::Program<LiftedTag> m_datalog_program;
 };

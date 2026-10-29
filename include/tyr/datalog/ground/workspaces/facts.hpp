@@ -22,6 +22,7 @@
 #include "tyr/datalog/fact_sets.hpp"
 #include "tyr/formalism/datalog/repository.hpp"
 
+#include <utility>
 #include <yggdrasil/containers/associative_containers.hpp>
 #include <yggdrasil/core/closed_interval.hpp>
 #include <yggdrasil/core/config.hpp>
@@ -32,20 +33,18 @@ namespace tyr::datalog
 template<>
 struct FactsWorkspace<GroundTag>
 {
-    TaggedFactSets<::tyr::formalism::FluentTag> fact_sets;
+    TaggedFactSets<formalism::FluentTag> fact_sets;
 
-    explicit FactsWorkspace(::tyr::formalism::datalog::PredicateListView<::tyr::formalism::FluentTag> predicates,
-                            ::tyr::formalism::datalog::FunctionListView<::tyr::formalism::FluentTag> functions,
-                            ::tyr::formalism::datalog::GroundAtomListView<::tyr::formalism::FluentTag> atoms,
-                            ::tyr::formalism::datalog::GroundFunctionTermValueListView<::tyr::formalism::FluentTag> fterm_values,
-                            const ::tyr::formalism::datalog::Repository& workspace_repository);
+    explicit FactsWorkspace(formalism::datalog::PredicateListView<formalism::FluentTag> predicates,
+                            formalism::datalog::FunctionListView<formalism::FluentTag> functions,
+                            formalism::datalog::AtomListView<GroundTag, formalism::FluentTag> atoms,
+                            formalism::datalog::FunctionTermValueListView<GroundTag, formalism::FluentTag> fterm_values,
+                            const formalism::datalog::Repository& workspace_repository);
 
-    bool insert(::tyr::formalism::datalog::PredicateBindingView<::tyr::formalism::FluentTag> binding) { return fact_sets.predicate.insert(binding); }
+    bool insert(formalism::datalog::PredicateBindingIndex<formalism::FluentTag> binding) { return fact_sets.predicate.insert(binding); }
 
-    bool insert(::tyr::formalism::datalog::FunctionBindingView<::tyr::formalism::FluentTag> binding, ygg::ClosedInterval<ygg::float_t> interval)
-    {
-        return fact_sets.function.insert(binding, interval);
-    }
+    bool insert(formalism::datalog::FunctionBindingIndex<formalism::FluentTag> binding, const ygg::ClosedInterval<ygg::float_t>& interval)
+    { return fact_sets.function.insert(binding, interval); }
 
     void reset();
 };
@@ -53,13 +52,13 @@ struct FactsWorkspace<GroundTag>
 template<>
 struct ConstFactsWorkspace<GroundTag>
 {
-    const TaggedFactSets<::tyr::formalism::StaticTag> fact_sets;
+    TaggedFactSets<formalism::StaticTag> fact_sets;
 
-    explicit ConstFactsWorkspace(::tyr::formalism::datalog::PredicateListView<::tyr::formalism::StaticTag> predicates,
-                                 ::tyr::formalism::datalog::FunctionListView<::tyr::formalism::StaticTag> functions,
-                                 ::tyr::formalism::datalog::GroundAtomListView<::tyr::formalism::StaticTag> atoms,
-                                 ::tyr::formalism::datalog::GroundFunctionTermValueListView<::tyr::formalism::StaticTag> fterm_values,
-                                 const ::tyr::formalism::datalog::Repository& program_repository);
+    explicit ConstFactsWorkspace(formalism::datalog::PredicateListView<formalism::StaticTag> predicates,
+                                 formalism::datalog::FunctionListView<formalism::StaticTag> functions,
+                                 formalism::datalog::AtomListView<GroundTag, formalism::StaticTag> atoms,
+                                 formalism::datalog::FunctionTermValueListView<GroundTag, formalism::StaticTag> fterm_values,
+                                 const formalism::datalog::Repository& program_repository);
 };
 
 }

@@ -23,6 +23,7 @@ namespace tyr::formalism
 
 void bind_object(nb::module_& m)
 {
+    using namespace nb::literals;
     ygg::bind_index<ygg::Index<Object>>(m, "ObjectIndex");
 
     {
@@ -31,6 +32,7 @@ void bind_object(nb::module_& m)
         auto cls = nb::class_<V>(m, "ObjectData")  //
                        .def(nb::init<const std::string&>(), "name"_a)
                        .def_rw("name", &V::name);
+        cls.def(nb::init<::cista::offset::string>(), "name"_a);
         ygg::add_comparison(cls);
     }
 }

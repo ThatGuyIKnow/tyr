@@ -18,16 +18,17 @@
 #ifndef TYR_DATALOG_GROUND_WORKSPACES_PROGRAM_HPP_
 #define TYR_DATALOG_GROUND_WORKSPACES_PROGRAM_HPP_
 
+#include "tyr/datalog/cost_buckets.hpp"
 #include "tyr/datalog/declarations.hpp"
 #include "tyr/datalog/ground/scheduler.hpp"
 #include "tyr/datalog/ground/workspaces/facts.hpp"
 #include "tyr/datalog/policies/annotation.hpp"
-#include "tyr/datalog/policies/annotation_concept.hpp"
+#include "tyr/datalog/policies/annotation_concepts.hpp"
 #include "tyr/datalog/policies/cost.hpp"
-#include "tyr/datalog/policies/cost_concept.hpp"
+#include "tyr/datalog/policies/cost_concepts.hpp"
 #include "tyr/datalog/policies/numeric_support.hpp"
 #include "tyr/datalog/policies/termination.hpp"
-#include "tyr/datalog/policies/termination_concept.hpp"
+#include "tyr/datalog/policies/termination_concepts.hpp"
 #include "tyr/formalism/datalog/repository.hpp"
 
 #include <type_traits>
@@ -38,13 +39,15 @@
 namespace tyr::datalog
 {
 
-template<::tyr::formalism::RelationKind R>
+template<formalism::RelationKind R>
 struct GroundRuleDependencies
 {
-    using Rules = std::vector<::tyr::formalism::datalog::GroundRuleView<R>>;
+private:
+    using Rules = std::vector<formalism::datalog::RuleView<GroundTag, R>>;
 
-    DenseRelationMap<::tyr::formalism::PredicateTag, Rules> fluent_precondition_to_rules;
-    DenseRelationMap<::tyr::formalism::FunctionTag, Rules> fluent_function_term_to_rules;
+public:
+    DenseRelationMap<formalism::PredicateTag, Rules> fluent_precondition_to_rules;
+    DenseRelationMap<formalism::FunctionTag, Rules> fluent_function_term_to_rules;
 
     GroundRuleDependencies(size_t num_predicates, size_t num_functions) :
         fluent_precondition_to_rules(num_predicates),
@@ -56,47 +59,49 @@ struct GroundRuleDependencies
 template<>
 struct ConstProgramWorkspace<GroundTag>
 {
-    ::tyr::formalism::datalog::ProgramView<GroundTag> program;
+    formalism::datalog::ProgramView<GroundTag> program;
     ConstFactsWorkspace<GroundTag> facts;
-    GroundRuleDependencies<::tyr::formalism::PredicateTag> predicate_rules;
-    GroundRuleDependencies<::tyr::formalism::FunctionTag> function_rules;
+    GroundRuleDependencies<formalism::PredicateTag> predicate_rules;
+    GroundRuleDependencies<formalism::FunctionTag> function_rules;
 
-    template<::tyr::formalism::RelationKind R>
+    template<formalism::RelationKind R>
     const auto& get_dependencies() const noexcept;
 
-    explicit ConstProgramWorkspace(::tyr::formalism::datalog::ProgramView<GroundTag> program);
+    explicit ConstProgramWorkspace(formalism::datalog::ProgramView<GroundTag> program);
 };
 
 template<AnnotationPolicyConcept AP, TerminationPolicyConcept TP, RuleCostPolicyConcept CP>
 struct ProgramWorkspace<GroundTag, AP, TP, CP>
 {
-    const ConstProgramWorkspace<GroundTag>& const_workspace;
+    const ConstProgramWorkspace<GroundTag>* const_workspace;
     FactsWorkspace<GroundTag> facts;
     AP annotation_policy;
     PredicateAnnotations<> annotations;
     FunctionAnnotations<> numeric_annotations;
     TP tp;
     CP cost_policy;
+    CostBuckets cost_buckets;
+    PendingPredicateAchievers pending_achievers;
     Scheduler<GroundTag> scheduler;
-    ::tyr::formalism::datalog::Builder datalog_builder;
+    formalism::datalog::Builder datalog_builder;
 
     explicit ProgramWorkspace(const ConstProgramWorkspace<GroundTag>& cws, AP annotation_policy_ = AP(), TP tp_ = TP(), CP cost_policy_ = CP()) :
-        const_workspace(cws),
-        facts(cws.program.template get_predicates<::tyr::formalism::FluentTag>(),
-              cws.program.template get_functions<::tyr::formalism::FluentTag>(),
-              cws.program.template get_atoms<::tyr::formalism::FluentTag>(),
-              cws.program.template get_fterm_values<::tyr::formalism::FluentTag>(),
+        const_workspace(&cws),
+        facts(cws.program.template get_predicates<formalism::FluentTag>(),
+              cws.program.template get_functions<formalism::FluentTag>(),
+              cws.program.template get_atoms<formalism::FluentTag>(),
+              cws.program.template get_fterm_values<formalism::FluentTag>(),
               cws.program.get_context()),
         annotation_policy(std::move(annotation_policy_)),
-        annotations(cws.program.template get_predicates<::tyr::formalism::FluentTag>().size()),
-        numeric_annotations(cws.program.template get_functions<::tyr::formalism::FluentTag>().size()),
+        annotations(cws.program.template get_predicates<formalism::FluentTag>().size()),
+        numeric_annotations(cws.program.template get_functions<formalism::FluentTag>().size()),
         tp(std::move(tp_)),
         cost_policy(std::move(cost_policy_)),
         scheduler(cws.program),
         datalog_builder()
     {
         if constexpr (AP::records_propositional_achievers)
-            annotation_policy.initialize(cws.program.template get_predicates<::tyr::formalism::FluentTag>().size());
+            annotation_policy.initialize(cws.program.template get_predicates<formalism::FluentTag>().size());
     }
 
     explicit ProgramWorkspace(Program<GroundTag>& program, AP annotation_policy_ = AP(), TP tp_ = TP(), CP cost_policy_ = CP());
@@ -104,22 +109,16 @@ struct ProgramWorkspace<GroundTag, AP, TP, CP>
     void clear_costs() { cost_policy.clear(); }
 
     auto get_numeric_support_selector() const noexcept
-    {
-        return NumericSupportSelector(FactSets { const_workspace.facts.fact_sets, facts.fact_sets }, numeric_annotations, !AP::stores_annotations);
-    }
+    { return NumericSupportSelector(FactSets { const_workspace->facts.fact_sets, facts.fact_sets }, numeric_annotations, !AP::stores_annotations); }
 };
 
 template<>
-inline const auto& ConstProgramWorkspace<GroundTag>::get_dependencies<::tyr::formalism::PredicateTag>() const noexcept
-{
-    return predicate_rules;
-}
+inline const auto& ConstProgramWorkspace<GroundTag>::get_dependencies<formalism::PredicateTag>() const noexcept
+{ return predicate_rules; }
 
 template<>
-inline const auto& ConstProgramWorkspace<GroundTag>::get_dependencies<::tyr::formalism::FunctionTag>() const noexcept
-{
-    return function_rules;
-}
+inline const auto& ConstProgramWorkspace<GroundTag>::get_dependencies<formalism::FunctionTag>() const noexcept
+{ return function_rules; }
 
 }
 

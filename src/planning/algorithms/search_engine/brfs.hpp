@@ -51,9 +51,7 @@ struct BreadthFirstModePolicy<SequentialSearch>
 
     template<TaskKind Kind>
     static constexpr bool synchronize_priority_layers(const brfs::Options<Kind>&) noexcept
-    {
-        return false;
-    }
+    { return false; }
 };
 
 template<>
@@ -68,9 +66,7 @@ struct BreadthFirstModePolicy<ParallelSearch>
 
     template<TaskKind Kind>
     static constexpr bool synchronize_priority_layers(const brfs::Options<Kind>&) noexcept
-    {
-        return true;
-    }
+    { return true; }
 };
 
 template<TaskKind Kind, SearchKind Search>
@@ -79,7 +75,6 @@ class BreadthFirstPolicy
 public:
     using ModePolicy = BreadthFirstModePolicy<Search>;
     using ParentPolicy = ParentStatePolicy<Kind, Search>;
-    using TaskTag = Kind;
     using SearchTag = Search;
     using Options = brfs::Options<Kind>;
     using EventHandlerPtr = brfs::EventHandlerPtr<Kind>;
@@ -122,14 +117,12 @@ public:
 
     void open_start(ygg::Index<State<Kind>> state, const SearchNode& search_node) { m_openlist.push_back(PoppedEntry { search_node.g_value, state }); }
 
-    bool empty() const noexcept { return m_openlist.empty(); }
+    [[nodiscard]] bool empty() const noexcept { return m_openlist.empty(); }
 
-    ygg::float_t get_min_priority() const noexcept
-    {
-        return m_openlist.empty() ? std::numeric_limits<ygg::float_t>::infinity() : static_cast<ygg::float_t>(m_openlist.front().depth);
-    }
+    [[nodiscard]] ygg::float_t get_min_priority() const noexcept
+    { return m_openlist.empty() ? std::numeric_limits<ygg::float_t>::infinity() : static_cast<ygg::float_t>(m_openlist.front().depth); }
 
-    size_t get_num_open_entries() const noexcept { return m_openlist.size(); }
+    [[nodiscard]] size_t get_num_open_entries() const noexcept { return m_openlist.size(); }
 
     PoppedEntry pop()
     {
@@ -163,32 +156,24 @@ public:
         return ExpansionResult::EXPAND;
     }
 
-    static SuccessorMetadata make_successor_metadata(ygg::Index<Worker> worker,
-                                                     ygg::Index<State<Kind>> state,
-                                                     const SearchNode& search_node,
-                                                     ::tyr::formalism::planning::ActionBindingView)
-    {
-        return SuccessorMetadata { WorkerStateIndex<Kind> { worker, state }, static_cast<ygg::float_t>(search_node.g_value) };
-    }
-
-    static constexpr void prepare_routed_successor(Heuristic<Kind>&, const ygg::Builder<State<Kind>>&, bool, SuccessorMetadata&) noexcept {}
+    static SuccessorMetadata make_successor_metadata(ygg::Index<Worker> worker, const Node<Kind>& node, formalism::planning::ActionBindingView)
+    { return SuccessorMetadata { WorkerStateIndex<Kind> { worker, node.get_state().get_index() }, node.get_metric() }; }
 
     static void set_parent(SearchNode& search_node, WorkerStateIndex<Kind> parent) noexcept { search_node.parent_state = ParentPolicy::make_parent(parent); }
 
     void open_successor(ygg::Index<State<Kind>> state, ygg::float_t g_value, ygg::float_t, SearchNodeStatus, bool)
-    {
-        m_openlist.push_back(PoppedEntry { static_cast<ygg::uint_t>(g_value), state });
-    }
+    { m_openlist.push_back(PoppedEntry { static_cast<ygg::uint_t>(g_value), state }); }
 
-    template<typename Engine, typename WorkerData, typename EmitTransition>
+    template<typename Engine, typename WorkerData, typename EvaluateHeuristic, typename EmitTransition>
     AcceptanceResult accept_successor(Engine& engine,
                                       WorkerData& worker,
                                       const Node<Kind>& source_node,
                                       const Node<Kind>& successor_node,
-                                      const typename Engine::RoutedSuccessor& routed_successor,
+                                      const RoutedSuccessorT<Engine>& routed_successor,
                                       SearchNode& successor_search_node,
                                       bool is_new,
-                                      EmitTransition&& emit_transition)
+                                      EvaluateHeuristic&&,
+                                      EmitTransition emit_transition)
     {
         if (!is_new)
         {
@@ -212,7 +197,7 @@ public:
             return AcceptanceResult::DISCARDED;
         }
 
-        worker.statistics.increment_num_accepted_successors();
+        worker.statistics.increment_num_generated_successors();
         if (is_goal)
         {
             successor_search_node.status = SearchNodeStatus::GOAL;
@@ -229,23 +214,17 @@ public:
     static constexpr bool synchronize_priority_layers(const Options& options) noexcept { return ModePolicy::synchronize_priority_layers(options); }
 
     static WorkerEventHandlerPtr make_worker_event_handler(const EventHandlerPtr& event_handler, ygg::Index<Worker> index)
-    {
-        return event_handler ? event_handler->make_worker(index) : nullptr;
-    }
+    { return event_handler ? event_handler->make_worker(index) : nullptr; }
 
     template<typename Handler>
     static void on_start_search(Handler& handler, const Node<Kind>& node, ygg::float_t)
-    {
-        handler.on_start_search(node);
-    }
+    { handler.on_start_search(node); }
 
     template<typename Handler>
     static void on_finish_priority_layer(Handler& handler, ygg::float_t priority, const Statistics& statistics)
-    {
-        handler.on_finish_layer(static_cast<ygg::uint_t>(priority), statistics);
-    }
+    { handler.on_finish_layer(static_cast<ygg::uint_t>(priority), statistics); }
 
-    const ygg::SegmentedVector<SearchNode>& get_search_nodes() const noexcept { return m_search_nodes; }
+    [[nodiscard]] const ygg::SegmentedVector<SearchNode>& get_search_nodes() const noexcept { return m_search_nodes; }
 
 private:
     ygg::uint_t m_current_layer { 0 };
@@ -253,10 +232,11 @@ private:
     std::deque<PoppedEntry> m_openlist;
 };
 
-static_assert(sizeof(BreadthFirstPolicy<LiftedTag, SequentialSearch>::SearchNode) == 12);
-static_assert(sizeof(BreadthFirstPolicy<GroundTag, SequentialSearch>::SearchNode) == 12);
-static_assert(sizeof(BreadthFirstPolicy<LiftedTag, ParallelSearch>::SearchNode) == 16);
-static_assert(sizeof(BreadthFirstPolicy<GroundTag, ParallelSearch>::SearchNode) == 16);
+// Search nodes are dense in hot loops; these sizes guard their layout.
+static_assert(sizeof(BreadthFirstPolicy<LiftedTag, SequentialSearch>::SearchNode) == 3 * sizeof(ygg::uint_t));
+static_assert(sizeof(BreadthFirstPolicy<GroundTag, SequentialSearch>::SearchNode) == 3 * sizeof(ygg::uint_t));
+static_assert(sizeof(BreadthFirstPolicy<LiftedTag, ParallelSearch>::SearchNode) == 4 * sizeof(ygg::uint_t));
+static_assert(sizeof(BreadthFirstPolicy<GroundTag, ParallelSearch>::SearchNode) == 4 * sizeof(ygg::uint_t));
 
 }
 

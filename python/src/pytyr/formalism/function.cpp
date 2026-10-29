@@ -17,9 +17,9 @@
 
 #include "binding_utils.hpp"
 #include "bindings.hpp"
+#include "tyr/formalism/declarations.hpp"
 
 #include <tyr/formalism/function_data.hpp>
-#include <tyr/formalism/function_index.hpp>
 #include <tyr/formalism/function_view.hpp>
 
 namespace tyr::formalism
@@ -30,8 +30,10 @@ namespace
 template<FactKind T>
 void bind_function_data(nb::module_& m, const char* name)
 {
+    using namespace nb::literals;
     using V = ygg::Data<Function<T>>;
     auto cls = nb::class_<V>(m, name).def(nb::init<const std::string&, ygg::uint_t>(), "name"_a, "arity"_a);
+    cls.def(nb::init<::cista::offset::string, ygg::uint_t>(), "name"_a, "arity"_a);
     ygg::add_print(cls);
     ygg::add_comparison(cls);
     ygg::add_hash(cls);

@@ -19,44 +19,26 @@
 #define TYR_FORMALISM_PLANNING_UNARY_OPERATOR_VIEW_HPP_
 
 #include "tyr/formalism/planning/declarations.hpp"
-#include "tyr/formalism/planning/unary_operator_index.hpp"
+#include "tyr/formalism/planning/function_expression_view.hpp"
 
 #include <yggdrasil/containers/variant.hpp>
 #include <yggdrasil/core/types.hpp>
 
 namespace ygg
 {
-template<typename T, ::tyr::formalism::planning::Context C>
-class View<ygg::Index<::tyr::formalism::planning::UnaryOperator<T>>, C>
+template<::tyr::TaskKind T, ygg::formalism::SymbolContextFor<::tyr::formalism::planning::UnaryOperator<T>> C>
+class View<ygg::Index<::tyr::formalism::planning::UnaryOperator<T>>, C> : public ygg::IndexViewBase<::tyr::formalism::planning::UnaryOperator<T>, C>
 {
-private:
-    const C* m_context;
-    ygg::Index<::tyr::formalism::planning::UnaryOperator<T>> m_handle;
-
 public:
     using OperatorType = ::tyr::formalism::ArithmeticOperatorKind;
 
-    View(ygg::Index<::tyr::formalism::planning::UnaryOperator<T>> handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
-
-    const auto& get_data() const noexcept { return get_repository(*m_context)[m_handle]; }
-    const auto& get_context() const noexcept { return *m_context; }
-    const auto& get_handle() const noexcept { return m_handle; }
-
-    auto get_index() const noexcept { return m_handle; }
-    auto get_operator() const noexcept { return get_data().operator_kind; }
-    auto get_arg() const noexcept
+    View(ygg::Index<::tyr::formalism::planning::UnaryOperator<T>> handle, const C& context) noexcept :
+        ygg::IndexViewBase<::tyr::formalism::planning::UnaryOperator<T>, C>(handle, context)
     {
-        if constexpr (ygg::ViewConcept<T, C>)
-        {
-            return ygg::make_view(get_data().arg, *m_context);
-        }
-        else
-        {
-            return get_data().arg;
-        }
     }
 
-    auto identifying_members() const noexcept { return std::tie(m_handle, m_context->get_index()); }
+    auto get_operator() const noexcept { return this->get_data().operator_kind; }
+    auto get_arg() const noexcept { return ygg::make_view(this->get_data().arg, this->get_context()); }
 };
 
 }

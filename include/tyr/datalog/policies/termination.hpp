@@ -22,7 +22,7 @@
 #include "tyr/datalog/fact_sets.hpp"
 #include "tyr/datalog/policies/aggregation.hpp"
 #include "tyr/datalog/policies/numeric_support.hpp"
-#include "tyr/datalog/policies/termination_concept.hpp"
+#include "tyr/datalog/policies/termination_concepts.hpp"
 
 #include <optional>
 #include <yggdrasil/core/config.hpp>
@@ -35,13 +35,12 @@ class NoTerminationPolicy
 public:
     NoTerminationPolicy() = default;
 
-    void set_goals(::tyr::formalism::datalog::GroundConjunctiveConditionView) {}
-    bool check(const FactSets&) const noexcept { return false; }
-    bool should_terminate(const FactSets&) const noexcept { return false; }
-    Cost get_total_cost(const FactSets&, const PredicateAnnotations<>&, const FunctionAnnotations<>&, const NumericSupportSelector&) const noexcept
-    {
-        return Cost(0);
-    }
+    void set_goals(formalism::datalog::ConjunctiveConditionView<GroundTag>) {}
+    [[nodiscard]] bool check(const FactSets&) const noexcept { return false; }
+    [[nodiscard]] bool should_terminate(const FactSets&) const noexcept { return false; }
+    [[nodiscard]] Cost
+    get_total_cost(const FactSets&, const PredicateAnnotations<>&, const FunctionAnnotations<>&, const NumericSupportSelector&) const noexcept
+    { return static_cast<Cost>(0); }
     void reset() noexcept {}
     void clear() noexcept {}
 };
@@ -52,17 +51,17 @@ class TerminationPolicy
 public:
     TerminationPolicy() = default;
 
-    void set_goals(::tyr::formalism::datalog::GroundConjunctiveConditionView goals_);
+    void set_goals(formalism::datalog::ConjunctiveConditionView<GroundTag> goals_);
 
-    bool check(const FactSets& fact_sets) const noexcept;
-    bool should_terminate(const FactSets& fact_sets) const noexcept;
+    bool check(const FactSets& fact_sets) const;
+    bool should_terminate(const FactSets& fact_sets) const;
 
     void set_early_termination(bool value) noexcept { early_termination = value; }
 
     Cost get_total_cost(const FactSets& fact_sets,
                         const PredicateAnnotations<>& annotations,
                         const FunctionAnnotations<>&,
-                        const NumericSupportSelector& numeric_support_selector) const noexcept;
+                        const NumericSupportSelector& numeric_support_selector) const;
 
     const auto& get_goal() const noexcept { return goals; }
 
@@ -71,7 +70,7 @@ public:
     void clear() noexcept;
 
 private:
-    std::optional<::tyr::formalism::datalog::GroundConjunctiveConditionView> goals;
+    std::optional<formalism::datalog::ConjunctiveConditionView<GroundTag>> goals;
     mutable NumericSupportSelectorWorkspace numeric_support_selector_workspace;
     AggregationFunction agg;
     bool early_termination { true };

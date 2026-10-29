@@ -17,7 +17,7 @@
 
 #include "tyr/planning/state_routing/dist_hash.hpp"
 
-#include "tyr/formalism/planning/ground_conjunctive_condition_view.hpp"
+#include "tyr/formalism/planning/conjunctive_condition_view.hpp"
 #include "tyr/planning/ground/state_repository.hpp"
 #include "tyr/planning/ground/task.hpp"
 #include "tyr/planning/heuristics/lmcut.hpp"
@@ -27,8 +27,6 @@
 #include <algorithm>
 #include <stdexcept>
 #include <yggdrasil/execution/onetbb.hpp>
-
-namespace f = ::tyr::formalism;
 
 namespace tyr::planning
 {
@@ -43,7 +41,7 @@ void DistHash<Kind, LMCutDistHashTag>::initialize(const StateView<Kind>& start_s
     auto heuristic = LMCutHeuristic<Kind>(task, ygg::ExecutionContext::create(1), CostMode::UNIT);
     auto atoms = heuristic.compute_cut_frontier_atoms(start_state.get_state_builder());
 
-    for (const auto fact : task->get_task().get_goal().template get_facts<f::PositiveTag>())
+    for (const auto fact : task->get_task().get_goal().template get_facts<formalism::PositiveTag>())
         if (const auto atom = fact.get_atom())
             atoms.push_back(*atom);
 

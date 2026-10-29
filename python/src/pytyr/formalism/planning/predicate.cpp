@@ -17,9 +17,9 @@
 
 #include "binding_utils.hpp"
 #include "bindings.hpp"
+#include "tyr/formalism/declarations.hpp"
 
 #include <tyr/formalism/predicate_data.hpp>
-#include <tyr/formalism/predicate_index.hpp>
 #include <tyr/formalism/predicate_view.hpp>
 
 namespace tyr::formalism::planning
@@ -31,8 +31,10 @@ namespace
 template<FactKind T>
 void bind_predicate_data(nb::module_& m, const char* name)
 {
+    using namespace nb::literals;
     using V = ygg::Data<Predicate<T>>;
     auto cls = nb::class_<V>(m, name).def(nb::init<const std::string&, ygg::uint_t>(), "name"_a, "arity"_a);
+    cls.def(nb::init<::cista::offset::string, ygg::uint_t>(), "name"_a, "arity"_a);
     ygg::add_print(cls);
     ygg::add_comparison(cls);
     ygg::add_hash(cls);
@@ -58,9 +60,9 @@ void bind_predicate(nb::module_& m, RepositoryBinding& repository)
     bind_predicate_view<FluentTag>(m, "FluentPredicate");
     bind_predicate_view<DerivedTag>(m, "DerivedPredicate");
 
-    repository.def("get_or_create", &get_or_create_data<Predicate<StaticTag>>, "data"_a, nb::keep_alive<0, 1>());
-    repository.def("get_or_create", &get_or_create_data<Predicate<FluentTag>>, "data"_a, nb::keep_alive<0, 1>());
-    repository.def("get_or_create", &get_or_create_data<Predicate<DerivedTag>>, "data"_a, nb::keep_alive<0, 1>());
+    bind_insert<Predicate<StaticTag>>(repository);
+    bind_insert<Predicate<FluentTag>>(repository);
+    bind_insert<Predicate<DerivedTag>>(repository);
 }
 
 }  // namespace tyr::formalism::planning

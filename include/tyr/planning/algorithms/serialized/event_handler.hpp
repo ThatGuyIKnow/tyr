@@ -18,47 +18,53 @@
 #ifndef TYR_PLANNING_ALGORITHMS_SERIALIZED_EVENT_HANDLER_HPP_
 #define TYR_PLANNING_ALGORITHMS_SERIALIZED_EVENT_HANDLER_HPP_
 
-#include "tyr/planning/algorithms/concepts.hpp"
 #include "tyr/planning/algorithms/serialized/statistics.hpp"
 #include "tyr/planning/algorithms/utils.hpp"
 #include "tyr/planning/declarations.hpp"
 
+#include <concepts>
 #include <cstddef>
 #include <memory>
 
 namespace tyr::planning::serialized
 {
 
-template<TaskKind Kind, SolverConcept<Kind> Subsolver>
+template<TaskKind Kind, std::copy_constructible Stats = tyr::planning::Statistics>
 class EventHandler
 {
 public:
+    EventHandler() = default;
     virtual ~EventHandler() = default;
 
     virtual void on_start_search() = 0;
     virtual void on_start_subsearch(ygg::uint_t subsearch_index) = 0;
-    virtual void add_subsearch_statistics(const tyr::planning::Statistics& search_statistics,
-                                          const typename Subsolver::EventHandlerType::StatisticsType& solver_statistics) = 0;
+    virtual void add_subsearch_statistics(const tyr::planning::Statistics& search_statistics, const Stats& solver_statistics) = 0;
     virtual void on_end_subsearch(ygg::uint_t subsearch_index, tyr::planning::SearchStatus status) = 0;
     virtual void on_end_search(tyr::planning::SearchStatus status, const tyr::planning::Statistics& statistics) = 0;
     virtual void on_solved(const Plan<Kind>& plan) = 0;
+
+protected:
+    EventHandler(const EventHandler&) = default;
+    EventHandler& operator=(const EventHandler&) = default;
+    EventHandler(EventHandler&&) = default;
+    EventHandler& operator=(EventHandler&&) = default;
 };
 
-template<typename Derived, TaskKind Kind, SolverConcept<Kind> Subsolver>
-class EventHandlerBase : public EventHandler<Kind, Subsolver>
+template<typename Derived, TaskKind Kind, std::copy_constructible Stats = tyr::planning::Statistics>
+class EventHandlerBase : public EventHandler<Kind, Stats>
 {
-protected:
-    Statistics<Kind, Subsolver> m_statistics;
-    size_t m_verbosity;
+private:
+    Statistics<Stats> m_statistics;
+    size_t m_verbosity = 0;
 
 private:
     EventHandlerBase() = default;
     friend Derived;
 
-    constexpr const auto& self() const { return static_cast<const Derived&>(*this); }
+    [[nodiscard]] constexpr const auto& self() const { return static_cast<const Derived&>(*this); }
     constexpr auto& self() { return static_cast<Derived&>(*this); }
 
-    bool verbosity(size_t level) const { return m_verbosity >= level; }
+    [[nodiscard]] bool verbosity(size_t level) const { return m_verbosity >= level; }
 
 public:
     explicit EventHandlerBase(size_t verbosity = 0) : m_statistics(), m_verbosity(verbosity) {}
@@ -77,8 +83,7 @@ public:
             self().on_start_subsearch_impl(subsearch_index);
     }
 
-    void add_subsearch_statistics(const tyr::planning::Statistics& search_statistics,
-                                  const typename Subsolver::EventHandlerType::StatisticsType& solver_statistics) override
+    void add_subsearch_statistics(const tyr::planning::Statistics& search_statistics, const Stats& solver_statistics) override
     {
         m_statistics.add_search_statistics(search_statistics);
         m_statistics.add_solver_statistics(solver_statistics);
@@ -102,14 +107,14 @@ public:
             self().on_solved_impl(plan);
     }
 
-    const Statistics<Kind, Subsolver>& get_statistics() const { return m_statistics; }
+    [[nodiscard]] const Statistics<Stats>& get_statistics() const { return m_statistics; }
 };
 
-template<TaskKind Kind, SolverConcept<Kind> Subsolver>
-class DefaultEventHandler : public EventHandlerBase<DefaultEventHandler<Kind, Subsolver>, Kind, Subsolver>
+template<TaskKind Kind, std::copy_constructible Stats = tyr::planning::Statistics>
+class DefaultEventHandler : public EventHandlerBase<DefaultEventHandler<Kind, Stats>, Kind, Stats>
 {
 private:
-    friend class EventHandlerBase<DefaultEventHandler<Kind, Subsolver>, Kind, Subsolver>;
+    friend class EventHandlerBase<DefaultEventHandler<Kind, Stats>, Kind, Stats>;
 
     void on_start_search_impl() const {}
     void on_start_subsearch_impl(ygg::uint_t subsearch_index) const { static_cast<void>(subsearch_index); }
@@ -126,19 +131,17 @@ private:
     void on_solved_impl(const Plan<Kind>& plan) const { static_cast<void>(plan); }
 
 public:
-    explicit DefaultEventHandler(size_t verbosity = 0) : EventHandlerBase<DefaultEventHandler<Kind, Subsolver>, Kind, Subsolver>(verbosity) {}
+    explicit DefaultEventHandler(size_t verbosity = 0) : EventHandlerBase<DefaultEventHandler<Kind, Stats>, Kind, Stats>(verbosity) {}
 
-    static std::shared_ptr<DefaultEventHandler<Kind, Subsolver>> create(size_t verbosity = 0)
-    {
-        return std::make_shared<DefaultEventHandler<Kind, Subsolver>>(verbosity);
-    }
+    static std::shared_ptr<DefaultEventHandler<Kind, Stats>> create(size_t verbosity = 0)
+    { return std::make_shared<DefaultEventHandler<Kind, Stats>>(verbosity); }
 };
 
-template<TaskKind Kind, SolverConcept<Kind> Subsolver>
-using EventHandlerPtr = std::shared_ptr<EventHandler<Kind, Subsolver>>;
+template<TaskKind Kind, std::copy_constructible Stats = tyr::planning::Statistics>
+using EventHandlerPtr = std::shared_ptr<EventHandler<Kind, Stats>>;
 
-template<TaskKind Kind, SolverConcept<Kind> Subsolver>
-using DefaultEventHandlerPtr = std::shared_ptr<DefaultEventHandler<Kind, Subsolver>>;
+template<TaskKind Kind, std::copy_constructible Stats = tyr::planning::Statistics>
+using DefaultEventHandlerPtr = std::shared_ptr<DefaultEventHandler<Kind, Stats>>;
 
 }  // namespace tyr::planning::serialized
 

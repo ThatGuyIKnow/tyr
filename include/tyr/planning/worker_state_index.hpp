@@ -19,8 +19,6 @@
 #define TYR_PLANNING_WORKER_STATE_INDEX_HPP_
 
 #include "tyr/planning/declarations.hpp"
-#include "tyr/planning/state_index.hpp"
-#include "tyr/planning/worker_index.hpp"
 
 #include <tuple>
 
@@ -33,9 +31,9 @@ struct WorkerStateIndex
     ygg::Index<Worker> worker;
     ygg::Index<State<Kind>> state;
 
-    bool is_max() const noexcept { return worker.is_max() && state.is_max(); }
+    [[nodiscard]] bool is_max() const noexcept { return worker.is_max() && state.is_max(); }
 
-    auto identifying_members() const noexcept { return std::tie(worker, state); }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&WorkerStateIndex::worker, &WorkerStateIndex::state> {}; }
 };
 
 }

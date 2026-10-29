@@ -18,18 +18,19 @@
 #ifndef TYR_DATALOG_LIFTED_WORKSPACES_PROGRAM_HPP_
 #define TYR_DATALOG_LIFTED_WORKSPACES_PROGRAM_HPP_
 
+#include "tyr/datalog/cost_buckets.hpp"
 #include "tyr/datalog/declarations.hpp"
 #include "tyr/datalog/lifted/scheduler.hpp"
 #include "tyr/datalog/lifted/workspaces/facts.hpp"
 #include "tyr/datalog/lifted/workspaces/rule.hpp"
 #include "tyr/datalog/policies/annotation.hpp"
-#include "tyr/datalog/policies/annotation_concept.hpp"
+#include "tyr/datalog/policies/annotation_concepts.hpp"
 #include "tyr/datalog/policies/annotation_types.hpp"
 #include "tyr/datalog/policies/cost.hpp"
-#include "tyr/datalog/policies/cost_concept.hpp"
+#include "tyr/datalog/policies/cost_concepts.hpp"
 #include "tyr/datalog/policies/numeric_support.hpp"
 #include "tyr/datalog/policies/termination.hpp"
-#include "tyr/datalog/policies/termination_concept.hpp"
+#include "tyr/datalog/policies/termination_concepts.hpp"
 #include "tyr/datalog/statistics/program.hpp"
 #include "tyr/formalism/datalog/repository.hpp"
 #include "tyr/formalism/planning/repository.hpp"
@@ -47,14 +48,10 @@ namespace tyr::datalog
 template<AnnotationPolicyConcept AP, TerminationPolicyConcept TP, RuleCostPolicyConcept CP>
 struct ProgramWorkspace<LiftedTag, AP, TP, CP>
 {
-    const ConstProgramWorkspace<LiftedTag>& const_workspace;
-    const ::tyr::formalism::datalog::Repository& program_repository;
-
-private:
-    ::tyr::formalism::datalog::RepositoryPtr m_workspace_repository;
-
-public:
-    ::tyr::formalism::datalog::Repository& workspace_repository;
+    const ConstProgramWorkspace<LiftedTag>* const_workspace;
+    const formalism::datalog::Repository* program_repository;
+    /// Holds what evaluation derives; the program's repository is its parent.
+    formalism::datalog::RepositoryPtr workspace_repository;
 
     FactsWorkspace<LiftedTag> facts;
 
@@ -67,42 +64,44 @@ public:
 
     TP tp;
     CP cost_policy;
+    CostBuckets cost_buckets;
+    PendingPredicateAchievers pending_achievers;
 
-    std::vector<std::unique_ptr<RuleWorkspace<LiftedTag, ::tyr::formalism::PredicateTag>>> predicate_rules;
-    std::vector<std::unique_ptr<RuleWorkspace<LiftedTag, ::tyr::formalism::FunctionTag>>> function_rules;
+    std::vector<std::unique_ptr<RuleWorkspace<LiftedTag, formalism::PredicateTag>>> predicate_rules;
+    std::vector<std::unique_ptr<RuleWorkspace<LiftedTag, formalism::FunctionTag>>> function_rules;
 
-    template<::tyr::formalism::RelationKind R>
+    template<formalism::RelationKind R>
     auto& get_rules() noexcept
     {
-        if constexpr (std::same_as<R, ::tyr::formalism::PredicateTag>)
+        if constexpr (std::same_as<R, formalism::PredicateTag>)
             return predicate_rules;
-        else if constexpr (std::same_as<R, ::tyr::formalism::FunctionTag>)
+        else if constexpr (std::same_as<R, formalism::FunctionTag>)
             return function_rules;
         else
             static_assert(ygg::dependent_false<R>::value, "Missing case");
     }
 
-    template<::tyr::formalism::RelationKind R>
+    template<formalism::RelationKind R>
     const auto& get_rules() const noexcept
     {
-        if constexpr (std::same_as<R, ::tyr::formalism::PredicateTag>)
+        if constexpr (std::same_as<R, formalism::PredicateTag>)
             return predicate_rules;
-        else if constexpr (std::same_as<R, ::tyr::formalism::FunctionTag>)
+        else if constexpr (std::same_as<R, formalism::FunctionTag>)
             return function_rules;
         else
             static_assert(ygg::dependent_false<R>::value, "Missing case");
     }
 
-    ::tyr::formalism::planning::Builder planning_builder;
-    ::tyr::formalism::datalog::Builder datalog_builder;
+    formalism::planning::Builder planning_builder;
+    formalism::datalog::Builder datalog_builder;
 
-    ygg::IndexList<::tyr::formalism::Object> binding;
+    ygg::IndexList<formalism::Object> binding;
 
     std::vector<Scheduler<LiftedTag>> schedulers;
 
     ProgramStatistics statistics;
 
-    explicit ProgramWorkspace(const Program<LiftedTag>& program, AP annotation_policy = AP(), TP tp = TP(), CP cost_policy = CP());
+    explicit ProgramWorkspace(const Program<LiftedTag>& program, AP annotation_policy_ = AP(), TP tp_ = TP(), CP cost_policy_ = CP());
     ProgramWorkspace(Program<LiftedTag>&&, AP = AP(), TP = TP(), CP = CP()) = delete;
 
     /// Discards all evaluation-local views before clearing their repository. Call only while no
@@ -123,26 +122,26 @@ struct ConstProgramWorkspace<LiftedTag>
 {
     ConstFactsWorkspace<LiftedTag> facts;
 
-    std::vector<std::optional<ConstRuleWorkspace<LiftedTag, ::tyr::formalism::PredicateTag>>> predicate_rules;
-    std::vector<std::optional<ConstRuleWorkspace<LiftedTag, ::tyr::formalism::FunctionTag>>> function_rules;
+    std::vector<std::optional<ConstRuleWorkspace<LiftedTag, formalism::PredicateTag>>> predicate_rules;
+    std::vector<std::optional<ConstRuleWorkspace<LiftedTag, formalism::FunctionTag>>> function_rules;
 
-    template<::tyr::formalism::RelationKind R>
+    template<formalism::RelationKind R>
     auto& get_rules() noexcept
     {
-        if constexpr (std::same_as<R, ::tyr::formalism::PredicateTag>)
+        if constexpr (std::same_as<R, formalism::PredicateTag>)
             return predicate_rules;
-        else if constexpr (std::same_as<R, ::tyr::formalism::FunctionTag>)
+        else if constexpr (std::same_as<R, formalism::FunctionTag>)
             return function_rules;
         else
             static_assert(ygg::dependent_false<R>::value, "Missing case");
     }
 
-    template<::tyr::formalism::RelationKind R>
-    const auto& get_rules() const noexcept
+    template<formalism::RelationKind R>
+    [[nodiscard]] const auto& get_rules() const noexcept
     {
-        if constexpr (std::same_as<R, ::tyr::formalism::PredicateTag>)
+        if constexpr (std::same_as<R, formalism::PredicateTag>)
             return predicate_rules;
-        else if constexpr (std::same_as<R, ::tyr::formalism::FunctionTag>)
+        else if constexpr (std::same_as<R, formalism::FunctionTag>)
             return function_rules;
         else
             static_assert(ygg::dependent_false<R>::value, "Missing case");

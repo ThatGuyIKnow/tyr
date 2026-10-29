@@ -1,33 +1,29 @@
 #include "tyr/formalism/datalog/repository.hpp"
+#include "tyr/formalism/declarations.hpp"
 #include "tyr/formalism/function_data.hpp"
-#include "tyr/formalism/function_index.hpp"
 #include "tyr/formalism/function_view.hpp"
 #include "tyr/formalism/planning/repository.hpp"
 
 #include <concepts>
 #include <gtest/gtest.h>
 
-namespace f = tyr::formalism;
-namespace fd = tyr::formalism::datalog;
-namespace fp = tyr::formalism::planning;
-
-using Function = f::Function<f::StaticTag>;
+using Function = tyr::formalism::Function<tyr::formalism::StaticTag>;
 using FunctionData = ygg::Data<Function>;
-using FunctionView = ygg::View<ygg::Index<Function>, fp::Repository>;
+using FunctionView = ygg::View<ygg::Index<Function>, tyr::formalism::planning::Repository>;
 
 template<typename Entity, typename Repository>
 struct FunctionPublicView;
 
-template<f::FactKind T>
-struct FunctionPublicView<f::Function<T>, fd::Repository>
+template<tyr::formalism::FactKind T>
+struct FunctionPublicView<tyr::formalism::Function<T>, tyr::formalism::datalog::Repository>
 {
-    using type = fd::FunctionView<T>;
+    using type = tyr::formalism::datalog::FunctionView<T>;
 };
 
-template<f::FactKind T>
-struct FunctionPublicView<f::Function<T>, fp::Repository>
+template<tyr::formalism::FactKind T>
+struct FunctionPublicView<tyr::formalism::Function<T>, tyr::formalism::planning::Repository>
 {
-    using type = fp::FunctionView<T>;
+    using type = tyr::formalism::planning::FunctionView<T>;
 };
 
 template<typename Entity, typename Repository>
@@ -46,12 +42,10 @@ concept FunctionContract = std::constructible_from<ygg::Index<Entity>, ygg::uint
 
 template<typename Repository, typename... Entities>
 consteval bool function_contracts(ygg::TypeList<Entities...>)
-{
-    return (FunctionContract<Entities, Repository> && ...);
-}
+{ return (FunctionContract<Entities, Repository> && ...); }
 
-static_assert(function_contracts<fd::Repository>(fd::FunctionTypes {}));
-static_assert(function_contracts<fp::Repository>(fp::FunctionTypes {}));
+static_assert(function_contracts<tyr::formalism::datalog::Repository>(tyr::formalism::datalog::FunctionTypes {}));
+static_assert(function_contracts<tyr::formalism::planning::Repository>(tyr::formalism::planning::FunctionTypes {}));
 
 TEST(TyrFormalismFunction, ExposesOwnedContract)
 {

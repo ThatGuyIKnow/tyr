@@ -18,7 +18,7 @@
 #ifndef TYR_DATALOG_ASSIGNMENT_HPP_
 #define TYR_DATALOG_ASSIGNMENT_HPP_
 
-#include "tyr/formalism/object_index.hpp"
+#include "tyr/formalism/declarations.hpp"
 #include "tyr/formalism/parameter_index.hpp"
 
 #include <limits>
@@ -43,14 +43,14 @@ struct EmptyAssignment
 
 struct VertexAssignment
 {
-    ::tyr::formalism::ParameterIndex index;
-    ygg::Index<::tyr::formalism::Object> object;
+    formalism::ParameterIndex index;
+    ygg::Index<formalism::Object> object;
 
     VertexAssignment() : index(), object() {}
 
-    VertexAssignment(::tyr::formalism::ParameterIndex index, ygg::Index<::tyr::formalism::Object> object) : index(index), object(object) {}
+    VertexAssignment(formalism::ParameterIndex index_, ygg::Index<formalism::Object> object_) : index(index_), object(object_) {}
 
-    inline bool is_valid() const noexcept { return index != ::tyr::formalism::ParameterIndex::max() && object != ygg::Index<::tyr::formalism::Object>::max(); }
+    [[nodiscard]] inline bool is_valid() const noexcept { return index != formalism::ParameterIndex::max() && object != ygg::Index<formalism::Object>::max(); }
 };
 
 /**
@@ -60,29 +60,28 @@ struct VertexAssignment
 /// @brief Encapsulate assignment of objects to variables of atoms.
 struct EdgeAssignment
 {
-    ::tyr::formalism::ParameterIndex first_index;
-    ygg::Index<::tyr::formalism::Object> first_object;
-    ::tyr::formalism::ParameterIndex second_index;
-    ygg::Index<::tyr::formalism::Object> second_object;
+    formalism::ParameterIndex first_index;
+    ygg::Index<formalism::Object> first_object;
+    formalism::ParameterIndex second_index;
+    ygg::Index<formalism::Object> second_object;
 
     EdgeAssignment() : first_index(), first_object(), second_index(), second_object() {}
 
-    EdgeAssignment(::tyr::formalism::ParameterIndex first_index,
-                   ygg::Index<::tyr::formalism::Object> first_object,
-                   ::tyr::formalism::ParameterIndex second_index,
-                   ygg::Index<::tyr::formalism::Object> second_object) :
-        first_index(first_index),
-        first_object(first_object),
-        second_index(second_index),
-        second_object(second_object)
+    EdgeAssignment(formalism::ParameterIndex first_index_,
+                   ygg::Index<formalism::Object> first_object_,
+                   formalism::ParameterIndex second_index_,
+                   ygg::Index<formalism::Object> second_object_) :
+        first_index(first_index_),
+        first_object(first_object_),
+        second_index(second_index_),
+        second_object(second_object_)
     {
     }
 
-    inline bool is_valid() const noexcept
+    [[nodiscard]] inline bool is_valid() const noexcept
     {
-        return (first_index < second_index) && (first_index != ::tyr::formalism::ParameterIndex::max())
-               && (second_index != ::tyr::formalism::ParameterIndex::max()) && (first_object != ygg::Index<::tyr::formalism::Object>::max())
-               && (second_object != ygg::Index<::tyr::formalism::Object>::max());
+        return (first_index < second_index) && (first_index != formalism::ParameterIndex::max()) && (second_index != formalism::ParameterIndex::max())
+               && (first_object != ygg::Index<formalism::Object>::max()) && (second_object != ygg::Index<formalism::Object>::max());
     }
 };
 }

@@ -10,25 +10,26 @@
 #ifndef TYR_ANALYSIS_PROGRAM_ANALYSIS_HPP_
 #define TYR_ANALYSIS_PROGRAM_ANALYSIS_HPP_
 
+#include "tyr/algorithms/kckp/kckp.hpp"
 #include "tyr/analysis/declarations.hpp"
 
 namespace tyr::analysis
 {
 
-template<::tyr::formalism::RelationKind R>
-using RuleCompatibilityGraphMap = ygg::UnorderedMap<ygg::Index<::tyr::formalism::datalog::Rule<R>>, kckp::Graph>;
+template<formalism::RelationKind R>
+using RuleCompatibilityGraphMap = ygg::UnorderedMap<ygg::Index<formalism::datalog::Rule<LiftedTag, R>>, kckp::Graph>;
 
 struct ProgramCompatibilityGraphs
 {
-    RuleCompatibilityGraphMap<::tyr::formalism::PredicateTag> predicate_rules;
-    RuleCompatibilityGraphMap<::tyr::formalism::FunctionTag> function_rules;
+    RuleCompatibilityGraphMap<formalism::PredicateTag> predicate_rules;
+    RuleCompatibilityGraphMap<formalism::FunctionTag> function_rules;
 
-    template<::tyr::formalism::RelationKind R>
+    template<formalism::RelationKind R>
     auto& get_rules() noexcept
     {
-        if constexpr (std::same_as<R, ::tyr::formalism::PredicateTag>)
+        if constexpr (std::same_as<R, formalism::PredicateTag>)
             return predicate_rules;
-        else if constexpr (std::same_as<R, ::tyr::formalism::FunctionTag>)
+        else if constexpr (std::same_as<R, formalism::FunctionTag>)
             return function_rules;
         else
             static_assert(ygg::dependent_false<R>::value, "Missing case");

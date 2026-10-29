@@ -19,8 +19,13 @@
 #define TYR_TESTS_PLANNING_HEURISTICS_HEURISTIC_HPP_
 
 #include "planning/parser.hpp"
-#include "tyr/formalism/formalism.hpp"
-#include "tyr/planning/planning.hpp"
+#include "tyr/planning/factory.hpp"
+#include "tyr/planning/ground/successor_generator.hpp"
+#include "tyr/planning/ground/task.hpp"
+#include "tyr/planning/heuristics/rpg_add.hpp"
+#include "tyr/planning/heuristics/rpg_ff.hpp"
+#include "tyr/planning/lifted/successor_generator.hpp"
+#include "tyr/planning/lifted/task.hpp"
 
 #include <algorithm>
 #include <boost/json.hpp>
@@ -30,20 +35,20 @@
 #include <memory>
 #include <optional>
 #include <ostream>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <vector>
+#include <yggdrasil/execution/onetbb.hpp>
 #include <yggdrasil/serialization/json.hpp>
 #include <yggdrasil/serialization/json_suite.hpp>
-
-namespace p = tyr::planning;
 
 namespace tyr::tests
 {
 
 struct HeuristicExpectation
 {
-    ::tyr::CostMode cost_mode;
+    CostMode cost_mode;
     std::optional<ygg::float_t> h;
 };
 
@@ -65,19 +70,17 @@ inline std::optional<ygg::float_t> parse_optional_float(const boost::json::objec
     return boost::json::value_to<ygg::float_t>(*value);
 }
 
-inline ::tyr::CostMode parse_cost_mode(const std::string& key)
+inline CostMode parse_cost_mode(const std::string& key)
 {
     if (key == "unit")
-        return ::tyr::CostMode::UNIT;
+        return CostMode::UNIT;
     if (key == "general")
-        return ::tyr::CostMode::GENERAL;
+        return CostMode::GENERAL;
     throw std::runtime_error("parse_cost_mode(...): unknown cost mode: " + key);
 }
 
 inline HeuristicExpectation parse_expectation(const std::string& key, const boost::json::object& object)
-{
-    return HeuristicExpectation { parse_cost_mode(key), parse_optional_float(object, "h") };
-}
+{ return HeuristicExpectation { parse_cost_mode(key), parse_optional_float(object, "h") }; }
 
 inline HeuristicCase parse_case(const boost::json::object& object)
 {
@@ -91,9 +94,9 @@ inline HeuristicCase parse_case(const boost::json::object& object)
     return result;
 }
 
-inline std::vector<HeuristicCase> load_cases()
+inline std::vector<HeuristicCase> load_cases(const std::filesystem::path& fixture)
 {
-    const auto suite = ygg::common::load_json_file(ygg::common::root_path() / kHeuristicFixture);
+    const auto suite = ygg::common::load_json_file(ygg::common::root_path() / fixture);
     const auto& suite_object = ygg::common::as_object(suite, "suite");
     auto result = std::vector<HeuristicCase> {};
     for (const auto& case_value : ygg::common::as_array(suite_object, "cases", "suite"))
@@ -101,30 +104,30 @@ inline std::vector<HeuristicCase> load_cases()
     return result;
 }
 
-template<::tyr::TaskKind Kind>
+template<TaskKind Kind>
 struct HeuristicContext
 {
     std::shared_ptr<ygg::ExecutionContext> execution_context;
-    p::TaskPtr<Kind> task;
-    p::StateRepositoryPtr<Kind> state_repository;
-    p::AxiomEvaluatorPtr<Kind> axiom_evaluator;
-    p::SuccessorGeneratorPtr<Kind> successor_generator;
+    tyr::planning::TaskPtr<Kind> task;
+    tyr::planning::StateRepositoryPtr<Kind> state_repository;
+    tyr::planning::AxiomEvaluatorPtr<Kind> axiom_evaluator;
+    tyr::planning::SuccessorGeneratorPtr<Kind> successor_generator;
 };
 
-template<::tyr::TaskKind Kind>
-HeuristicContext<Kind> create_heuristic_context(p::TaskPtr<::tyr::LiftedTag> lifted_task)
+template<TaskKind Kind>
+HeuristicContext<Kind> create_heuristic_context(const tyr::planning::TaskPtr<LiftedTag>& lifted_task)
 {
     auto execution_context = ygg::ExecutionContext::create(1);
 
-    auto task = p::TaskPtr<Kind> {};
-    if constexpr (std::is_same_v<Kind, ::tyr::LiftedTag>)
+    auto task = tyr::planning::TaskPtr<Kind> {};
+    if constexpr (std::is_same_v<Kind, LiftedTag>)
         task = std::move(lifted_task);
     else
         task = lifted_task->instantiate_ground_task(*execution_context).task;
 
-    auto axiom_evaluator = p::AxiomEvaluatorFactory<Kind>().create(task, execution_context);
-    auto state_repository = p::StateRepositoryFactory<Kind>().create(task);
-    auto successor_generator = p::SuccessorGeneratorFactory<Kind>().create(task, execution_context);
+    auto axiom_evaluator = tyr::planning::AxiomEvaluatorFactory<Kind>().create(task, execution_context);
+    auto state_repository = tyr::planning::StateRepositoryFactory<Kind>().create(task);
+    auto successor_generator = tyr::planning::SuccessorGeneratorFactory<Kind>().create(task, execution_context);
 
     return HeuristicContext<Kind> { std::move(execution_context),
                                     std::move(task),
@@ -133,43 +136,41 @@ HeuristicContext<Kind> create_heuristic_context(p::TaskPtr<::tyr::LiftedTag> lif
                                     std::move(successor_generator) };
 }
 
-template<::tyr::TaskKind Kind>
+template<TaskKind Kind>
 HeuristicContext<Kind> create_heuristic_context(const std::filesystem::path& domain_file, const std::filesystem::path& task_file)
-{
-    return create_heuristic_context<Kind>(p::Task<::tyr::LiftedTag>::create(make_test_parser(domain_file).parse_task(task_file)));
-}
+{ return create_heuristic_context<Kind>(tyr::planning::Task<LiftedTag>::create(make_test_parser(domain_file).parse_task(task_file))); }
 
 inline bool should_check(const HeuristicExpectation& expectation) { return expectation.h.has_value(); }
 
-template<::tyr::TaskKind Kind>
+template<TaskKind Kind>
 HeuristicContext<Kind> create_preferred_action_reset_context()
 {
     const auto fixture_dir = ygg::common::root_path() / "tests/fixtures/planning/heuristics/preferred_action_reset";
     return create_heuristic_context<Kind>(fixture_dir / "domain.pddl", fixture_dir / "problem.pddl");
 }
 
-template<::tyr::TaskKind Kind>
-void expect_preferred_actions_reset_after_dead_end()
+template<TaskKind Kind>
+void expect_relaxed_plan_reset_after_dead_end()
 {
     auto context = create_preferred_action_reset_context<Kind>();
-    auto heuristic = p::FFRPGHeuristic<Kind>::create(context.task, context.execution_context);
+    auto heuristic = tyr::planning::FFRPGHeuristic<Kind>::create(context.task, context.execution_context);
     const auto initial_node = context.successor_generator->get_initial_node(*context.state_repository, *context.axiom_evaluator);
 
     EXPECT_EQ(heuristic->evaluate(initial_node.get_state()), 1);
-    EXPECT_FALSE(heuristic->get_preferred_actions().empty());
+    EXPECT_FALSE(heuristic->get_relaxed_plan()->empty());
 
     const auto successors = context.successor_generator->get_labeled_successor_nodes(initial_node, *context.state_repository, *context.axiom_evaluator);
     const auto dead_end = std::ranges::find_if(successors, [](const auto& successor) { return successor.label.get_relation().get_name().str() == "consume"; });
     ASSERT_NE(dead_end, successors.end());
     EXPECT_EQ(heuristic->evaluate(dead_end->node.get_state()), std::numeric_limits<ygg::float_t>::infinity());
-    EXPECT_TRUE(heuristic->get_preferred_actions().empty());
+    EXPECT_TRUE(heuristic->get_relaxed_plan()->empty());
 }
 
-template<::tyr::TaskKind Kind>
+template<TaskKind Kind>
 void expect_builtin_set_goal_reconfigures_evaluator()
 {
     auto context = create_preferred_action_reset_context<Kind>();
-    auto heuristic = p::AddRPGHeuristic<Kind>::create(context.task, context.execution_context);
+    auto heuristic = tyr::planning::AddRPGHeuristic<Kind>::create(context.task, context.execution_context);
     const auto initial_node = context.successor_generator->get_initial_node(*context.state_repository, *context.axiom_evaluator);
 
     EXPECT_EQ(heuristic->evaluate(initial_node.get_state()), 1);
@@ -182,11 +183,11 @@ void expect_builtin_set_goal_reconfigures_evaluator()
     EXPECT_EQ(heuristic->evaluate(initial_node.get_state()), 0);
 }
 
-template<::tyr::TaskKind Kind>
+template<TaskKind Kind, template<TaskKind> class Heuristic>
 void expect_worker_snapshots_configured_goal()
 {
     auto context = create_preferred_action_reset_context<Kind>();
-    auto heuristic = TestedHeuristic<Kind>::create(context.task, context.execution_context);
+    auto heuristic = Heuristic<Kind>::create(context.task, context.execution_context);
     const auto initial_node = context.successor_generator->get_initial_node(*context.state_repository, *context.axiom_evaluator);
     const auto successors = context.successor_generator->get_labeled_successor_nodes(initial_node, *context.state_repository, *context.axiom_evaluator);
     const auto achieve = std::ranges::find_if(successors, [](const auto& successor) { return successor.label.get_relation().get_name().str() == "achieve"; });
@@ -200,28 +201,28 @@ void expect_worker_snapshots_configured_goal()
     EXPECT_EQ(worker->evaluate(initial_node.get_state()), 0);
 }
 
-template<::tyr::TaskKind Kind>
-void expect_worker_has_independent_preferred_actions()
+template<TaskKind Kind>
+void expect_worker_has_independent_relaxed_plan()
 {
     auto context = create_preferred_action_reset_context<Kind>();
-    auto heuristic = p::FFRPGHeuristic<Kind>::create(context.task, context.execution_context);
+    auto heuristic = tyr::planning::FFRPGHeuristic<Kind>::create(context.task, context.execution_context);
     const auto initial_node = context.successor_generator->get_initial_node(*context.state_repository, *context.axiom_evaluator);
 
     EXPECT_EQ(heuristic->evaluate(initial_node.get_state()), 1);
-    ASSERT_FALSE(heuristic->get_preferred_actions().empty());
+    ASSERT_FALSE(heuristic->get_relaxed_plan()->empty());
 
     auto worker = heuristic->make_worker(ygg::ExecutionContext::create(2));
-    EXPECT_TRUE(worker->get_preferred_actions().empty());
+    EXPECT_TRUE(worker->get_relaxed_plan()->empty());
 
     const auto successors = context.successor_generator->get_labeled_successor_nodes(initial_node, *context.state_repository, *context.axiom_evaluator);
     const auto dead_end = std::ranges::find_if(successors, [](const auto& successor) { return successor.label.get_relation().get_name().str() == "consume"; });
     ASSERT_NE(dead_end, successors.end());
     EXPECT_EQ(worker->evaluate(dead_end->node.get_state()), std::numeric_limits<ygg::float_t>::infinity());
-    EXPECT_TRUE(worker->get_preferred_actions().empty());
-    EXPECT_FALSE(heuristic->get_preferred_actions().empty());
+    EXPECT_TRUE(worker->get_relaxed_plan()->empty());
+    EXPECT_FALSE(heuristic->get_relaxed_plan()->empty());
 }
 
-template<::tyr::TaskKind Kind>
+template<TaskKind Kind>
 void expect_ff_traverses_exact_numeric_head_supports()
 {
     static constexpr auto domain = std::string_view { R"(
@@ -254,48 +255,21 @@ void expect_ff_traverses_exact_numeric_head_supports()
 )
 )" };
 
-    auto parser = ::tyr::formalism::planning::Parser(std::string(domain), "ff-numeric-witness-domain.pddl");
+    auto parser = formalism::planning::Parser(std::string(domain), "ff-numeric-witness-domain.pddl");
     auto context =
-        create_heuristic_context<Kind>(p::Task<::tyr::LiftedTag>::create(parser.parse_task(std::string(problem), "ff-numeric-witness-problem.pddl")));
+        create_heuristic_context<Kind>(tyr::planning::Task<LiftedTag>::create(parser.parse_task(std::string(problem), "ff-numeric-witness-problem.pddl")));
     const auto initial_state = context.successor_generator->get_initial_node(*context.state_repository, *context.axiom_evaluator).get_state();
-    auto heuristic = p::FFRPGHeuristic<Kind>::create(context.task, context.execution_context, ::tyr::CostMode::UNIT);
+    auto heuristic = tyr::planning::FFRPGHeuristic<Kind>::create(context.task, context.execution_context, CostMode::UNIT);
 
     // copy-source records both [0, 0] and [1, 1] certificates for the same source binding.
     EXPECT_EQ(heuristic->evaluate(initial_state), 3);
 }
 
-template<::tyr::TaskKind Kind>
-void expect_general_metric_targets_exact_binding()
+template<TaskKind Kind, template<TaskKind> class Heuristic>
+void expect_general_cost_mode_throws()
 {
-    static constexpr auto domain = std::string_view { R"(
-(define (domain exact-metric-binding)
-  (:requirements :strips :numeric-fluents)
-  (:predicates (done ?x))
-  (:functions (expense ?x))
-
-  (:action finish
-    :parameters (?x)
-    :precondition ()
-    :effect (and (done ?x) (increase (expense ?x) 5)))
-)
-)" };
-    static constexpr auto problem = std::string_view { R"(
-(define (problem exact-metric-binding-problem)
-  (:domain exact-metric-binding)
-  (:objects charged free)
-  (:init (= (expense charged) 0) (= (expense free) 0))
-  (:goal (done free))
-  (:metric minimize (expense charged))
-)
-)" };
-
-    auto parser = ::tyr::formalism::planning::Parser(std::string(domain), "exact-metric-binding-domain.pddl");
-    auto context =
-        create_heuristic_context<Kind>(p::Task<::tyr::LiftedTag>::create(parser.parse_task(std::string(problem), "exact-metric-binding-problem.pddl")));
-    const auto initial_state = context.successor_generator->get_initial_node(*context.state_repository, *context.axiom_evaluator).get_state();
-    auto heuristic = TestedHeuristic<Kind>::create(context.task, context.execution_context, ::tyr::CostMode::GENERAL);
-
-    EXPECT_EQ(heuristic->evaluate(initial_state), 0);
+    auto context = create_preferred_action_reset_context<Kind>();
+    EXPECT_THROW(Heuristic<Kind>::create(context.task, context.execution_context, CostMode::GENERAL), std::invalid_argument);
 }
 
 inline void expect_optional_eq(ygg::float_t actual, std::optional<ygg::float_t> expected)
@@ -306,16 +280,32 @@ inline void expect_optional_eq(ygg::float_t actual, std::optional<ygg::float_t> 
     }
 }
 
-class HeuristicFixtureTest : public ::testing::TestWithParam<HeuristicCase>
+/// Evaluating alternating states replaces the previous relaxed model each time.
+template<TaskKind Kind, template<TaskKind> class Heuristic>
+void expect_alternating_states_replace_previous_model()
 {
-};
+    auto context = create_preferred_action_reset_context<Kind>();
+    auto heuristic = Heuristic<Kind>::create(context.task, context.execution_context);
+    const auto initial_node = context.successor_generator->get_initial_node(*context.state_repository, *context.axiom_evaluator);
+    const auto successors = context.successor_generator->get_labeled_successor_nodes(initial_node, *context.state_repository, *context.axiom_evaluator);
+    const auto dead_end = std::ranges::find_if(successors, [](const auto& successor) { return successor.label.get_relation().get_name().str() == "consume"; });
+    const auto goal = std::ranges::find_if(successors, [](const auto& successor) { return successor.label.get_relation().get_name().str() == "achieve"; });
+    ASSERT_NE(dead_end, successors.end());
+    ASSERT_NE(goal, successors.end());
 
-TEST(TyrPlanningHeuristicWorkerTest, SnapshotsConfiguredGoal) { expect_worker_snapshots_configured_goal<HeuristicTaskKind>(); }
+    EXPECT_EQ(heuristic->evaluate(initial_node.get_state()), 1);
+    EXPECT_EQ(heuristic->evaluate(dead_end->node.get_state()), std::numeric_limits<ygg::float_t>::infinity());
+    EXPECT_EQ(heuristic->evaluate(initial_node.get_state()), 1);
+    EXPECT_EQ(heuristic->evaluate(goal->node.get_state()), 0);
+    EXPECT_EQ(heuristic->evaluate(initial_node.get_state()), 1);
+    EXPECT_EQ(heuristic->evaluate(initial_node.get_state()), 1);
+}
 
-TEST_P(HeuristicFixtureTest, InitialStateMatchesFixture)
+/// The heuristic value of the initial state matches the fixture for each cost mode.
+template<TaskKind Kind, template<TaskKind> class Heuristic>
+void check_heuristic_case(const HeuristicCase& test_case)
 {
-    const auto& test_case = GetParam();
-    auto context = create_heuristic_context<HeuristicTaskKind>(test_case.domain_file, test_case.task_file);
+    auto context = create_heuristic_context<Kind>(test_case.domain_file, test_case.task_file);
     const auto initial_state = context.successor_generator->get_initial_node(*context.state_repository, *context.axiom_evaluator).get_state();
 
     for (const auto& [key, expectation] : test_case.configs)
@@ -324,18 +314,13 @@ TEST_P(HeuristicFixtureTest, InitialStateMatchesFixture)
             continue;
 
         SCOPED_TRACE(key);
-        auto heuristic = TestedHeuristic<HeuristicTaskKind>::create(context.task, context.execution_context, expectation.cost_mode);
+        auto heuristic = Heuristic<Kind>::create(context.task, context.execution_context, expectation.cost_mode);
         const auto value = heuristic->evaluate(initial_state);
 
         ASSERT_NE(value, std::numeric_limits<ygg::float_t>::infinity());
         expect_optional_eq(value, expectation.h);
     }
 }
-
-INSTANTIATE_TEST_SUITE_P(TyrPlanningHeuristicFixture,
-                         HeuristicFixtureTest,
-                         ::testing::ValuesIn(load_cases()),
-                         [](const testing::TestParamInfo<HeuristicCase>& info) { return info.param.name; });
 
 }
 

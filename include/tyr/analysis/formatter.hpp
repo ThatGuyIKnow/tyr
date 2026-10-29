@@ -19,6 +19,7 @@
 #define TYR_ANALYSIS_FORMATTER_HPP_
 
 #include "tyr/analysis/declarations.hpp"
+#include "tyr/analysis/domains_view.hpp"
 #include "tyr/formalism/datalog/formatter.hpp"
 #include "tyr/formalism/planning/formatter.hpp"
 
@@ -46,9 +47,7 @@ struct formatter<tyr::analysis::VariableDomain, char>
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
     template<typename FormatContext>
     auto format(const tyr::analysis::VariableDomain& value, FormatContext& ctx) const
-    {
-        return fmt::format_to(ctx.out(), "{}", value.objects);
-    }
+    { return fmt::format_to(ctx.out(), "{}", value.objects); }
 };
 
 template<typename Element, typename Payload>
@@ -68,16 +67,16 @@ struct formatter<tyr::analysis::Scoped<Element, Payload>, char>
             fmt::print(os, "{}{}\n", "payload = ", value.payload);
         }
         os << ygg::print_indent << ")";
-        return fmt::format_to(ctx.out(), "{}", os.str());
+        return fmt::format_to(ctx.out(), "{}", os.view());
     }
 };
 
 template<typename Payload>
-struct formatter<tyr::analysis::Scoped<tyr::formalism::planning::Axiom, Payload>, char>
+struct formatter<tyr::analysis::Scoped<tyr::formalism::planning::Axiom<::tyr::LiftedTag>, Payload>, char>
 {
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
     template<typename FormatContext>
-    auto format(const tyr::analysis::Scoped<tyr::formalism::planning::Axiom, Payload>& value, FormatContext& ctx) const
+    auto format(const tyr::analysis::Scoped<tyr::formalism::planning::Axiom<::tyr::LiftedTag>, Payload>& value, FormatContext& ctx) const
     {
         auto os = std::stringstream {};
         os << "AxiomDomain(\n";
@@ -89,16 +88,16 @@ struct formatter<tyr::analysis::Scoped<tyr::formalism::planning::Axiom, Payload>
             fmt::print(os, "{}{}\n", "payload = ", value.payload);
         }
         os << ygg::print_indent << ")";
-        return fmt::format_to(ctx.out(), "{}", os.str());
+        return fmt::format_to(ctx.out(), "{}", os.view());
     }
 };
 
 template<tyr::formalism::RelationKind R, typename Payload>
-struct formatter<tyr::analysis::Scoped<tyr::formalism::datalog::Rule<R>, Payload>, char>
+struct formatter<tyr::analysis::Scoped<tyr::formalism::datalog::Rule<::tyr::LiftedTag, R>, Payload>, char>
 {
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
     template<typename FormatContext>
-    auto format(const tyr::analysis::Scoped<tyr::formalism::datalog::Rule<R>, Payload>& value, FormatContext& ctx) const
+    auto format(const tyr::analysis::Scoped<tyr::formalism::datalog::Rule<::tyr::LiftedTag, R>, Payload>& value, FormatContext& ctx) const
     {
         auto os = std::stringstream {};
         os << "RuleDomain(\n";
@@ -110,7 +109,7 @@ struct formatter<tyr::analysis::Scoped<tyr::formalism::datalog::Rule<R>, Payload
             fmt::print(os, "{}{}\n", "payload = ", value.payload);
         }
         os << ygg::print_indent << ")";
-        return fmt::format_to(ctx.out(), "{}", os.str());
+        return fmt::format_to(ctx.out(), "{}", os.view());
     }
 };
 
@@ -133,7 +132,7 @@ struct formatter<tyr::analysis::ConditionalEffectDomain, char>
             fmt::print(os, "{}{}\n", "effect domain = ", value.payload.effect_domain);
         }
         os << ygg::print_indent << ")";
-        return fmt::format_to(ctx.out(), "{}", os.str());
+        return fmt::format_to(ctx.out(), "{}", os.view());
     }
 };
 
@@ -156,7 +155,7 @@ struct formatter<tyr::analysis::ActionDomain, char>
             fmt::print(os, "{}{}\n", "effect domains = ", value.payload.effect_domains);
         }
         os << ygg::print_indent << ")";
-        return fmt::format_to(ctx.out(), "{}", os.str());
+        return fmt::format_to(ctx.out(), "{}", os.view());
     }
 };
 
@@ -177,7 +176,7 @@ struct formatter<tyr::analysis::ConditionalEffectDomainData, char>
             fmt::print(os, "{}{}\n", "effect domain = ", value.effect_domain);
         }
         os << ygg::print_indent << ")";
-        return fmt::format_to(ctx.out(), "{}", os.str());
+        return fmt::format_to(ctx.out(), "{}", os.view());
     }
 };
 
@@ -198,7 +197,7 @@ struct formatter<tyr::analysis::ActionDomainData, char>
             fmt::print(os, "{}{}\n", "effect domains = ", value.effect_domains);
         }
         os << ygg::print_indent << ")";
-        return fmt::format_to(ctx.out(), "{}", os.str());
+        return fmt::format_to(ctx.out(), "{}", os.view());
     }
 };
 
@@ -234,7 +233,7 @@ struct formatter<tyr::analysis::ProgramVariableDomains, char>
             format_rules.template operator()<tyr::formalism::FunctionTag>();
         }
         os << ygg::print_indent << ")";
-        return fmt::format_to(ctx.out(), "{}", os.str());
+        return fmt::format_to(ctx.out(), "{}", os.view());
     }
 };
 
@@ -273,17 +272,20 @@ struct formatter<tyr::analysis::TaskVariableDomains, char>
             }
         }
         os << ygg::print_indent << ")";
-        return fmt::format_to(ctx.out(), "{}", os.str());
+        return fmt::format_to(ctx.out(), "{}", os.view());
     }
 };
 
 template<typename C>
-struct formatter<tyr::analysis::ScopedView<tyr::formalism::planning::ConditionalEffect, tyr::analysis::ConditionalEffectDomainViewData<C>, C>, char>
+struct formatter<tyr::analysis::ScopedView<tyr::formalism::planning::ConditionalEffect<::tyr::LiftedTag>, tyr::analysis::ConditionalEffectDomainViewData<C>, C>,
+                 char>
 {
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
     template<typename FormatContext>
-    auto format(const tyr::analysis::ScopedView<tyr::formalism::planning::ConditionalEffect, tyr::analysis::ConditionalEffectDomainViewData<C>, C>& value,
-                FormatContext& ctx) const
+    auto
+    format(const tyr::analysis::ScopedView<tyr::formalism::planning::ConditionalEffect<::tyr::LiftedTag>, tyr::analysis::ConditionalEffectDomainViewData<C>, C>&
+               value,
+           FormatContext& ctx) const
     {
         auto os = std::stringstream {};
         os << "ConditionalEffectDomain(\n";
@@ -297,16 +299,17 @@ struct formatter<tyr::analysis::ScopedView<tyr::formalism::planning::Conditional
             fmt::print(os, "{}\n", value.payload.effect_domain);
         }
         os << ygg::print_indent << ")";
-        return fmt::format_to(ctx.out(), "{}", os.str());
+        return fmt::format_to(ctx.out(), "{}", os.view());
     }
 };
 
 template<typename C>
-struct formatter<tyr::analysis::ScopedView<tyr::formalism::planning::Action, tyr::analysis::ActionDomainViewData<C>, C>, char>
+struct formatter<tyr::analysis::ScopedView<tyr::formalism::planning::Action<::tyr::LiftedTag>, tyr::analysis::ActionDomainViewData<C>, C>, char>
 {
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
     template<typename FormatContext>
-    auto format(const tyr::analysis::ScopedView<tyr::formalism::planning::Action, tyr::analysis::ActionDomainViewData<C>, C>& value, FormatContext& ctx) const
+    auto format(const tyr::analysis::ScopedView<tyr::formalism::planning::Action<::tyr::LiftedTag>, tyr::analysis::ActionDomainViewData<C>, C>& value,
+                FormatContext& ctx) const
     {
         auto os = std::stringstream {};
         os << "ActionDomain(\n";
@@ -324,7 +327,7 @@ struct formatter<tyr::analysis::ScopedView<tyr::formalism::planning::Action, tyr
             }
         }
         os << ygg::print_indent << ")";
-        return fmt::format_to(ctx.out(), "{}", os.str());
+        return fmt::format_to(ctx.out(), "{}", os.view());
     }
 };
 
@@ -345,16 +348,16 @@ struct formatter<tyr::analysis::ScopedView<Element, Payload, C>, char>
             fmt::print(os, "{}{}\n", "payload = ", value.payload);
         }
         os << ygg::print_indent << ")";
-        return fmt::format_to(ctx.out(), "{}", os.str());
+        return fmt::format_to(ctx.out(), "{}", os.view());
     }
 };
 
 template<typename Payload, typename C>
-struct formatter<tyr::analysis::ScopedView<tyr::formalism::planning::ConjunctiveCondition, Payload, C>, char>
+struct formatter<tyr::analysis::ScopedView<tyr::formalism::planning::ConjunctiveCondition<::tyr::LiftedTag>, Payload, C>, char>
 {
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
     template<typename FormatContext>
-    auto format(const tyr::analysis::ScopedView<tyr::formalism::planning::ConjunctiveCondition, Payload, C>& value, FormatContext& ctx) const
+    auto format(const tyr::analysis::ScopedView<tyr::formalism::planning::ConjunctiveCondition<::tyr::LiftedTag>, Payload, C>& value, FormatContext& ctx) const
     {
         auto os = std::stringstream {};
         os << "ConjunctiveConditionDomain(\n";
@@ -366,16 +369,16 @@ struct formatter<tyr::analysis::ScopedView<tyr::formalism::planning::Conjunctive
             fmt::print(os, "{}{}\n", "payload = ", value.payload);
         }
         os << ygg::print_indent << ")";
-        return fmt::format_to(ctx.out(), "{}", os.str());
+        return fmt::format_to(ctx.out(), "{}", os.view());
     }
 };
 
 template<typename Payload, typename C>
-struct formatter<tyr::analysis::ScopedView<tyr::formalism::planning::ConjunctiveEffect, Payload, C>, char>
+struct formatter<tyr::analysis::ScopedView<tyr::formalism::planning::ConjunctiveEffect<::tyr::LiftedTag>, Payload, C>, char>
 {
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
     template<typename FormatContext>
-    auto format(const tyr::analysis::ScopedView<tyr::formalism::planning::ConjunctiveEffect, Payload, C>& value, FormatContext& ctx) const
+    auto format(const tyr::analysis::ScopedView<tyr::formalism::planning::ConjunctiveEffect<::tyr::LiftedTag>, Payload, C>& value, FormatContext& ctx) const
     {
         auto os = std::stringstream {};
         os << "ConjunctiveEffectDomain(\n";
@@ -387,16 +390,16 @@ struct formatter<tyr::analysis::ScopedView<tyr::formalism::planning::Conjunctive
             fmt::print(os, "{}{}\n", "payload = ", value.payload);
         }
         os << ygg::print_indent << ")";
-        return fmt::format_to(ctx.out(), "{}", os.str());
+        return fmt::format_to(ctx.out(), "{}", os.view());
     }
 };
 
 template<typename Payload, typename C>
-struct formatter<tyr::analysis::ScopedView<tyr::formalism::planning::Axiom, Payload, C>, char>
+struct formatter<tyr::analysis::ScopedView<tyr::formalism::planning::Axiom<::tyr::LiftedTag>, Payload, C>, char>
 {
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
     template<typename FormatContext>
-    auto format(const tyr::analysis::ScopedView<tyr::formalism::planning::Axiom, Payload, C>& value, FormatContext& ctx) const
+    auto format(const tyr::analysis::ScopedView<tyr::formalism::planning::Axiom<::tyr::LiftedTag>, Payload, C>& value, FormatContext& ctx) const
     {
         auto os = std::stringstream {};
         os << "AxiomDomain(\n";
@@ -408,16 +411,16 @@ struct formatter<tyr::analysis::ScopedView<tyr::formalism::planning::Axiom, Payl
             fmt::print(os, "{}{}\n", "payload = ", value.payload);
         }
         os << ygg::print_indent << ")";
-        return fmt::format_to(ctx.out(), "{}", os.str());
+        return fmt::format_to(ctx.out(), "{}", os.view());
     }
 };
 
 template<tyr::formalism::RelationKind R, typename Payload, typename C>
-struct formatter<tyr::analysis::ScopedView<tyr::formalism::datalog::Rule<R>, Payload, C>, char>
+struct formatter<tyr::analysis::ScopedView<tyr::formalism::datalog::Rule<::tyr::LiftedTag, R>, Payload, C>, char>
 {
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
     template<typename FormatContext>
-    auto format(const tyr::analysis::ScopedView<tyr::formalism::datalog::Rule<R>, Payload, C>& value, FormatContext& ctx) const
+    auto format(const tyr::analysis::ScopedView<tyr::formalism::datalog::Rule<::tyr::LiftedTag, R>, Payload, C>& value, FormatContext& ctx) const
     {
         auto os = std::stringstream {};
         os << "RuleDomain(\n";
@@ -429,7 +432,7 @@ struct formatter<tyr::analysis::ScopedView<tyr::formalism::datalog::Rule<R>, Pay
             fmt::print(os, "{}{}\n", "payload = ", value.payload);
         }
         os << ygg::print_indent << ")";
-        return fmt::format_to(ctx.out(), "{}", os.str());
+        return fmt::format_to(ctx.out(), "{}", os.view());
     }
 };
 
@@ -439,9 +442,7 @@ struct formatter<tyr::analysis::VariableDomainView<C>, char>
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
     template<typename FormatContext>
     auto format(const tyr::analysis::VariableDomainView<C>& value, FormatContext& ctx) const
-    {
-        return fmt::format_to(ctx.out(), "{}", value.objects);
-    }
+    { return fmt::format_to(ctx.out(), "{}", value.objects); }
 };
 
 template<>
@@ -476,7 +477,7 @@ struct formatter<tyr::analysis::ProgramVariableDomainsView, char>
             format_rules.template operator()<tyr::formalism::FunctionTag>();
         }
         os << ygg::print_indent << ")";
-        return fmt::format_to(ctx.out(), "{}", os.str());
+        return fmt::format_to(ctx.out(), "{}", os.view());
     }
 };
 
@@ -515,7 +516,7 @@ struct formatter<tyr::analysis::TaskVariableDomainsView, char>
             }
         }
         os << ygg::print_indent << ")";
-        return fmt::format_to(ctx.out(), "{}", os.str());
+        return fmt::format_to(ctx.out(), "{}", os.view());
     }
 };
 

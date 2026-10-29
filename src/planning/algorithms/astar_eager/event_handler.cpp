@@ -19,12 +19,11 @@
 
 #include "tyr/formalism/planning/formatter.hpp"
 #include "tyr/planning/formatter.hpp"
-#include "tyr/planning/ground/state_view.hpp"
 #include "tyr/planning/ground/task.hpp"
-#include "tyr/planning/lifted/state_view.hpp"
 #include "tyr/planning/lifted/task.hpp"
 #include "tyr/planning/node.hpp"
 #include "tyr/planning/plan.hpp"
+#include "tyr/planning/state_repository.hpp"
 
 #include <fmt/ostream.h>
 
@@ -37,36 +36,30 @@ template<TaskKind Kind>
 class DefaultWorkerEventHandler final : public WorkerEventHandler<Kind>
 {
 public:
-    DefaultWorkerEventHandler(ygg::Index<Worker> index, bool trace_nodes) : m_index(index), m_trace_nodes(trace_nodes) {}
+    explicit DefaultWorkerEventHandler(ygg::Index<Worker> index) : m_index(index) {}
 
     void on_expand_node(const Node<Kind>& node) override
     {
-        if (!m_trace_nodes)
-            return;
         fmt::print("[ASTAR][Worker {}] ----------------------------------------\n[ASTAR][Worker {}] Expanding node: {}\n\n",
-                   ygg::uint_t(m_index),
-                   ygg::uint_t(m_index),
+                   static_cast<ygg::uint_t>(m_index),
+                   static_cast<ygg::uint_t>(m_index),
                    node);
     }
 
     void on_generate_transition(const Node<Kind>&, const LabeledNode<Kind>& labeled_succ_node, TransitionOutcome outcome) override
     {
-        if (!m_trace_nodes
-            || (outcome != TransitionOutcome::OPENED && outcome != TransitionOutcome::RELAXED && outcome != TransitionOutcome::DEAD_END
-                && outcome != TransitionOutcome::GOAL))
+        if (outcome != TransitionOutcome::OPENED && outcome != TransitionOutcome::RELAXED && outcome != TransitionOutcome::DEAD_END
+            && outcome != TransitionOutcome::GOAL)
             return;
         fmt::print("[ASTAR][Worker {}] Action: {}\n[ASTAR][Worker {}] Successor node: {}\n\n",
-                   ygg::uint_t(m_index),
+                   static_cast<ygg::uint_t>(m_index),
                    labeled_succ_node.label,
-                   ygg::uint_t(m_index),
+                   static_cast<ygg::uint_t>(m_index),
                    labeled_succ_node.node);
     }
 
-    void on_finish_f_layer(ygg::float_t f_value) override { fmt::print("[ASTAR][Worker {}] Finished f-layer: {}\n", ygg::uint_t(m_index), f_value); }
-
 private:
     ygg::Index<Worker> m_index;
-    bool m_trace_nodes;
 };
 
 }
@@ -79,9 +72,19 @@ DefaultEventHandler<Kind>::DefaultEventHandler(size_t verbosity) : m_verbosity(v
 template<TaskKind Kind>
 void DefaultEventHandler<Kind>::on_start_search(const Node<Kind>&, ygg::float_t f_value)
 {
+    m_progress_statistics.clear();
     if (m_verbosity < 1)
         return;
     fmt::print("[ASTAR] Search started.\n[ASTAR] Start node f_value: {}\n", f_value);
+}
+
+template<TaskKind Kind>
+void DefaultEventHandler<Kind>::on_finish_f_layer(ygg::float_t f_value, const tyr::planning::Statistics& statistics)
+{
+    m_progress_statistics.add_snapshot(statistics);
+    if (m_verbosity < 1)
+        return;
+    fmt::print("[ASTAR] Finished f-layer: {}\n", f_value);
 }
 
 template<TaskKind Kind>
@@ -89,7 +92,7 @@ void DefaultEventHandler<Kind>::on_end_search(SearchStatus, const tyr::planning:
 {
     if (m_verbosity < 1)
         return;
-    fmt::print("[ASTAR] Search ended.\n{}\n", statistics);
+    fmt::print("[ASTAR] Search ended.\n{}\n{}\n", statistics, m_progress_statistics);
 }
 
 template<TaskKind Kind>
@@ -103,16 +106,14 @@ void DefaultEventHandler<Kind>::on_solved(const Plan<Kind>& plan)
 template<TaskKind Kind>
 WorkerEventHandlerPtr<Kind> DefaultEventHandler<Kind>::make_worker(ygg::Index<Worker> index)
 {
-    if (m_verbosity < 1)
+    if (m_verbosity < 2)
         return nullptr;
-    return std::make_unique<DefaultWorkerEventHandler<Kind>>(index, m_verbosity >= 2);
+    return std::make_unique<DefaultWorkerEventHandler<Kind>>(index);
 }
 
 template<TaskKind Kind>
 DefaultEventHandlerPtr<Kind> DefaultEventHandler<Kind>::create(size_t verbosity)
-{
-    return std::make_shared<DefaultEventHandler<Kind>>(verbosity);
-}
+{ return std::make_shared<DefaultEventHandler<Kind>>(verbosity); }
 
 template class DefaultEventHandler<LiftedTag>;
 template class DefaultEventHandler<GroundTag>;

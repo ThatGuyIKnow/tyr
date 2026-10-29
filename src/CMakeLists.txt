@@ -1,4 +1,4 @@
-set(SUBDIRECTORIES "algorithms" "analysis" "buffer" "common" "formalism" "datalog" "planning")
+set(SUBDIRECTORIES "algorithms" "analysis" "buffer" "common" "formalism" "datalog" "planning" "serialization")
 
 set(TYR_SRC_FILES "")
 set(TYR_PRIVATE_HEADER_FILES "")
@@ -28,15 +28,19 @@ if("${TYR_STATE_STORAGE_POLICY}" STREQUAL "Hashset")
         planning/lifted/state_storage/hash_set/atom.cpp
         planning/lifted/state_storage/hash_set/fact.cpp
     )
-elseif("${TYR_STATE_STORAGE_POLICY}" STREQUAL "Tree")
+elseif("${TYR_STATE_STORAGE_POLICY}" MATCHES "^Tree(Vector|Bitset)$")
     set(
         TYR_STATE_STORAGE_SRC_FILES
-        planning/state_storage/tree_compression/numeric.cpp
-        planning/ground/state_storage/tree_compression/atom.cpp
-        planning/ground/state_storage/tree_compression/fact.cpp
-        planning/ground/state_storage/tree_compression/context.cpp
-        planning/lifted/state_storage/tree_compression/atom.cpp
-        planning/lifted/state_storage/tree_compression/fact.cpp
+        planning/state_storage/tree_vector/numeric.cpp
+        planning/state_storage/tree_bitset/atom.cpp
+        planning/ground/state_storage/tree_vector/atom.cpp
+        planning/ground/state_storage/tree_vector/fact.cpp
+        planning/ground/state_storage/tree_vector/context.cpp
+        planning/ground/state_storage/tree_bitset/fact.cpp
+        planning/ground/state_storage/tree_bitset/context.cpp
+        planning/lifted/state_storage/tree_vector/atom.cpp
+        planning/lifted/state_storage/tree_vector/fact.cpp
+        planning/lifted/state_storage/tree_bitset/fact.cpp
     )
 endif()
 
@@ -55,7 +59,7 @@ add_library(
     formalism/formatter.cpp
     formalism/datalog/formatter.cpp
     formalism/datalog/grounder.cpp
-    formalism/datalog/merge.cpp
+    formalism/datalog/copy.cpp
     formalism/datalog/repository.cpp
     formalism/datalog/views.cpp
     formalism/datalog/variable_dependency_graph.cpp
@@ -65,6 +69,7 @@ add_library(
     formalism/planning/invariants/matcher.cpp
     formalism/planning/invariants/mutexes.cpp
     formalism/planning/invariants/normalization.cpp
+    formalism/planning/invariants/ordering.cpp
     formalism/planning/invariants/proof.cpp
     formalism/planning/invariants/refinement.cpp
     formalism/planning/invariants/synthesis.cpp
@@ -73,13 +78,15 @@ add_library(
     formalism/planning/grounder.cpp
     formalism/planning/merge_datalog.cpp
     formalism/planning/merge_planning.cpp
-    formalism/planning/merge.cpp
+    formalism/planning/copy.cpp
     formalism/planning/repository.cpp
     formalism/planning/views.cpp
     formalism/planning/loki_to_tyr.cpp
     formalism/planning/parser.cpp
     formalism/planning/planning_task.cpp
 
+    datalog/rule_splitting.cpp
+    datalog/static_literal_decomposition.cpp
     datalog/static_rule_filter.cpp
     datalog/policies/annotation.cpp
     datalog/policies/cost.cpp
@@ -110,17 +117,18 @@ add_library(
     planning/heuristics/rpg_add.cpp
     planning/heuristics/rpg_ff.cpp
     planning/heuristics/rpg_max.cpp
+    planning/state.cpp
+    planning/state_delta.cpp
     planning/state_repository.cpp
 
     planning/ground/axiom_evaluator.cpp
     planning/ground/axiom_stratification.cpp
     planning/ground/match_tree.cpp
     planning/ground/node.cpp
-    planning/ground/state.cpp
     planning/ground/successor_generator.cpp
     planning/lifted/axiom_evaluator.cpp
     planning/lifted/node.cpp
-    planning/lifted/state.cpp
+    planning/lifted/effect_atom_index.cpp
     planning/lifted/successor_generator.cpp
     planning/lifted/task_grounder.cpp
 
@@ -145,8 +153,8 @@ add_library(
     planning/applicability.cpp
     planning/applicability_lifted.cpp
     planning/action_executor.cpp
-    planning/ground_task.cpp
-    planning/lifted_task.cpp
+    planning/factory.cpp
+    planning/task.cpp
     planning/plan.cpp
     planning/task_utils.cpp
 )
@@ -158,9 +166,8 @@ target_compile_features(core PUBLIC cxx_std_20)
 target_compile_definitions(
     core
     PUBLIC
+        # Boost.MPL's configuration comes from loki::parsers, so every translation unit agrees on it.
         FMT_HEADER_ONLY
-        BOOST_MPL_CFG_NO_PREPROCESSED_HEADERS
-        BOOST_MPL_LIMIT_LIST_SIZE=50
 )
 
 if(TYR_ENABLE_INNER_PARALLELISM)
@@ -173,8 +180,10 @@ endif()
 
 if("${TYR_STATE_STORAGE_POLICY}" STREQUAL "Hashset")
     target_compile_definitions(core PUBLIC TYR_STATE_STORAGE_HASHSET)
-elseif("${TYR_STATE_STORAGE_POLICY}" STREQUAL "Tree")
-    target_compile_definitions(core PUBLIC TYR_STATE_STORAGE_TREE)
+elseif("${TYR_STATE_STORAGE_POLICY}" STREQUAL "TreeVector")
+    target_compile_definitions(core PUBLIC TYR_STATE_STORAGE_TREE_VECTOR)
+elseif("${TYR_STATE_STORAGE_POLICY}" STREQUAL "TreeBitset")
+    target_compile_definitions(core PUBLIC TYR_STATE_STORAGE_TREE_BITSET)
 endif()
 
 if("${TYR_RELATION_STORAGE_POLICY}" STREQUAL "Word")
@@ -205,6 +214,7 @@ target_link_libraries(
         fmt::fmt-header-only
         gtl::gtl
         loki::parsers
+        Boost::json
     PRIVATE
         Threads::Threads
 )

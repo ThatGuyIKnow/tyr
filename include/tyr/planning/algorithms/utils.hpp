@@ -18,6 +18,7 @@
 #ifndef TYR_PLANNING_ALGORITHMS_UTILS_HPP_
 #define TYR_PLANNING_ALGORITHMS_UTILS_HPP_
 
+#include "tyr/planning/algorithms/declarations.hpp"
 #include "tyr/planning/algorithms/statistics.hpp"
 #include "tyr/planning/node.hpp"
 #include "tyr/planning/plan.hpp"
@@ -36,35 +37,6 @@
 
 namespace tyr::planning
 {
-
-enum class DistHashMode : uint8_t
-{
-    RANDOM,
-    LMCUT,
-};
-
-enum class SearchStatus
-{
-    IN_PROGRESS,
-    OUT_OF_TIME,
-    OUT_OF_MEMORY,
-    OUT_OF_STATES,
-    FAILED,
-    EXHAUSTED,
-    CYCLE,
-    SOLVED,
-    UNSOLVABLE
-};
-
-enum class TransitionOutcome : uint8_t
-{
-    OPENED,
-    RELAXED,
-    DUPLICATE,
-    PRUNED,
-    DEAD_END,
-    GOAL,
-};
 
 inline ygg::float_t compute_successor_g_value(ygg::float_t source_g_value, ygg::float_t generated_successor_g_value, CostMode mode)
 {
@@ -105,7 +77,7 @@ struct SearchResult
     std::vector<Statistics> worker_statistics;
 
     /// Fraction of aggregate search-worker capacity not spent waiting for work.
-    ygg::float_t get_worker_utilization() const noexcept
+    [[nodiscard]] ygg::float_t get_worker_utilization() const noexcept
     {
         const auto search_time = std::chrono::duration<long double>(statistics.get_search_time()).count();
         const auto capacity = search_time * worker_statistics.size();
@@ -113,7 +85,8 @@ struct SearchResult
             return 0;
 
         const auto idle_time = std::chrono::duration<long double>(statistics.get_idle_time()).count();
-        return static_cast<ygg::float_t>(std::clamp(1.0L - idle_time / capacity, 0.0L, 1.0L));
+        constexpr auto full_utilization = 1.0L;
+        return static_cast<ygg::float_t>(std::clamp(full_utilization - idle_time / capacity, 0.0L, full_utilization));
     }
 };
 

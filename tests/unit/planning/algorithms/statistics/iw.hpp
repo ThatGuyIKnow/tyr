@@ -15,20 +15,25 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#ifndef TYR_TESTS_UNIT_PLANNING_ALGORITHMS_STATISTICS_IW_HPP_
+#define TYR_TESTS_UNIT_PLANNING_ALGORITHMS_STATISTICS_IW_HPP_
+
 #include "statistics.hpp"
 
 #include <filesystem>
-
-namespace p = tyr::planning;
+#include <tyr/planning/algorithms/brfs.hpp>
+#include <tyr/planning/algorithms/brfs/event_handler.hpp>
+#include <tyr/planning/algorithms/iw.hpp>
+#include <tyr/planning/algorithms/iw/event_handler.hpp>
 
 namespace tyr::tests
 {
 struct IwExpectation
 {
-    std::optional<p::SearchStatus> status;
+    std::optional<tyr::planning::SearchStatus> status;
     std::optional<PlanStatistics> plan;
     std::optional<ygg::uint_t> solution_arity;
-    std::optional<p::ProgressStatistics::Snapshot> counters;
+    std::optional<tyr::planning::ProgressStatistics::Snapshot> counters;
 };
 
 struct IwCase
@@ -40,21 +45,20 @@ struct IwCase
     std::vector<std::pair<std::string, IwExpectation>> configs;
 };
 
-void PrintTo(const IwCase& test_case, std::ostream* os) { *os << test_case.name << " (" << test_case.task_file << ")"; }
+inline void PrintTo(const IwCase& test_case, std::ostream* os) { *os << test_case.name << " (" << test_case.task_file << ")"; }
 
-IwExpectation parse_expectation(const boost::json::object& object)
+inline IwExpectation parse_expectation(const boost::json::object& object)
 {
     auto result = IwExpectation {};
     if (const auto value = ygg::common::find_string(object, "status", "case"))
         result.status = parse_search_status(*value);
     result.plan = parse_optional_plan(object);
-    if (const auto value = ygg::common::find_uint_t(object, "solution_arity", "case"))
-        result.solution_arity = *value;
+    result.solution_arity = ygg::common::find_uint_t(object, "solution_arity", "case");
     result.counters = parse_optional_counters(object);
     return result;
 }
 
-IwCase parse_case(const boost::json::object& suite, const boost::json::object& object)
+inline IwCase parse_case(const boost::json::object& suite, const boost::json::object& object)
 {
     auto result = IwCase { ygg::common::as_string(object, "name", "case"),
                            ygg::common::resolve_path(std::filesystem::path(BENCHMARKS_DIR), ygg::common::as_string(object, "domain_file", "case")),
@@ -67,9 +71,9 @@ IwCase parse_case(const boost::json::object& suite, const boost::json::object& o
     return result;
 }
 
-std::vector<IwCase> load_cases()
+inline std::vector<IwCase> load_cases(const std::filesystem::path& fixture)
 {
-    const auto suite = ygg::common::load_json_file(ygg::common::root_path() / kStatisticsFixture);
+    const auto suite = ygg::common::load_json_file(ygg::common::root_path() / fixture);
     const auto& suite_object = ygg::common::as_object(suite, "suite");
     auto result = std::vector<IwCase> {};
     for (const auto& case_value : ygg::common::as_array(suite_object, "cases", "suite"))
@@ -77,24 +81,25 @@ std::vector<IwCase> load_cases()
     return result;
 }
 
+template<TaskKind Kind>
 void check_expectation(const IwExpectation& expectation, const IwCase& test_case)
 {
-    auto context = create_search_context<StatisticsTaskKind>(test_case.domain_file, test_case.task_file);
-    auto brfs_solver = p::brfs::Solver<StatisticsTaskKind> { context.task,
-                                                             context.state_repository,
-                                                             context.axiom_evaluator,
-                                                             context.successor_generator,
-                                                             p::brfs::Options<StatisticsTaskKind> {} };
-    brfs_solver.options.event_handler = p::brfs::DefaultEventHandler<StatisticsTaskKind>::create();
+    auto context = create_search_context<Kind>(test_case.domain_file, test_case.task_file);
+    auto brfs_solver = tyr::planning::brfs::Solver<Kind> { context.task,
+                                                           context.state_repository,
+                                                           context.axiom_evaluator,
+                                                           context.successor_generator,
+                                                           tyr::planning::brfs::Options<Kind> {} };
+    brfs_solver.options.event_handler = tyr::planning::brfs::DefaultEventHandler<Kind>::create();
 
-    auto options = p::iw::Options<StatisticsTaskKind> {};
-    const auto event_handler = p::iw::DefaultEventHandler<StatisticsTaskKind>::create();
+    auto options = tyr::planning::iw::Options<Kind> {};
+    const auto event_handler = tyr::planning::iw::DefaultEventHandler<Kind>::create();
     options.event_handler = event_handler;
 
-    const auto result = p::iw::find_solution(brfs_solver, test_case.max_arity, options);
+    const auto result = tyr::planning::iw::find_solution(brfs_solver, test_case.max_arity, options);
 
     const auto solution_arity = event_handler->get_statistics().get_solution_arity();
-    if (result.status == p::SearchStatus::SOLVED)
+    if (result.status == tyr::planning::SearchStatus::SOLVED)
     {
         EXPECT_TRUE(solution_arity);
         if (solution_arity)
@@ -114,13 +119,13 @@ void check_expectation(const IwExpectation& expectation, const IwCase& test_case
     if (expectation.plan)
     {
         ASSERT_TRUE(result.plan);
-        expect_plan(*expectation.plan, *result.plan);
+        expect_plan(*expectation.plan, result.plan.value());
         EXPECT_TRUE(solution_arity);
     }
     if (expectation.solution_arity)
     {
         ASSERT_TRUE(solution_arity);
-        EXPECT_EQ(*solution_arity, *expectation.solution_arity);
+        EXPECT_EQ(solution_arity.value(), *expectation.solution_arity);
     }
     if (expectation.counters)
     {
@@ -129,24 +134,17 @@ void check_expectation(const IwExpectation& expectation, const IwCase& test_case
     expect_repository_statistics(context, result.statistics);
 }
 
-class IwStatisticsTest : public ::testing::TestWithParam<IwCase>
+/// Checks every configuration of one fixture case.
+template<TaskKind Kind>
+void check_iw_case(const IwCase& test_case)
 {
-};
-
-TEST_P(IwStatisticsTest, MatchesExpectedOutcome)
-{
-    const auto& test_case = GetParam();
-
     for (const auto& [key, expectation] : test_case.configs)
     {
         SCOPED_TRACE(key);
-        check_expectation(expectation, test_case);
+        check_expectation<Kind>(expectation, test_case);
     }
 }
 
-INSTANTIATE_TEST_SUITE_P(TyrPlanningIwStatistics,
-                         IwStatisticsTest,
-                         ::testing::ValuesIn(load_cases()),
-                         [](const testing::TestParamInfo<IwCase>& info) { return info.param.name; });
-
 }
+
+#endif

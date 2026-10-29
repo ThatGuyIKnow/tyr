@@ -20,13 +20,14 @@
 
 #include "tyr/datalog/cost_buckets.hpp"
 #include "tyr/datalog/fact_sets.hpp"
-#include "tyr/datalog/policies/annotation_concept.hpp"
+#include "tyr/datalog/policies/annotation_concepts.hpp"
 #include "tyr/datalog/policies/annotation_types.hpp"
-#include "tyr/datalog/policies/cost_concept.hpp"
-#include "tyr/datalog/policies/termination_concept.hpp"
+#include "tyr/datalog/policies/cost_concepts.hpp"
+#include "tyr/datalog/policies/termination_concepts.hpp"
 #include "tyr/datalog/solver.hpp"
 
 #include <concepts>
+#include <yggdrasil/execution/onetbb.hpp>
 
 namespace tyr::datalog
 {
@@ -39,7 +40,7 @@ concept SchedulerConcept = TaskKind<Kind> && AnnotationPolicyConcept<AP> && Term
                            && requires(Scheduler<Kind>& scheduler,
                                        ProgramExecutionContext<Kind, AP, TP, CP>& ctx,
                                        const CostBuckets::Bucket& bucket,
-                                       ::tyr::formalism::datalog::FunctionBindingView<::tyr::formalism::FluentTag> function) {
+                                       formalism::datalog::FunctionBindingIndex<formalism::FluentTag> function) {
                                   { scheduler.begin_stratum(ctx) } -> std::same_as<void>;
                                   { scheduler.begin_iteration(ctx) } -> std::same_as<void>;
                                   { scheduler.finish_iteration(SchedulerIterationTrigger::FactChanged) } -> std::same_as<void>;
@@ -59,14 +60,16 @@ concept SolverPolicyConcept =
 template<TaskKind Kind, AnnotationPolicyConcept AP, TerminationPolicyConcept TP, RuleCostPolicyConcept CP>
 bool commit_head_bucket(ProgramExecutionContext<Kind, AP, TP, CP>& ctx, Scheduler<Kind>& scheduler, CostBuckets& cost_buckets, Cost cost)
 {
-    auto bucket = cost_buckets.take(cost);
+    auto& bucket = cost_buckets.at(cost);
     gtl::erase_if(bucket.predicate, [&](const auto fact) { return !ctx.out().facts().insert(fact); });
     gtl::erase_if(bucket.function, [&](const auto& entry) { return !ctx.out().facts().insert(entry.first, entry.second); });
 
     // Install the entire bucket before notifying rules. The scheduler controls the representation-specific
     // notification order.
     scheduler.notify_generated(bucket, ctx);
-    return !bucket.empty();
+    const auto changed = !bucket.empty();
+    cost_buckets.erase(cost);
+    return changed;
 }
 
 template<TaskKind Kind, AnnotationPolicyConcept AP, TerminationPolicyConcept TP, RuleCostPolicyConcept CP>
@@ -77,14 +80,19 @@ void compute_model_impl(ProgramExecutionContext<Kind, AP, TP, CP>& ctx)
     while (policy.next_stratum())
     {
         Scheduler<Kind>& scheduler = policy.scheduler();
-        auto cost_buckets = CostBuckets {};
-        auto pending_achievers = PendingPredicateAchievers {};
+        auto& cost_buckets = ctx.out().cost_buckets();
+        cost_buckets.clear();
+        auto& pending_achievers = ctx.out().pending_achievers();
+        pending_achievers.clear();
         scheduler.begin_stratum(ctx);
 
         while (true)
         {
             if (ctx.out().tp().should_terminate(FactSets { ctx.in().facts().fact_sets, ctx.out().facts().fact_sets }))
+            {
+                cost_buckets.clear();
                 return;
+            }
 
             scheduler.begin_iteration(ctx);
             if (policy.generate_updates(cost_buckets, pending_achievers))
@@ -113,14 +121,23 @@ void compute_model_impl(ProgramExecutionContext<Kind, AP, TP, CP>& ctx)
 
 template<AnnotationPolicyConcept AP, TerminationPolicyConcept TP, RuleCostPolicyConcept CP>
 void compute_model(ProgramExecutionContext<GroundTag, AP, TP, CP>& ctx)
-{
-    compute_model_impl(ctx);
-}
+{ compute_model_impl(ctx); }
 
 template<AnnotationPolicyConcept AP, TerminationPolicyConcept TP, RuleCostPolicyConcept CP>
 void compute_model(ProgramExecutionContext<LiftedTag, AP, TP, CP>& ctx)
+{ compute_model_impl(ctx); }
+
+template<AnnotationPolicyConcept AP, TerminationPolicyConcept TP, RuleCostPolicyConcept CP>
+void execute_model(ProgramExecutionContext<GroundTag, AP, TP, CP>& ctx, ygg::ExecutionContext& execution_context)
 {
-    compute_model_impl(ctx);
+    execution_context.arena().execute([&] { compute_model(ctx); });
+}
+
+template<AnnotationPolicyConcept AP, TerminationPolicyConcept TP, RuleCostPolicyConcept CP>
+void execute_model(ProgramExecutionContext<LiftedTag, AP, TP, CP>& ctx, ygg::ExecutionContext& execution_context)
+{
+    ctx.set_num_threads(execution_context.get_num_threads());
+    execution_context.arena().execute([&] { compute_model(ctx); });
 }
 
 }

@@ -17,28 +17,24 @@
 
 #include "tyr/datalog/policies/numeric_support.hpp"
 
-namespace fd = tyr::formalism::datalog;
-namespace f = tyr::formalism;
-
 namespace tyr::datalog
 {
 
 NumericSupportSelector::NumericSupportSelector(const FactSets& fact_sets, const NumericIntervalAnnotations<>& annotations, bool initial_intervals_cost_zero) :
     m_fact_sets(fact_sets),
-    m_annotations(annotations),
+    m_annotations(&annotations),
     m_initial_intervals_cost_zero(initial_intervals_cost_zero)
 {
 }
 
-NumericSupportSelector::Key NumericSupportSelector::fluent_key(fd::GroundFunctionTermView<f::FluentTag> term) const noexcept { return term.get_row(); }
+NumericSupportSelector::Key NumericSupportSelector::fluent_key(formalism::datalog::FunctionTermView<GroundTag, formalism::FluentTag> term) const noexcept
+{ return term.get_row().get_index(); }
 
-ygg::ClosedInterval<ygg::float_t> NumericSupportSelector::lookup_static(fd::GroundFunctionTermView<f::StaticTag> term) const
-{
-    return m_fact_sets.static_sets.function[term];
-}
+ygg::ClosedInterval<ygg::float_t> NumericSupportSelector::lookup_static(formalism::datalog::FunctionTermView<GroundTag, formalism::StaticTag> term) const
+{ return m_fact_sets.static_sets().function[term]; }
 
-ygg::ClosedInterval<ygg::float_t> NumericSupportSelector::current_interval(Key key) const { return m_fact_sets.fluent_sets.function[key]; }
+ygg::ClosedInterval<ygg::float_t> NumericSupportSelector::current_interval(Key key) const { return m_fact_sets.fluent_sets().function[key]; }
 
-const NumericIntervalAnnotations<>::Entries* NumericSupportSelector::find_entries(Key key) const { return m_annotations.find_entries(key); }
+const NumericIntervalAnnotations<>::Entries* NumericSupportSelector::find_entries(Key key) const { return m_annotations->find_entries(key); }
 
 }

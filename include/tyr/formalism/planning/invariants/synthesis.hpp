@@ -18,12 +18,16 @@
 #ifndef TYR_FORMALISM_PLANNING_INVARIANTS_SYNTHESIS_HPP_
 #define TYR_FORMALISM_PLANNING_INVARIANTS_SYNTHESIS_HPP_
 
-#include "tyr/formalism/planning/invariants/invariant.hpp"
 #include "tyr/formalism/planning/declarations.hpp"
+#include "tyr/formalism/planning/invariant_view.hpp"
 
 namespace tyr::formalism::planning::invariant
 {
-InvariantList synthesize_invariants(DomainView domain);
+/// The invariants of the domain (Helmert 2009, Section 5), interned into `repository`: the domain's repository, or a
+/// descendant of it. Repositories that other repositories branched from must not change, so the first call for a
+/// repository must come before any task is created from it. Synthesis is deterministic and interning finds existing
+/// entries, so later calls add nothing.
+InvariantViewList synthesize_invariants(DomainView domain, Repository& repository);
 }
 
 #endif

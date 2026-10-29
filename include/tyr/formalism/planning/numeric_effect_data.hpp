@@ -20,53 +20,53 @@
 
 #include "tyr/formalism/planning/declarations.hpp"
 #include "tyr/formalism/planning/function_expression_data.hpp"
-#include "tyr/formalism/planning/function_term_index.hpp"
-#include "tyr/formalism/planning/numeric_effect_index.hpp"
 
 #include <stdexcept>
+#include <tuple>
+#include <utility>
 #include <yggdrasil/core/types.hpp>
 #include <yggdrasil/core/types_utils.hpp>
 
 namespace ygg
 {
 
-template<::tyr::formalism::FactKind T>
-struct Data<::tyr::formalism::planning::NumericEffect<T>>
+template<::tyr::TaskKind T, ::tyr::formalism::FactKind F>
+struct Data<::tyr::formalism::planning::NumericEffect<T, F>>
 {
-    static_assert(std::same_as<T, ::tyr::formalism::FluentTag> || std::same_as<T, ::tyr::formalism::AuxiliaryTag>,
-                  "Unsupported NumericEffect<T> specialization.");
-    static constexpr auto default_operator = std::same_as<T, ::tyr::formalism::AuxiliaryTag> ? ::tyr::formalism::NumericEffectOperatorKind::Increase :
+    static_assert(std::same_as<F, ::tyr::formalism::FluentTag> || std::same_as<F, ::tyr::formalism::AuxiliaryTag>,
+                  "Unsupported NumericEffect<F> specialization.");
+    static constexpr auto default_operator = std::same_as<F, ::tyr::formalism::AuxiliaryTag> ? ::tyr::formalism::NumericEffectOperatorKind::Increase :
                                                                                                ::tyr::formalism::NumericEffectOperatorKind::Assign;
 
-    ygg::Index<::tyr::formalism::planning::NumericEffect<T>> index;
+    ygg::Index<::tyr::formalism::planning::NumericEffect<T, F>> index;
     ::tyr::formalism::NumericEffectOperatorKind operator_kind = default_operator;
-    ygg::Index<::tyr::formalism::planning::FunctionTerm<T>> fterm;
-    ygg::Data<::tyr::formalism::planning::FunctionExpression> fexpr;
+    ygg::Index<::tyr::formalism::planning::FunctionTerm<T, F>> fterm;
+    ygg::Data<::tyr::formalism::planning::FunctionExpression<T>> fexpr;
 
     Data() = default;
     Data(::tyr::formalism::NumericEffectOperatorKind operator_kind_,
-         ygg::Index<::tyr::formalism::planning::FunctionTerm<T>> fterm_,
-         ygg::Data<::tyr::formalism::planning::FunctionExpression> fexpr_) :
+         ygg::Index<::tyr::formalism::planning::FunctionTerm<T, F>> fterm_,
+         ygg::Data<::tyr::formalism::planning::FunctionExpression<T>> fexpr_) :
         index(),
         operator_kind(operator_kind_),
         fterm(fterm_),
         fexpr(fexpr_)
     {
-        if constexpr (std::same_as<T, ::tyr::formalism::AuxiliaryTag>)
+        if constexpr (std::same_as<F, ::tyr::formalism::AuxiliaryTag>)
             if (operator_kind != default_operator)
                 throw std::invalid_argument("auxiliary numeric effect must be Increase");
     }
     // Python constructor
     template<typename C>
     Data(::tyr::formalism::NumericEffectOperatorKind operator_kind_,
-         ::ygg::View<ygg::Index<::tyr::formalism::planning::FunctionTerm<T>>, C> fterm_,
-         ::ygg::View<ygg::Data<::tyr::formalism::planning::FunctionExpression>, C> fexpr_) :
+         ::ygg::View<ygg::Index<::tyr::formalism::planning::FunctionTerm<T, F>>, C> fterm_,
+         ::ygg::View<ygg::Data<::tyr::formalism::planning::FunctionExpression<T>>, C> fexpr_) :
         index(),
         operator_kind(operator_kind_),
         fterm(),
         fexpr()
     {
-        if constexpr (std::same_as<T, ::tyr::formalism::AuxiliaryTag>)
+        if constexpr (std::same_as<F, ::tyr::formalism::AuxiliaryTag>)
             if (operator_kind != default_operator)
                 throw std::invalid_argument("auxiliary numeric effect must be Increase");
         ygg::set(fterm_, fterm);
@@ -76,20 +76,15 @@ struct Data<::tyr::formalism::planning::NumericEffect<T>>
     Data& operator=(const Data& other) = default;
     Data(Data&& other) = default;
     Data& operator=(Data&& other) = default;
+    ~Data() = default;
 
-    void clear() noexcept
-    {
-        ygg::clear(index);
-        operator_kind = default_operator;
-        ygg::clear(fterm);
-        ygg::clear(fexpr);
-    }
-
-    auto cista_members() const noexcept { return std::tie(index, operator_kind, fterm, fexpr); }
-    auto identifying_members() const noexcept { return std::tie(operator_kind, fterm, fexpr); }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::operator_kind, &Data::fterm, &Data::fexpr> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::operator_kind, &Data::fterm, &Data::fexpr> {}; }
+    void clear() noexcept { ygg::clear_members(*this); }
 };
 
-static_assert(!ygg::uses_trivial_storage_v<::tyr::formalism::planning::NumericEffect<::tyr::formalism::FluentTag>>);
+static_assert(!ygg::uses_trivial_storage_v<::tyr::formalism::planning::NumericEffect<::tyr::LiftedTag, ::tyr::formalism::FluentTag>>);
+static_assert(!ygg::uses_trivial_storage_v<::tyr::formalism::planning::NumericEffect<::tyr::GroundTag, ::tyr::formalism::FluentTag>>);
 
 }
 

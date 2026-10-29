@@ -31,12 +31,12 @@ namespace tyr::planning
 template<TaskKind Kind>
 struct NumericPackedStorage<Kind, HashSet> : ygg::comparison::Mixin<NumericPackedStorage<Kind, HashSet>>
 {
-    ygg::uint_t index;
+    ygg::uint_t index = 0;
 
     NumericPackedStorage() = default;
-    explicit NumericPackedStorage(ygg::uint_t index) : index(index) {}
+    explicit NumericPackedStorage(ygg::uint_t index_) : index(index_) {}
 
-    auto identifying_members() const noexcept { return std::tie(index); }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&NumericPackedStorage::index> {}; }
 };
 
 template<TaskKind Kind, bool ThreadSafe>
@@ -54,7 +54,7 @@ public:
     void unpack(const Packed& packed, Unpacked& unpacked);
 
 private:
-    typename Context::FloatVectorSet& m_float_vec_set;
+    typename Context::FloatVectorSet* m_float_vec_set;
 };
 
 }

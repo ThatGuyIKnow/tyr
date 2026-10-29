@@ -27,7 +27,8 @@
 #include <concepts>
 #include <cstdint>
 #include <limits>
-#include <oneapi/tbb/spin_mutex.h>
+#include <map>
+#include <mutex>
 #include <optional>
 #include <span>
 #include <tuple>
@@ -39,6 +40,7 @@
 #include <yggdrasil/containers/segmented_vector.hpp>
 #include <yggdrasil/core/closed_interval.hpp>
 #include <yggdrasil/core/config.hpp>
+#include <yggdrasil/core/spin_mutex.hpp>
 #include <yggdrasil/semantics/comparison.hpp>
 
 namespace tyr::datalog
@@ -46,91 +48,126 @@ namespace tyr::datalog
 
 struct NumericSupport : ygg::comparison::Mixin<NumericSupport>
 {
-    ::tyr::formalism::datalog::FunctionBindingView<::tyr::formalism::FluentTag> key;
+    formalism::datalog::FunctionBindingIndex<formalism::FluentTag> key;
     ygg::ClosedInterval<ygg::float_t> interval;
     Cost cost;
 
     NumericSupport() = delete;
-    NumericSupport(::tyr::formalism::datalog::FunctionBindingView<::tyr::formalism::FluentTag> key, ygg::ClosedInterval<ygg::float_t> interval, Cost cost) :
-        key(key),
-        interval(interval),
-        cost(cost)
+    NumericSupport(formalism::datalog::FunctionBindingIndex<formalism::FluentTag> key_, ygg::ClosedInterval<ygg::float_t> interval_, Cost cost_) :
+        key(key_),
+        interval(std::move(interval_)),
+        cost(cost_)
     {
     }
 
-    auto get_key() const noexcept { return key; }
-    auto get_interval() const noexcept { return interval; }
-    auto get_cost() const noexcept { return cost; }
+    [[nodiscard]] auto get_key() const noexcept { return key; }
+    [[nodiscard]] auto get_interval() const noexcept { return interval; }
+    [[nodiscard]] auto get_cost() const noexcept { return cost; }
 
-    auto identifying_members() const noexcept { return std::tie(key, interval, cost); }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&NumericSupport::key, &NumericSupport::interval, &NumericSupport::cost> {}; }
 };
 
-template<::tyr::formalism::RelationKind R = ::tyr::formalism::PredicateTag>
+template<formalism::RelationKind R = formalism::PredicateTag>
 struct WitnessAnnotation : ygg::comparison::Mixin<WitnessAnnotation<R>>
 {
-    using Relation = R;
-    using Metric = ygg::ClosedInterval<ygg::float_t>;
+private:
     using NumericSupports = std::vector<NumericSupport>;
 
-    WitnessAnnotation(::tyr::formalism::datalog::RuleBindingView<R> rule_key, Cost cost);
-    WitnessAnnotation(::tyr::formalism::datalog::RuleBindingView<R> rule_key, Metric metric, Cost cost);
-    WitnessAnnotation(::tyr::formalism::datalog::RuleBindingView<R> rule_key, Metric metric, Cost cost, NumericSupports numeric_supports);
-    WitnessAnnotation(::tyr::formalism::datalog::RuleBindingView<R> rule_key, Metric metric, Cost cost, std::span<const NumericSupport> numeric_supports);
+public:
+    WitnessAnnotation(formalism::datalog::RuleBindingIndex<R> rule_key, Cost cost);
+    WitnessAnnotation(formalism::datalog::RuleBindingIndex<R> rule_key, Cost cost, NumericSupports numeric_supports);
+    WitnessAnnotation(formalism::datalog::RuleBindingIndex<R> rule_key, Cost cost, std::span<const NumericSupport> numeric_supports);
 
-    auto get_rule_key() const noexcept { return rule_key; }
-    auto get_metric() const noexcept { return metric; }
-    auto get_cost() const noexcept { return cost; }
-    const auto& get_numeric_supports() const noexcept { return numeric_supports; }
+    [[nodiscard]] auto get_rule_key() const noexcept { return rule_key; }
+    [[nodiscard]] auto get_cost() const noexcept { return cost; }
+    [[nodiscard]] const auto& get_numeric_supports() const noexcept { return numeric_supports; }
 
-    auto identifying_members() const noexcept { return std::tie(rule_key, metric, cost, numeric_supports); }
+    static constexpr auto identifying_members() noexcept
+    { return ygg::Members<&WitnessAnnotation::rule_key, &WitnessAnnotation::cost, &WitnessAnnotation::numeric_supports> {}; }
 
 private:
-    ::tyr::formalism::datalog::RuleBindingView<R> rule_key;
-    Metric metric;
+    formalism::datalog::RuleBindingIndex<R> rule_key;
     Cost cost;
     NumericSupports numeric_supports;
 };
 
-using PredicateRuleBinding = ::tyr::formalism::datalog::RuleBindingView<::tyr::formalism::PredicateTag>;
+using PredicateRuleBinding = formalism::datalog::RuleBindingIndex<formalism::PredicateTag>;
 
 struct PredicateAchiever
 {
-    ::tyr::formalism::datalog::PredicateBindingView<::tyr::formalism::FluentTag> head;
-    WitnessAnnotation<::tyr::formalism::PredicateTag> witness;
+    formalism::datalog::PredicateBindingIndex<formalism::FluentTag> head;
+    WitnessAnnotation<formalism::PredicateTag> witness;
 };
 
-using PendingPredicateAchieverBuckets = ygg::Map<Cost, std::vector<PredicateRuleBinding>>;
-
-struct PendingPredicateAchiever
+struct PredicateAchieverKey : ygg::comparison::Mixin<PredicateAchieverKey>
 {
-    Cost cost;
-    PredicateAchiever achiever;
-    bool pending;
+    PredicateRuleBinding rule_key;
+    formalism::datalog::PredicateBindingIndex<formalism::FluentTag> head;
+
+    PredicateAchieverKey() = default;
+    PredicateAchieverKey(PredicateRuleBinding rule_key_, formalism::datalog::PredicateBindingIndex<formalism::FluentTag> head_) :
+        rule_key(rule_key_),
+        head(head_)
+    {
+    }
+
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&PredicateAchieverKey::rule_key, &PredicateAchieverKey::head> {}; }
 };
 
+using PendingPredicateAchieverBuckets = std::map<Cost, std::vector<PredicateAchieverKey>>;
+
+/// Owned by the program workspace and reused across solves: clear() keeps the capacity of by_key and of the bucket vectors.
 struct PendingPredicateAchievers
 {
     PendingPredicateAchieverBuckets buckets;
-    ygg::UnorderedMap<PredicateRuleBinding, PendingPredicateAchiever> by_rule;
+    ygg::UnorderedMap<PredicateAchieverKey, PredicateAchiever> by_key;  ///< Cheapest unpublished achiever per rule and head; erased once published.
+    std::vector<PendingPredicateAchieverBuckets::node_type> free_buckets;
+
+    std::vector<PredicateAchieverKey>& bucket(Cost cost)
+    {
+        if (const auto it = buckets.find(cost); it != buckets.end())
+            return it->second;
+        if (free_buckets.empty())
+            return buckets.try_emplace(cost).first->second;
+        auto node = std::move(free_buckets.back());
+        free_buckets.pop_back();
+        node.key() = cost;
+        return buckets.insert(std::move(node)).position->second;
+    }
+
+    void erase_buckets(PendingPredicateAchieverBuckets::iterator end)
+    {
+        while (buckets.begin() != end)
+        {
+            auto node = buckets.extract(buckets.begin());
+            node.mapped().clear();
+            free_buckets.push_back(std::move(node));
+        }
+    }
+
+    void clear()
+    {
+        by_key.clear();
+        erase_buckets(buckets.end());
+    }
 };
 
 inline void insert_pending_achiever(PendingPredicateAchievers& pending, PredicateAchiever achiever)
 {
     const auto cost = achiever.witness.get_cost();
-    const auto rule_key = achiever.witness.get_rule_key();
-    const auto it = pending.by_rule.find(rule_key);
-    if (it == pending.by_rule.end())
+    const auto key = PredicateAchieverKey(achiever.witness.get_rule_key(), achiever.head);
+    const auto it = pending.by_key.find(key);
+    if (it == pending.by_key.end())
     {
-        pending.by_rule.emplace(rule_key, PendingPredicateAchiever { cost, std::move(achiever), true });
+        pending.by_key.emplace(key, std::move(achiever));
     }
     else
     {
-        auto& incumbent = it->second;
-        if (incumbent.cost <= cost)
+        if (it->second.witness.get_cost() <= cost)
             return;
-        incumbent = PendingPredicateAchiever { cost, std::move(achiever), true };
+        it->second = std::move(achiever);
     }
-    pending.buckets[cost].push_back(rule_key);
+    pending.bucket(cost).push_back(key);
 }
 
 template<typename AnnotationPolicy>
@@ -138,49 +175,45 @@ void publish_pending_achievers(PendingPredicateAchievers& pending, PendingPredic
 {
     if constexpr (AnnotationPolicy::records_propositional_achievers)
         for (auto bucket = pending.buckets.begin(); bucket != end; ++bucket)
-            for (const auto rule_key : bucket->second)
+            for (const auto key : bucket->second)
             {
-                auto& entry = pending.by_rule.at(rule_key);
-                if (!entry.pending || entry.cost != bucket->first)
+                // An achiever improved into a cheaper bucket appears again in its older buckets; only its current one publishes it.
+                // Published entries are erased: record_achiever keeps the cheapest witness per (head, rule) itself.
+                const auto it = pending.by_key.find(key);
+                if (it == pending.by_key.end() || it->second.witness.get_cost() != bucket->first)
                     continue;
-                annotation_policy.record_achiever(entry.achiever.head, std::move(entry.achiever.witness));
-                entry.pending = false;
+                annotation_policy.record_achiever(it->second.head, std::move(it->second.witness));
+                pending.by_key.erase(it);
             }
-    pending.buckets.erase(pending.buckets.begin(), end);
+    pending.erase_buckets(end);
 }
 
 struct BaseAnnotation : ygg::comparison::Mixin<BaseAnnotation>
 {
 public:
-    using Metric = ygg::ClosedInterval<ygg::float_t>;
+    BaseAnnotation() : m_cost(static_cast<Cost>(0)) {}
+    explicit BaseAnnotation(Cost cost) : m_cost(cost) {}
 
-    BaseAnnotation() : m_metric(), m_cost(Cost(0)) {}
-    explicit BaseAnnotation(Cost cost) : m_metric(), m_cost(cost) {}
-    BaseAnnotation(Metric metric, Cost cost) : m_metric(metric), m_cost(cost) {}
+    [[nodiscard]] auto get_cost() const noexcept { return m_cost; }
 
-    auto get_metric() const noexcept { return m_metric; }
-    auto get_cost() const noexcept { return m_cost; }
-
-    auto identifying_members() const noexcept { return std::tie(m_metric, m_cost); }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&BaseAnnotation::m_cost> {}; }
 
 private:
-    Metric m_metric;
     Cost m_cost;
 };
 
-template<::tyr::formalism::RelationKind R = ::tyr::formalism::PredicateTag>
+template<formalism::RelationKind R = formalism::PredicateTag>
 using Annotation = std::variant<BaseAnnotation, WitnessAnnotation<R>>;
 
-template<::tyr::formalism::RelationKind R>
-inline auto get_metric(const Annotation<R>& annotation) noexcept
-{
-    return std::visit([](const auto& value) { return value.get_metric(); }, annotation);
-}
-
-template<::tyr::formalism::RelationKind R>
+template<formalism::RelationKind R>
 inline Cost get_cost(const Annotation<R>& annotation) noexcept
 {
-    return std::visit([](const auto& value) { return value.get_cost(); }, annotation);
+    // get_if rather than std::visit, which throws for a valueless variant; annotations are never valueless.
+    if (const auto* base = std::get_if<BaseAnnotation>(&annotation))
+        return base->get_cost();
+    const auto* witness = std::get_if<WitnessAnnotation<R>>(&annotation);
+    YGG_ASSUME(witness != nullptr);
+    return witness->get_cost();
 }
 
 struct CostUpdate
@@ -188,32 +221,30 @@ struct CostUpdate
     std::optional<Cost> old_cost;
     Cost new_cost;
 
-    CostUpdate() noexcept : old_cost(std::nullopt), new_cost(Cost(0)) { assert(is_monotone()); }
-    CostUpdate(std::optional<Cost> old_cost, Cost new_cost) noexcept : old_cost(old_cost), new_cost(new_cost) { assert(is_monotone()); }
-    CostUpdate(Cost old_cost, Cost new_cost) noexcept :
-        old_cost(old_cost == std::numeric_limits<Cost>::max() ? std::nullopt : std::optional<Cost>(old_cost)),
-        new_cost(new_cost)
-    {
-        assert(is_monotone());
-    }
+    CostUpdate() noexcept : old_cost(std::nullopt), new_cost(static_cast<Cost>(0)) { assert(is_monotone()); }
+    CostUpdate(std::optional<Cost> old_cost_, Cost new_cost_) noexcept : old_cost(old_cost_), new_cost(new_cost_) { assert(is_monotone()); }
+    CostUpdate(Cost old_cost_, Cost new_cost_) noexcept :
+        old_cost(old_cost_ == std::numeric_limits<Cost>::max() ? std::nullopt : std::optional<Cost>(old_cost_)),
+        new_cost(new_cost_)
+    { assert(is_monotone()); }
 
-    bool is_monotone() const noexcept { return !old_cost || new_cost <= old_cost.value(); }
-    bool is_strict_improvement() const noexcept { return new_cost < old_cost.value_or(std::numeric_limits<Cost>::max()); }
+    [[nodiscard]] bool is_monotone() const noexcept { return !old_cost || new_cost <= *old_cost; }
+    [[nodiscard]] bool is_strict_improvement() const noexcept { return new_cost < old_cost.value_or(std::numeric_limits<Cost>::max()); }
 };
 
 /// ThreadSafe permits concurrent read(), update(), and row growth after relation lanes
 /// are initialized. initialize(), clear(), find(), moves, and destruction require quiescence.
-template<::tyr::formalism::RelationKind R, std::default_initializable Value, bool ThreadSafe = false>
+template<formalism::RelationKind R, std::default_initializable Value, bool ThreadSafe = false>
 class DenseRelationMap
 {
 public:
     static constexpr bool thread_safe = ThreadSafe;
 
-    using Key = std::conditional_t<std::same_as<R, ::tyr::formalism::PredicateTag>,
-                                   ::tyr::formalism::datalog::PredicateBindingView<::tyr::formalism::FluentTag>,
-                                   ::tyr::formalism::datalog::FunctionBindingView<::tyr::formalism::FluentTag>>;
-    using Relation = decltype(std::declval<Key>().get_index().relation);
-    using Row = decltype(std::declval<Key>().get_index().row);
+    using Key = std::conditional_t<std::same_as<R, formalism::PredicateTag>,
+                                   formalism::datalog::PredicateBindingIndex<formalism::FluentTag>,
+                                   formalism::datalog::FunctionBindingIndex<formalism::FluentTag>>;
+    using Relation = decltype(std::declval<Key>().relation);
+    using Row = decltype(std::declval<Key>().row);
 
     explicit DenseRelationMap(size_t num_relations = 0) : m_lanes(num_relations) {}
     DenseRelationMap(const DenseRelationMap&)
@@ -230,6 +261,7 @@ public:
     = delete;
     DenseRelationMap(DenseRelationMap&&) noexcept = default;
     DenseRelationMap& operator=(DenseRelationMap&&) noexcept = default;
+    ~DenseRelationMap() = default;
 
     void initialize(size_t num_relations) { m_lanes = std::vector<Lane>(num_relations); }
 
@@ -238,7 +270,7 @@ public:
     template<std::invocable<const Value&> Read>
     std::invoke_result_t<Read, const Value&> read(Key key, Read&& read, std::invoke_result_t<Read, const Value&> missing) const
     {
-        const auto* slot = find_slot(key);
+        const auto* slot = find_slot(key.relation, key.row);
         if (!slot)
             return missing;
 
@@ -247,10 +279,7 @@ public:
 
     template<std::invocable<Value&, bool> Update>
     decltype(auto) update(Key key, Update&& update)
-    {
-        const auto index = key.get_index();
-        return this->update(index.relation, index.row, std::forward<Update>(update));
-    }
+    { return this->update(key.relation, key.row, std::forward<Update>(update)); }
 
     template<std::invocable<Value&, bool> Update>
     decltype(auto) update(Relation relation, Row row, Update&& update)
@@ -265,19 +294,13 @@ public:
                               });
     }
 
-    const Value* find(Key key) const noexcept
-    {
-        const auto index = key.get_index();
-        return find(index.relation, index.row);
-    }
+    [[nodiscard]] const Value* find(Key key) const noexcept { return find(key.relation, key.row); }
 
     Value* find(Key key) noexcept
         requires(!ThreadSafe)
-    {
-        return const_cast<Value*>(std::as_const(*this).find(key));
-    }
+    { return const_cast<Value*>(std::as_const(*this).find(key)); }
 
-    const Value* find(Relation relation, Row row) const noexcept
+    [[nodiscard]] const Value* find(Relation relation, Row row) const noexcept
     {
         const auto* slot = find_slot(relation, row);
         return slot && slot->generation == m_generation ? &slot->value : nullptr;
@@ -285,16 +308,14 @@ public:
 
     Value* find(Relation relation, Row row) noexcept
         requires(!ThreadSafe)
-    {
-        return const_cast<Value*>(std::as_const(*this).find(relation, row));
-    }
+    { return const_cast<Value*>(std::as_const(*this).find(relation, row)); }
 
 private:
     struct NoMutex
     {
     };
 
-    using Mutex = std::conditional_t<ThreadSafe, oneapi::tbb::spin_mutex, NoMutex>;
+    using Mutex = std::conditional_t<ThreadSafe, ygg::SpinMutex, NoMutex>;
 
     struct Slot
     {
@@ -303,14 +324,16 @@ private:
         Value value {};
     };
 
-    using Lane = std::conditional_t<ThreadSafe, ygg::SegmentedVector<Slot, 32, true>, std::vector<Slot>>;
+    static constexpr size_t first_lane_segment_size = 32;
+
+    using Lane = std::conditional_t<ThreadSafe, ygg::SegmentedVector<Slot, first_lane_segment_size, true>, std::vector<Slot>>;
 
     template<typename SlotT, typename Callback>
     static decltype(auto) with_slot_lock(SlotT& slot, Callback&& callback)
     {
         if constexpr (ThreadSafe)
         {
-            const auto lock = oneapi::tbb::spin_mutex::scoped_lock(slot.mutex);
+            const auto lock = std::lock_guard(slot.mutex);
             return std::forward<Callback>(callback)();
         }
         else
@@ -339,13 +362,7 @@ private:
         return lane[row_index];
     }
 
-    const Slot* find_slot(Key key) const noexcept
-    {
-        const auto index = key.get_index();
-        return find_slot(index.relation, index.row);
-    }
-
-    const Slot* find_slot(Relation relation, Row row) const noexcept
+    [[nodiscard]] const Slot* find_slot(Relation relation, Row row) const noexcept
     {
         const auto relation_index = ygg::uint_t(relation);
         const auto row_index = ygg::uint_t(row);
@@ -369,7 +386,7 @@ public:
     static constexpr bool thread_safe = ThreadSafe;
 
     /// Both engines key predicate annotations by the fluent predicate binding.
-    using Key = ::tyr::formalism::datalog::PredicateBindingView<::tyr::formalism::FluentTag>;
+    using Key = formalism::datalog::PredicateBindingIndex<formalism::FluentTag>;
 
     PredicateAnnotationMap()
         requires(!ThreadSafe)
@@ -385,7 +402,7 @@ public:
         m_annotations.update(key, [&](auto& incumbent, bool) { incumbent = std::move(annotation); });
     }
 
-    Cost fetch_cost(Key key) const noexcept
+    [[nodiscard]] Cost fetch_cost(Key key) const noexcept
     {
         return m_annotations.read(key, [](const auto& annotation) { return get_cost(annotation); }, std::numeric_limits<Cost>::max());
     }
@@ -405,16 +422,14 @@ public:
                                     });
     }
 
-    const Annotation<>* find(Key key) const noexcept { return m_annotations.find(key); }
+    [[nodiscard]] const Annotation<>* find(Key key) const noexcept { return m_annotations.find(key); }
 
     Annotation<>* find(Key key) noexcept
         requires(!ThreadSafe)
-    {
-        return const_cast<Annotation<>*>(std::as_const(*this).find(key));
-    }
+    { return const_cast<Annotation<>*>(std::as_const(*this).find(key)); }
 
 private:
-    DenseRelationMap<::tyr::formalism::PredicateTag, Annotation<>, ThreadSafe> m_annotations;
+    DenseRelationMap<formalism::PredicateTag, Annotation<>, ThreadSafe> m_annotations;
 };
 
 template<bool ThreadSafe = false>
@@ -423,12 +438,12 @@ using PredicateAnnotations = PredicateAnnotationMap<ThreadSafe>;
 struct NumericIntervalAnnotation
 {
     ygg::ClosedInterval<ygg::float_t> interval;
-    Annotation<::tyr::formalism::FunctionTag> annotation;
+    Annotation<formalism::FunctionTag> annotation;
 
     NumericIntervalAnnotation() = default;
-    NumericIntervalAnnotation(ygg::ClosedInterval<ygg::float_t> interval, Annotation<::tyr::formalism::FunctionTag> annotation) :
-        interval(interval),
-        annotation(std::move(annotation))
+    NumericIntervalAnnotation(ygg::ClosedInterval<ygg::float_t> interval_, Annotation<formalism::FunctionTag> annotation_) :
+        interval(std::move(interval_)),
+        annotation(std::move(annotation_))
     {
     }
 };
@@ -439,8 +454,8 @@ inline bool numeric_interval_key_less(const NumericIntervalAnnotation& lhs, cons
                           std::tuple(get_cost(rhs.annotation), lower(rhs.interval), upper(rhs.interval)));
 }
 
-inline const Annotation<::tyr::formalism::FunctionTag>* find_numeric_interval_annotation(const std::vector<NumericIntervalAnnotation>& entries,
-                                                                                         ygg::ClosedInterval<ygg::float_t> interval) noexcept
+inline const Annotation<formalism::FunctionTag>* find_numeric_interval_annotation(const std::vector<NumericIntervalAnnotation>& entries,
+                                                                                  ygg::ClosedInterval<ygg::float_t> interval) noexcept
 {
     const auto it = std::find_if(entries.begin(), entries.end(), [&](const auto& entry) { return entry.interval == interval; });
     return it == entries.end() ? nullptr : &it->annotation;
@@ -474,10 +489,17 @@ class NumericIntervalAnnotations
 public:
     static constexpr bool thread_safe = ThreadSafe;
 
-    using Binding = ::tyr::formalism::datalog::FunctionBindingView<::tyr::formalism::FluentTag>;
+private:
+    using Binding = formalism::datalog::FunctionBindingIndex<formalism::FluentTag>;
     using Entry = NumericIntervalAnnotation;
+
+public:
     using Entries = std::vector<Entry>;
-    using Storage = DenseRelationMap<::tyr::formalism::FunctionTag, Entries, ThreadSafe>;
+
+private:
+    using Storage = DenseRelationMap<formalism::FunctionTag, Entries, ThreadSafe>;
+
+public:
     using Relation = typename Storage::Relation;
     using Key = typename Storage::Row;
 
@@ -492,13 +514,11 @@ public:
         m_size = 0;
     }
 
-    size_t size() const noexcept
+    [[nodiscard]] size_t size() const noexcept
         requires(!ThreadSafe)
-    {
-        return m_size;
-    }
+    { return m_size; }
 
-    Cost fetch_cost(Binding binding, ygg::ClosedInterval<ygg::float_t> interval) const noexcept
+    [[nodiscard]] Cost fetch_cost(Binding binding, ygg::ClosedInterval<ygg::float_t> interval) const noexcept
     {
         return m_slots.read(
             binding,
@@ -510,36 +530,33 @@ public:
             std::numeric_limits<Cost>::max());
     }
 
-    const Entries* find_entries(Binding binding) const noexcept { return m_slots.find(binding); }
+    [[nodiscard]] const Entries* find_entries(Binding binding) const noexcept { return m_slots.find(binding); }
 
-    const Entries* find_entries(Relation relation, Key key) const noexcept { return m_slots.find(relation, key); }
+    [[nodiscard]] const Entries* find_entries(Relation relation, Key key) const noexcept { return m_slots.find(relation, key); }
 
-    const Annotation<::tyr::formalism::FunctionTag>* find(Binding binding) const noexcept
+    [[nodiscard]] const Annotation<formalism::FunctionTag>* find(Binding binding) const noexcept
     {
         const auto* entries = find_entries(binding);
         return (!entries || entries->empty()) ? nullptr : &entries->back().annotation;
     }
 
-    Annotation<::tyr::formalism::FunctionTag>* find(Binding binding) noexcept
+    Annotation<formalism::FunctionTag>* find(Binding binding) noexcept
         requires(!ThreadSafe)
     {
         auto* entries = m_slots.find(binding);
         return (!entries || entries->empty()) ? nullptr : &entries->back().annotation;
     }
 
-    const Annotation<::tyr::formalism::FunctionTag>* find(Binding binding, ygg::ClosedInterval<ygg::float_t> interval) const noexcept
+    [[nodiscard]] const Annotation<formalism::FunctionTag>* find(Binding binding, ygg::ClosedInterval<ygg::float_t> interval) const noexcept
     {
         const auto* entries = find_entries(binding);
-        return entries ? find_numeric_interval_annotation(*entries, interval) : nullptr;
+        return entries ? find_numeric_interval_annotation(*entries, std::move(interval)) : nullptr;
     }
 
-    bool insert(Binding binding, ygg::ClosedInterval<ygg::float_t> interval, Annotation<::tyr::formalism::FunctionTag> annotation)
-    {
-        const auto index = binding.get_index();
-        return insert(index.relation, index.row, interval, std::move(annotation));
-    }
+    bool insert(Binding binding, const ygg::ClosedInterval<ygg::float_t>& interval, Annotation<formalism::FunctionTag> annotation)
+    { return insert(binding.relation, binding.row, std::move(interval), std::move(annotation)); }
 
-    bool insert(Relation relation, Key key, ygg::ClosedInterval<ygg::float_t> interval, Annotation<::tyr::formalism::FunctionTag> annotation)
+    bool insert(Relation relation, Key key, const ygg::ClosedInterval<ygg::float_t>& interval, Annotation<formalism::FunctionTag> annotation)
     {
         if (empty(interval))
             return false;
@@ -567,24 +584,115 @@ private:
 template<bool ThreadSafe = false>
 using FunctionAnnotations = NumericIntervalAnnotations<ThreadSafe>;
 
-inline ygg::ClosedInterval<ygg::float_t> aggregate_metric_support(ygg::ClosedInterval<ygg::float_t> lhs, ygg::ClosedInterval<ygg::float_t> rhs) noexcept
-{
-    if (empty(lhs))
-        return rhs;
-    if (empty(rhs))
-        return lhs;
-    return ygg::ClosedInterval<ygg::float_t>(std::max(lower(lhs), lower(rhs)), std::max(upper(lhs), upper(rhs)));
-}
+/// Stores of staged predicate annotations: PredicateAnnotations<true> for the parallel lifted engine,
+/// StagedPredicateAnnotation for the ground engine.
+template<typename T>
+concept PredicateAnnotationStore = requires(T& store, const T& const_store, typename T::Key key, Annotation<> annotation) {
+    { const_store.fetch_cost(key) } -> std::same_as<Cost>;
+    { const_store.find(key) } -> std::same_as<const Annotation<>*>;
+    { store.insert_if_better(key, std::move(annotation)) } -> std::same_as<std::optional<CostUpdate>>;
+    store.clear();
+};
 
-inline ygg::ClosedInterval<ygg::float_t> add_metric_delta(ygg::ClosedInterval<ygg::float_t> metric, Cost delta) noexcept
-{
-    if (delta == Cost(0))
-        return metric;
-    if (empty(metric))
-        return ygg::ClosedInterval<ygg::float_t>(delta, delta);
-    return ygg::ClosedInterval<ygg::float_t>(lower(metric) + delta, upper(metric) + delta);
-}
+/// Stores of staged function annotations: FunctionAnnotations<true> for the parallel lifted engine,
+/// StagedFunctionAnnotation for the ground engine.
+template<typename T>
+concept FunctionAnnotationStore = requires(T& store,
+                                           const T& const_store,
+                                           formalism::datalog::FunctionBindingIndex<formalism::FluentTag> binding,
+                                           ygg::ClosedInterval<ygg::float_t> interval,
+                                           Annotation<formalism::FunctionTag> annotation) {
+    { const_store.fetch_cost(binding, interval) } -> std::same_as<Cost>;
+    { const_store.find(binding, interval) } -> std::same_as<const Annotation<formalism::FunctionTag>*>;
+    { store.insert(binding, interval, std::move(annotation)) } -> std::same_as<bool>;
+    store.clear();
+};
 
+/// The predicate annotations staged by one ground rule firing; the ground engine fires one rule, i.e. its few heads, at a time.
+class StagedPredicateAnnotation
+{
+public:
+    using Key = formalism::datalog::PredicateBindingIndex<formalism::FluentTag>;
+
+    void clear() noexcept { m_entries.clear(); }
+
+    [[nodiscard]] Cost fetch_cost(Key key) const noexcept
+    {
+        const auto* annotation = find(key);
+        return annotation ? get_cost(*annotation) : std::numeric_limits<Cost>::max();
+    }
+
+    [[nodiscard]] const Annotation<>* find(Key key) const noexcept
+    {
+        const auto it = std::find_if(m_entries.begin(), m_entries.end(), [&](const auto& entry) { return entry.first == key; });
+        return it != m_entries.end() ? &it->second : nullptr;
+    }
+
+    std::optional<CostUpdate> insert_if_better(Key key, Annotation<> annotation)
+    {
+        const auto new_cost = get_cost(annotation);
+        const auto it = std::find_if(m_entries.begin(), m_entries.end(), [&](const auto& entry) { return entry.first == key; });
+        if (it == m_entries.end())
+        {
+            m_entries.emplace_back(key, std::move(annotation));
+            return std::optional<CostUpdate>(std::in_place, std::nullopt, new_cost);
+        }
+
+        const auto old_cost = get_cost(it->second);
+        if (old_cost <= new_cost)
+            return std::nullopt;
+
+        it->second = std::move(annotation);
+        return std::optional<CostUpdate>(std::in_place, old_cost, new_cost);
+    }
+
+private:
+    std::vector<std::pair<Key, Annotation<>>> m_entries;
+};
+
+/// The function annotation staged by one ground rule firing (one head interval).
+class StagedFunctionAnnotation
+{
+public:
+    using Binding = formalism::datalog::FunctionBindingIndex<formalism::FluentTag>;
+
+    void clear() noexcept { m_entry.reset(); }
+
+    [[nodiscard]] Cost fetch_cost(Binding binding, const ygg::ClosedInterval<ygg::float_t>& interval) const noexcept
+    {
+        const auto* annotation = find(binding, interval);
+        return annotation ? get_cost(*annotation) : std::numeric_limits<Cost>::max();
+    }
+
+    [[nodiscard]] const Annotation<formalism::FunctionTag>* find(Binding binding, const ygg::ClosedInterval<ygg::float_t>& interval) const noexcept
+    { return m_entry && m_entry->binding == binding && m_entry->interval == interval ? &m_entry->annotation : nullptr; }
+
+    /// Same replacement rule as NumericIntervalAnnotations: an equal interval is replaced only by a strictly cheaper annotation.
+    bool insert(Binding binding, const ygg::ClosedInterval<ygg::float_t>& interval, Annotation<formalism::FunctionTag> annotation)
+    {
+        assert((!m_entry || (m_entry->binding == binding && m_entry->interval == interval)) && "A ground rule firing stages a single head interval.");
+        if (m_entry && get_cost(m_entry->annotation) <= get_cost(annotation))
+            return false;
+
+        m_entry.emplace(Entry { binding, interval, std::move(annotation) });
+        return true;
+    }
+
+private:
+    struct Entry
+    {
+        Binding binding;
+        ygg::ClosedInterval<ygg::float_t> interval;
+        Annotation<formalism::FunctionTag> annotation;
+    };
+
+    std::optional<Entry> m_entry;
+};
+
+static_assert(PredicateAnnotationStore<PredicateAnnotations<true>>);
+static_assert(PredicateAnnotationStore<StagedPredicateAnnotation>);
+static_assert(FunctionAnnotationStore<FunctionAnnotations<true>>);
+static_assert(FunctionAnnotationStore<StagedFunctionAnnotation>);
 }
 
 #endif

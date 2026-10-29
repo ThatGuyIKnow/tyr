@@ -18,11 +18,14 @@
 #ifndef TYR_PLANNING_STATE_STORAGE_HPP_
 #define TYR_PLANNING_STATE_STORAGE_HPP_
 
+#include "tyr/formalism/planning/declarations.hpp"
 #include "tyr/planning/task.hpp"
 
 #include <concepts>
+#include <limits>
 #include <tuple>
 #include <vector>
+#include <yggdrasil/containers/vector.hpp>
 #include <yggdrasil/core/config.hpp>
 
 namespace tyr::planning
@@ -34,6 +37,12 @@ namespace tyr::planning
 
 template<TaskKind Kind, typename Tag, bool ThreadSafe = false>
 struct StateStorageContext;
+
+template<typename Context>
+using ArraySetT = typename Context::ArraySet;
+
+template<typename Context>
+using UintVectorSetT = typename Context::UintVectorSet;
 
 /**
  * Backend
@@ -76,7 +85,19 @@ struct NumericUnpackedStorage
 {
     std::vector<ygg::float_t> values;
 
-    auto identifying_members() const noexcept { return std::tie(values); }
+    [[nodiscard]] ygg::float_t get(ygg::Index<formalism::planning::FunctionTerm<GroundTag, formalism::FluentTag>> index) const
+    { return ygg::get(static_cast<ygg::uint_t>(index), values, std::numeric_limits<ygg::float_t>::quiet_NaN()); }
+    void set(ygg::Index<formalism::planning::FunctionTerm<GroundTag, formalism::FluentTag>> index, ygg::float_t value)
+    {
+        ygg::set(static_cast<ygg::uint_t>(index),
+                 ygg::FloatTolerance<ygg::float_t>::canonicalize(value),
+                 values,
+                 std::numeric_limits<ygg::float_t>::quiet_NaN());
+    }
+    void clear() { values.clear(); }
+    void swap(NumericUnpackedStorage& other) noexcept { values.swap(other.values); }
+
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&NumericUnpackedStorage::values> {}; }
 };
 
 }
