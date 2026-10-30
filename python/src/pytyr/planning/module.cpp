@@ -79,6 +79,10 @@ void bind_module_definitions(nb::module_& m)
         .value("SYNCHRONOUS", astar_eager::ParallelSearchMode::SYNCHRONOUS)
         .value("ASYNCHRONOUS", astar_eager::ParallelSearchMode::ASYNCHRONOUS);
 
+    nb::enum_<astar_eager::AStarArchitecture>(m, "AStarArchitecture")
+        .value("HASH_DISTRIBUTED", astar_eager::AStarArchitecture::HASH_DISTRIBUTED)
+        .value("K_PARALLEL", astar_eager::AStarArchitecture::K_PARALLEL);
+
     auto ground_module = m.def_submodule("ground");
     bind_ground_module_definitions(ground_module);
 

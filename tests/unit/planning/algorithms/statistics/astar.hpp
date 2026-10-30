@@ -36,6 +36,7 @@ void check_statistics(const SearchStatistics& expected, const SearchCase& test_c
 
     auto options = tyr::planning::astar_eager::Options<Kind>();
     options.cost_mode = cost_mode;
+    options.search_budget.max_num_states = expected.max_num_states;
     const auto result = tyr::planning::astar_eager::find_solution(*context.task,
                                                                   *context.state_repository,
                                                                   *context.axiom_evaluator,

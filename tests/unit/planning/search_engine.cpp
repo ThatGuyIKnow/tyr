@@ -41,6 +41,7 @@
 #include "tyr/planning/ground/task.hpp"
 #include "tyr/planning/heuristic.hpp"
 #include "tyr/planning/heuristics/blind.hpp"
+#include "tyr/planning/heuristics/rpg_max.hpp"
 #include "tyr/planning/lifted/task.hpp"
 #include "tyr/planning/node.hpp"
 #include "tyr/planning/plan.hpp"
@@ -619,13 +620,18 @@ void expect_astar_evaluates_goal_heuristic_before_pop(const tyr::planning::TaskP
 }
 
 template<TaskKind Kind>
-void expect_sequential_astar_root_layer_statistics(const tyr::planning::TaskPtr<Kind>& task)
+void expect_sequential_astar_root_layer_statistics(
+    const tyr::planning::TaskPtr<Kind>& task,
+    tyr::planning::astar_eager::AStarArchitecture architecture = tyr::planning::astar_eager::AStarArchitecture::HASH_DISTRIBUTED,
+    size_t workers = 1)
 {
     auto context = make_search_context(task);
     auto heuristic = tyr::planning::BlindHeuristic<Kind>::create();
     auto event_handler = std::make_shared<RecordingAStarLayerEventHandler<Kind>>();
     auto options = tyr::planning::astar_eager::Options<Kind> {};
     options.event_handler = event_handler;
+    options.architecture = architecture;
+    options.num_search_workers = workers;
 
     const auto result =
         tyr::planning::astar_eager::find_solution(*task, *context.repository, *context.axiom_evaluator, *context.successor_generator, *heuristic, options);
@@ -1178,7 +1184,9 @@ void expect_parallel_lazy_heuristic_exceptions_propagate(const tyr::planning::Ta
 }
 
 template<TaskKind Kind>
-void expect_pending_astar_improvement_is_coalesced(const tyr::planning::TaskPtr<Kind>& task)
+void expect_pending_astar_improvement_is_coalesced(
+    const tyr::planning::TaskPtr<Kind>& task,
+    tyr::planning::astar_eager::AStarArchitecture architecture = tyr::planning::astar_eager::AStarArchitecture::HASH_DISTRIBUTED)
 {
     auto probe = make_search_context(task);
     const auto start = probe.successor_generator->get_initial_node(*probe.repository, *probe.axiom_evaluator);
@@ -1217,6 +1225,7 @@ void expect_pending_astar_improvement_is_coalesced(const tyr::planning::TaskPtr<
     auto options = tyr::planning::astar_eager::Options<Kind> {};
     options.event_handler = std::make_shared<ReleasingAStarEventHandler<Kind>>(gate, tyr::planning::TransitionOutcome::RELAXED);
     options.num_search_workers = 3;
+    options.architecture = architecture;
     options.dist_hash_mode = tyr::planning::DistHashMode::RANDOM;
     options.parallel_search_mode = tyr::planning::astar_eager::ParallelSearchMode::ASYNCHRONOUS;
     options.random_seed = seed.value();
@@ -1340,6 +1349,208 @@ TEST(TyrPlanningSearchEngineTest, AStarCompletesTheIncumbentFLayer)
     expect_astar_completes_final_layer(tasks.lifted);
 }
 
+template<TaskKind Kind>
+void expect_k_parallel_final_layer(const tyr::planning::TaskPtr<Kind>& task)
+{
+    for (const auto workers : { size_t { 1 }, size_t { 2 }, size_t { 4 } })
+    {
+        auto context = make_search_context(task, true);
+        auto heuristic = tyr::planning::BlindHeuristic<Kind>::create();
+        auto options = tyr::planning::astar_eager::Options<Kind> {};
+        options.architecture = tyr::planning::astar_eager::AStarArchitecture::K_PARALLEL;
+        options.num_search_workers = workers;
+        const auto result = tyr::planning::astar_eager::find_solution(
+            *task, *context.repository, *context.axiom_evaluator, *context.successor_generator, *heuristic, options);
+        ASSERT_EQ(result.status, tyr::planning::SearchStatus::SOLVED);
+        ASSERT_TRUE(result.plan);
+        EXPECT_EQ(result.plan->get_cost(), 2);
+        EXPECT_EQ(result.statistics.get_num_expanded(), 4);
+        EXPECT_EQ(result.statistics.get_num_generated_candidates(), 5);
+        EXPECT_EQ(result.statistics.get_num_generated_successors(), 5);
+        ASSERT_EQ(result.worker_statistics.size(), workers);
+        EXPECT_EQ(result.worker_statistics.front().get_num_registered_states(), result.statistics.get_num_registered_states());
+        for (size_t i = 1; i < workers; ++i)
+            EXPECT_EQ(result.worker_statistics[i].get_num_registered_states(), 0);
+    }
+}
+
+TEST(TyrPlanningSearchEngineTest, KParallelCompletesFinalLayerAndCountsSharedStorageOnce)
+{
+    const auto tasks = parse_tasks("parallel_search_final_layer.pddl");
+    expect_k_parallel_final_layer(tasks.ground);
+    expect_k_parallel_final_layer(tasks.lifted);
+}
+
+template<TaskKind Kind>
+void expect_k_parallel_weighted_cost(const tyr::planning::TaskPtr<Kind>& task)
+{
+    for (const auto workers : { size_t { 1 }, size_t { 2 }, size_t { 4 } })
+        for (const auto mode : { tyr::planning::astar_eager::ParallelSearchMode::SYNCHRONOUS,
+                                 tyr::planning::astar_eager::ParallelSearchMode::ASYNCHRONOUS })
+        {
+            auto context = make_search_context(task, true);
+            auto heuristic = tyr::planning::MaxRPGHeuristic<Kind>::create(task, context.execution_context, tyr::CostMode::GENERAL);
+            const auto start = context.successor_generator->get_initial_node(*context.repository, *context.axiom_evaluator);
+            EXPECT_EQ(heuristic->evaluate(start.get_state()), 2);
+            auto options = tyr::planning::astar_eager::Options<Kind> {};
+            options.architecture = tyr::planning::astar_eager::AStarArchitecture::K_PARALLEL;
+            options.num_search_workers = workers;
+            options.parallel_search_mode = mode;
+            const auto result = tyr::planning::astar_eager::find_solution(
+                *task, *context.repository, *context.axiom_evaluator, *context.successor_generator, *heuristic, options);
+            ASSERT_EQ(result.status, tyr::planning::SearchStatus::SOLVED);
+            ASSERT_TRUE(result.plan);
+            EXPECT_EQ(result.plan->get_cost(), 2);
+            EXPECT_EQ(result.plan->get_length(), 2);
+        }
+}
+
+TEST(TyrPlanningSearchEngineTest, KParallelPreservesGeneralCostHmaxAndZeroCostCycles)
+{
+    for (const auto* name : { "parallel_astar_weighted.pddl", "parallel_astar_zero_cost.pddl" })
+    {
+        const auto tasks = parse_transport_tasks(name);
+        expect_k_parallel_weighted_cost(tasks.ground);
+        expect_k_parallel_weighted_cost(tasks.lifted);
+    }
+}
+
+template<TaskKind Kind>
+class InconsistentLocationHeuristic final : public tyr::planning::Heuristic<Kind>
+{
+public:
+    using tyr::planning::Heuristic<Kind>::evaluate;
+    explicit InconsistentLocationHeuristic(tyr::planning::TaskPtr<Kind> task) : m_task(std::move(task)) {}
+    void set_goal(formalism::planning::ConjunctiveConditionView<GroundTag>) override {}
+    ygg::float_t evaluate(const ygg::Builder<tyr::planning::State<Kind>>& state) override
+    { return is_at_location(state, *m_task->get_repository(), "cheap") ? 100 : 0; }
+    tyr::planning::HeuristicPtr<Kind> make_worker(ygg::ExecutionContextPtr) const override
+    { return std::make_shared<InconsistentLocationHeuristic>(m_task); }
+private:
+    tyr::planning::TaskPtr<Kind> m_task;
+};
+
+template<TaskKind Kind>
+void expect_k_parallel_reopens_closed_state(const tyr::planning::TaskPtr<Kind>& task)
+{
+    for (const auto workers : { size_t { 1 }, size_t { 2 }, size_t { 4 } })
+    {
+        auto context = make_search_context(task, true);
+        auto heuristic = InconsistentLocationHeuristic<Kind>(task);
+        auto options = tyr::planning::astar_eager::Options<Kind> {};
+        options.architecture = tyr::planning::astar_eager::AStarArchitecture::K_PARALLEL;
+        options.num_search_workers = workers;
+        const auto result = tyr::planning::astar_eager::find_solution(
+            *task, *context.repository, *context.axiom_evaluator, *context.successor_generator, heuristic, options);
+        ASSERT_EQ(result.status, tyr::planning::SearchStatus::SOLVED);
+        ASSERT_TRUE(result.plan);
+        EXPECT_EQ(result.plan->get_cost(), 102);
+        EXPECT_EQ(result.plan->get_length(), 3);
+        EXPECT_EQ(result.statistics.get_num_expanded(), 4);
+    }
+}
+
+TEST(TyrPlanningSearchEngineTest, KParallelReopensClosedStatesWithAnAdmissibleInconsistentHeuristic)
+{
+    const auto tasks = parse_transport_tasks("parallel_astar_reopening.pddl");
+    expect_k_parallel_reopens_closed_state(tasks.ground);
+    expect_k_parallel_reopens_closed_state(tasks.lifted);
+}
+
+TEST(TyrPlanningSearchEngineTest, KParallelCoalescesImprovementDuringUnlockedHeuristicEvaluation)
+{
+    const auto tasks = parse_transport_tasks("parallel_astar_pending_improvement.pddl");
+    expect_pending_astar_improvement_is_coalesced(tasks.ground, tyr::planning::astar_eager::AStarArchitecture::K_PARALLEL);
+    expect_pending_astar_improvement_is_coalesced(tasks.lifted, tyr::planning::astar_eager::AStarArchitecture::K_PARALLEL);
+}
+
+template<TaskKind Kind>
+void expect_k_parallel_empty_open_waits_for_producer(const tyr::planning::TaskPtr<Kind>& task)
+{
+    auto context = make_search_context(task, true);
+    auto gate = std::make_shared<AStarHeuristicGate>();
+    auto heuristic = GatedLocationHeuristic<Kind>(task, gate, "goal");
+    auto saw_pending = std::atomic_bool { false };
+    auto release = std::jthread([&] {
+        if (gate->target_started.try_acquire_for(std::chrono::seconds(2)))
+        {
+            saw_pending.store(true);
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            gate->target_continue.release();
+        }
+    });
+    auto options = tyr::planning::astar_eager::Options<Kind> {};
+    options.architecture = tyr::planning::astar_eager::AStarArchitecture::K_PARALLEL;
+    options.num_search_workers = 4;
+    const auto result = tyr::planning::astar_eager::find_solution(
+        *task, *context.repository, *context.axiom_evaluator, *context.successor_generator, heuristic, options);
+    ASSERT_EQ(result.status, tyr::planning::SearchStatus::SOLVED);
+    ASSERT_TRUE(result.plan);
+    EXPECT_EQ(result.plan->get_cost(), 1);
+    EXPECT_TRUE(saw_pending.load());
+}
+
+TEST(TyrPlanningSearchEngineTest, KParallelDoesNotTerminateWithAnEmptyOpenAndPendingProducer)
+{
+    const auto tasks = parse_tasks("parallel_search_simple.pddl");
+    expect_k_parallel_empty_open_waits_for_producer(tasks.ground);
+    expect_k_parallel_empty_open_waits_for_producer(tasks.lifted);
+}
+
+TEST(TyrPlanningSearchEngineTest, KParallelExceptionsWakeWaiters)
+{
+    const auto tasks = parse_tasks("parallel_search_diamond.pddl");
+    auto context = make_search_context(tasks.lifted, true);
+    auto heuristic = LocationThrowingHeuristic<LiftedTag>(tasks.lifted, "left");
+    auto options = tyr::planning::astar_eager::Options<LiftedTag> {};
+    options.architecture = tyr::planning::astar_eager::AStarArchitecture::K_PARALLEL;
+    options.num_search_workers = 4;
+    EXPECT_THROW(tyr::planning::astar_eager::find_solution(
+        *tasks.lifted, *context.repository, *context.axiom_evaluator, *context.successor_generator, heuristic, options), std::runtime_error);
+}
+
+TEST(TyrPlanningSearchEngineTest, KParallelReportsSynchronizedLayerStatistics)
+{
+    const auto tasks = parse_tasks("parallel_search_diamond.pddl");
+    for (const auto workers : { size_t { 1 }, size_t { 2 }, size_t { 4 } })
+    {
+        expect_sequential_astar_root_layer_statistics(tasks.ground, tyr::planning::astar_eager::AStarArchitecture::K_PARALLEL, workers);
+        expect_sequential_astar_root_layer_statistics(tasks.lifted, tyr::planning::astar_eager::AStarArchitecture::K_PARALLEL, workers);
+    }
+}
+
+template<TaskKind Kind>
+void expect_k_parallel_limit_outcomes(const tyr::planning::TaskPtr<Kind>& task)
+{
+    for (const auto workers : { size_t { 1 }, size_t { 4 } })
+        for (const auto outcome : { tyr::planning::SearchStatus::EXHAUSTED, tyr::planning::SearchStatus::OUT_OF_TIME,
+                                    tyr::planning::SearchStatus::OUT_OF_STATES })
+        {
+            auto context = make_search_context(task, true);
+            auto heuristic = tyr::planning::BlindHeuristic<Kind>::create();
+            auto options = tyr::planning::astar_eager::Options<Kind> {};
+            options.architecture = tyr::planning::astar_eager::AStarArchitecture::K_PARALLEL;
+            options.num_search_workers = workers;
+            if (outcome == tyr::planning::SearchStatus::EXHAUSTED)
+                options.goal_strategy = tyr::planning::ExhaustiveGoalStrategy<Kind>::create();
+            else if (outcome == tyr::planning::SearchStatus::OUT_OF_TIME)
+                options.search_budget.max_time = std::chrono::nanoseconds(0);
+            else
+                options.search_budget.max_num_states = 1;
+            const auto result = tyr::planning::astar_eager::find_solution(
+                *task, *context.repository, *context.axiom_evaluator, *context.successor_generator, *heuristic, options);
+            EXPECT_EQ(result.status, outcome);
+            EXPECT_FALSE(result.plan);
+        }
+}
+
+TEST(TyrPlanningSearchEngineTest, KParallelReportsExhaustionAndResourceLimitsHonestly)
+{
+    const auto tasks = parse_tasks("parallel_search_simple.pddl");
+    expect_k_parallel_limit_outcomes(tasks.ground);
+    expect_k_parallel_limit_outcomes(tasks.lifted);
+}
+
 TEST(TyrPlanningSearchEngineTest, AStarEvaluatesHeuristicsBeforePopGoalChecks)
 {
     const auto tasks = parse_tasks("parallel_search_simple.pddl");
@@ -1397,7 +1608,9 @@ TEST(TyrPlanningSearchEngineTest, DuplicateDetectionPrecedesParallelAStarHeurist
 
         ASSERT_EQ(result.status, tyr::planning::SearchStatus::SOLVED);
         EXPECT_EQ(result.statistics.get_num_generated_candidates(), 5);
-        EXPECT_EQ(result.statistics.get_num_destination_lock_acquisitions(), 8);
+        // The root heuristic has no destination lock; each successor heuristic reacquires its candidate lock.
+        EXPECT_EQ(result.statistics.get_num_destination_lock_acquisitions(),
+                  result.statistics.get_num_generated_candidates() + gate->num_evaluations.load(std::memory_order_relaxed) - 1);
         EXPECT_TRUE(gate->transition_seen.load(std::memory_order_relaxed));
         EXPECT_EQ(gate->num_evaluations.load(std::memory_order_relaxed), 5);
         EXPECT_EQ(gate->num_target_evaluations.load(std::memory_order_relaxed), 1);

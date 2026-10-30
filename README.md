@@ -28,6 +28,29 @@ The library consists of a **formalism** and a **planning** component. The formal
 
 ## Python Interface
 
+### Shared-frontier A*
+
+Set `options.architecture = planning.AStarArchitecture.K_PARALLEL` and
+`options.num_search_workers = workers` for one shared OPEN queue, duplicate-detection
+table and concurrent state registry. Each worker keeps its own evaluator and
+successor-generator scratch. The default `HASH_DISTRIBUTED` architecture retains
+owner-based search with private OPEN lists; `--state-repository-mode shared` alone
+does not select K-Parallel.
+
+The executable equivalent is `build/exe/astar_eager --search-architecture k-parallel
+-M WORKERS -N 1 -H rpg_max --heuristic-cost-type general --search-cost-type general
+-D DOMAIN -P PROBLEM -O PLAN`. K-Parallel also uses this path with one worker.
+It completes the final incumbent f-layer, reopens cheaper paths, and treats
+timeout results as incomplete. Synchronous mode additionally prevents advancing
+to the next f-layer while current-layer expansions or evaluations are in flight;
+asynchronous mode still selects the global minimum without that barrier.
+
+Shared registered-state and storage counts are reported once, in worker zero's
+statistics. They describe the shared pool, not ownership imbalance. Per-worker
+expansion and idle statistics remain worker-local. Synchronous f-layer callbacks
+run under the shared search lock, so callbacks must not reenter search or wait
+for other search workers.
+
 Pytyr is available at [PyPI](https://pypi.org/project/pytyr/) and can be installed with `pip install pytyr`. 
 
 [`pytyr.serialization`](docs/serialization/index.md) provides structured native

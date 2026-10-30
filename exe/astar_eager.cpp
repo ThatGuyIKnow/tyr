@@ -66,6 +66,10 @@ int run(int argc, char** argv)
         .default_value(std::string("random"))
         .choices("random", "lmcut")
         .help("The state hash used by hash-distributed parallel search.");
+    program.add_argument("--search-architecture")
+        .default_value(std::string("hash-distributed"))
+        .choices("hash-distributed", "k-parallel")
+        .help("A* search architecture.");
     program.add_argument("--parallel-search-mode")
         .default_value(std::string("synchronous"))
         .choices("synchronous", "asynchronous")
@@ -119,6 +123,9 @@ int run(int argc, char** argv)
         auto state_repository_mode_name = program.get<std::string>("--state-repository-mode");
         auto dist_hash_mode_name = program.get<std::string>("--dist-hash-mode");
         auto dist_hash_mode = dist_hash_mode_name == "random" ? tyr::planning::DistHashMode::RANDOM : tyr::planning::DistHashMode::LMCUT;
+        auto architecture_name = program.get<std::string>("--search-architecture");
+        auto architecture = architecture_name == "k-parallel" ? tyr::planning::astar_eager::AStarArchitecture::K_PARALLEL :
+                                                               tyr::planning::astar_eager::AStarArchitecture::HASH_DISTRIBUTED;
         auto parallel_search_mode_name = program.get<std::string>("--parallel-search-mode");
         auto parallel_search_mode = parallel_search_mode_name == "synchronous" ? tyr::planning::astar_eager::ParallelSearchMode::SYNCHRONOUS :
                                                                                  tyr::planning::astar_eager::ParallelSearchMode::ASYNCHRONOUS;
@@ -141,8 +148,10 @@ int run(int argc, char** argv)
 
         std::cout << "[INPUT] Num Datalog threads: " << num_datalog_threads << '\n';
         std::cout << "[INPUT] Num search workers: " << num_search_workers << '\n';
-        std::cout << "[INPUT] State repository mode: " << state_repository_mode_name << '\n';
+        std::cout << "[INPUT] State repository mode: "
+                  << (architecture == tyr::planning::astar_eager::AStarArchitecture::K_PARALLEL ? "shared" : state_repository_mode_name) << '\n';
         std::cout << "[INPUT] Distribution hash mode: " << dist_hash_mode_name << '\n';
+        std::cout << "[INPUT] Search architecture: " << architecture_name << '\n';
         std::cout << "[INPUT] Parallel search mode: " << parallel_search_mode_name << '\n';
         std::cout << "[INPUT] Collect destination lock statistics: " << collect_destination_lock_statistics << '\n';
         std::cout << "[INPUT] Random seed: " << random_seed << '\n';
@@ -190,6 +199,7 @@ int run(int argc, char** argv)
             options.num_search_workers = num_search_workers;
             options.dist_hash_mode = dist_hash_mode;
             options.parallel_search_mode = parallel_search_mode;
+            options.architecture = architecture;
             options.collect_destination_lock_statistics = collect_destination_lock_statistics;
             options.random_seed = random_seed;
             options.shuffle_labeled_succ_nodes = shuffle_labeled_succ_nodes;
@@ -261,6 +271,7 @@ int run(int argc, char** argv)
                 options.num_search_workers = num_search_workers;
                 options.dist_hash_mode = dist_hash_mode;
                 options.parallel_search_mode = parallel_search_mode;
+                options.architecture = architecture;
                 options.collect_destination_lock_statistics = collect_destination_lock_statistics;
                 options.random_seed = random_seed;
                 options.shuffle_labeled_succ_nodes = shuffle_labeled_succ_nodes;

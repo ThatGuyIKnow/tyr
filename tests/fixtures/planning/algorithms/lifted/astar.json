@@ -18,8 +18,8 @@
             "domain_file": "classical/tests/airport/domain.pddl",
             "task_file": "classical/tests/airport/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 20,
-                "num_expanded": 18,
+                "num_generated_successors": 22,
+                "num_expanded": 20,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -38,8 +38,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 20,
-                "num_expanded": 18,
+                "num_generated_successors": 22,
+                "num_expanded": 20,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -143,8 +143,8 @@
             "domain_file": "classical/tests/assembly/domain.pddl",
             "task_file": "classical/tests/assembly/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 3,
-                "num_expanded": 1,
+                "num_generated_successors": 5,
+                "num_expanded": 3,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -156,8 +156,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 3,
-                "num_expanded": 1,
+                "num_generated_successors": 5,
+                "num_expanded": 3,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -226,8 +226,8 @@
             "domain_file": "classical/tests/barman/domain.pddl",
             "task_file": "classical/tests/barman/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 256,
-                "num_expanded": 230,
+                "num_generated_successors": 277,
+                "num_expanded": 255,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -249,8 +249,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 198,
-                "num_expanded": 170,
+                "num_generated_successors": 213,
+                "num_expanded": 185,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -272,8 +272,8 @@
                 }
             },
             "hmax_unit": {
-                "num_generated_successors": 153,
-                "num_expanded": 119,
+                "num_generated_successors": 156,
+                "num_expanded": 120,
                 "num_deadends": 8,
                 "num_pruned": 0,
                 "plan": {
@@ -318,8 +318,8 @@
                 }
             },
             "hff_unit": {
-                "num_generated_successors": 119,
-                "num_expanded": 71,
+                "num_generated_successors": 122,
+                "num_expanded": 72,
                 "num_deadends": 4,
                 "num_pruned": 0,
                 "plan": {
@@ -341,8 +341,8 @@
                 }
             },
             "hlmcut_unit": {
-                "num_generated_successors": 153,
-                "num_expanded": 119,
+                "num_generated_successors": 156,
+                "num_expanded": 120,
                 "num_deadends": 8,
                 "num_pruned": 0,
                 "plan": {
@@ -370,7 +370,7 @@
             "task_file": "classical/tests/blocks_3/test-1.pddl",
             "blind_unit": {
                 "num_generated_successors": 25,
-                "num_expanded": 21,
+                "num_expanded": 25,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -386,7 +386,7 @@
             },
             "blind_general": {
                 "num_generated_successors": 25,
-                "num_expanded": 21,
+                "num_expanded": 25,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -470,8 +470,8 @@
             "domain_file": "classical/tests/blocks_4/domain.pddl",
             "task_file": "classical/tests/blocks_4/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 13,
-                "num_expanded": 9,
+                "num_generated_successors": 16,
+                "num_expanded": 13,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -486,8 +486,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 13,
-                "num_expanded": 9,
+                "num_generated_successors": 16,
+                "num_expanded": 13,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -672,8 +672,8 @@
             "domain_file": "classical/tests/delivery/domain.pddl",
             "task_file": "classical/tests/delivery/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 9,
-                "num_expanded": 7,
+                "num_generated_successors": 12,
+                "num_expanded": 9,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -688,8 +688,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 9,
-                "num_expanded": 7,
+                "num_generated_successors": 12,
+                "num_expanded": 9,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -943,7 +943,7 @@
             },
             "hmax_unit": {
                 "num_generated_successors": 14,
-                "num_expanded": 13,
+                "num_expanded": 14,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -962,7 +962,7 @@
             },
             "hadd_unit": {
                 "num_generated_successors": 14,
-                "num_expanded": 13,
+                "num_expanded": 14,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -981,7 +981,7 @@
             },
             "hff_unit": {
                 "num_generated_successors": 14,
-                "num_expanded": 13,
+                "num_expanded": 14,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -1000,7 +1000,7 @@
             },
             "hlmcut_unit": {
                 "num_generated_successors": 14,
-                "num_expanded": 13,
+                "num_expanded": 14,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -1023,8 +1023,8 @@
             "domain_file": "classical/tests/grid/domain.pddl",
             "task_file": "classical/tests/grid/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 12,
-                "num_expanded": 7,
+                "num_generated_successors": 20,
+                "num_expanded": 12,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -1039,8 +1039,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 12,
-                "num_expanded": 7,
+                "num_generated_successors": 20,
+                "num_expanded": 12,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -1124,8 +1124,8 @@
             "domain_file": "classical/tests/gripper/domain.pddl",
             "task_file": "classical/tests/gripper/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 15,
-                "num_expanded": 12,
+                "num_generated_successors": 20,
+                "num_expanded": 15,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -1139,8 +1139,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 15,
-                "num_expanded": 12,
+                "num_generated_successors": 20,
+                "num_expanded": 15,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -1155,7 +1155,7 @@
             },
             "hmax_unit": {
                 "num_generated_successors": 12,
-                "num_expanded": 6,
+                "num_expanded": 7,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -1170,7 +1170,7 @@
             },
             "hadd_unit": {
                 "num_generated_successors": 10,
-                "num_expanded": 4,
+                "num_expanded": 5,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -1185,7 +1185,7 @@
             },
             "hff_unit": {
                 "num_generated_successors": 10,
-                "num_expanded": 4,
+                "num_expanded": 5,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -1200,7 +1200,7 @@
             },
             "hlmcut_unit": {
                 "num_generated_successors": 12,
-                "num_expanded": 6,
+                "num_expanded": 7,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -1422,7 +1422,7 @@
             "task_file": "classical/tests/miconic/test-1.pddl",
             "blind_unit": {
                 "num_generated_successors": 16,
-                "num_expanded": 14,
+                "num_expanded": 16,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -1439,7 +1439,7 @@
             },
             "blind_general": {
                 "num_generated_successors": 16,
-                "num_expanded": 14,
+                "num_expanded": 16,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -1455,8 +1455,8 @@
                 }
             },
             "hmax_unit": {
-                "num_generated_successors": 13,
-                "num_expanded": 9,
+                "num_generated_successors": 14,
+                "num_expanded": 10,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -1472,8 +1472,8 @@
                 }
             },
             "hadd_unit": {
-                "num_generated_successors": 11,
-                "num_expanded": 6,
+                "num_generated_successors": 12,
+                "num_expanded": 7,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -1489,8 +1489,8 @@
                 }
             },
             "hff_unit": {
-                "num_generated_successors": 11,
-                "num_expanded": 6,
+                "num_generated_successors": 12,
+                "num_expanded": 7,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -1506,8 +1506,8 @@
                 }
             },
             "hlmcut_unit": {
-                "num_generated_successors": 11,
-                "num_expanded": 6,
+                "num_generated_successors": 12,
+                "num_expanded": 7,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -1528,8 +1528,8 @@
             "domain_file": "classical/tests/miconic-fulladl/domain.pddl",
             "task_file": "classical/tests/miconic-fulladl/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 54,
-                "num_expanded": 41,
+                "num_generated_successors": 68,
+                "num_expanded": 54,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -1547,8 +1547,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 54,
-                "num_expanded": 41,
+                "num_generated_successors": 68,
+                "num_expanded": 54,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -1566,8 +1566,8 @@
                 }
             },
             "hmax_unit": {
-                "num_generated_successors": 54,
-                "num_expanded": 41,
+                "num_generated_successors": 68,
+                "num_expanded": 54,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -1585,8 +1585,8 @@
                 }
             },
             "hadd_unit": {
-                "num_generated_successors": 54,
-                "num_expanded": 41,
+                "num_generated_successors": 68,
+                "num_expanded": 54,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -1604,8 +1604,8 @@
                 }
             },
             "hff_unit": {
-                "num_generated_successors": 54,
-                "num_expanded": 41,
+                "num_generated_successors": 68,
+                "num_expanded": 54,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -1623,8 +1623,8 @@
                 }
             },
             "hlmcut_unit": {
-                "num_generated_successors": 54,
-                "num_expanded": 41,
+                "num_generated_successors": 68,
+                "num_expanded": 54,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -1748,8 +1748,8 @@
             "domain_file": "classical/tests/parcprinter/domain.pddl",
             "task_file": "classical/tests/parcprinter/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 23,
-                "num_expanded": 18,
+                "num_generated_successors": 29,
+                "num_expanded": 23,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -1768,8 +1768,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 27,
-                "num_expanded": 23,
+                "num_generated_successors": 29,
+                "num_expanded": 24,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -1876,8 +1876,8 @@
             "domain_file": "classical/tests/pathways/domain.pddl",
             "task_file": "classical/tests/pathways/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 5175,
-                "num_expanded": 4444,
+                "num_generated_successors": 5587,
+                "num_expanded": 5175,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -1894,8 +1894,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 5175,
-                "num_expanded": 4444,
+                "num_generated_successors": 5587,
+                "num_expanded": 5175,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -1989,8 +1989,8 @@
             "domain_file": "classical/tests/philosophers/domain.pddl",
             "task_file": "classical/tests/philosophers/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 135,
-                "num_expanded": 125,
+                "num_generated_successors": 143,
+                "num_expanded": 135,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2019,8 +2019,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 135,
-                "num_expanded": 125,
+                "num_generated_successors": 143,
+                "num_expanded": 135,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2049,8 +2049,8 @@
                 }
             },
             "hmax_unit": {
-                "num_generated_successors": 135,
-                "num_expanded": 125,
+                "num_generated_successors": 143,
+                "num_expanded": 135,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2079,8 +2079,8 @@
                 }
             },
             "hadd_unit": {
-                "num_generated_successors": 135,
-                "num_expanded": 125,
+                "num_generated_successors": 143,
+                "num_expanded": 135,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2109,8 +2109,8 @@
                 }
             },
             "hff_unit": {
-                "num_generated_successors": 135,
-                "num_expanded": 125,
+                "num_generated_successors": 143,
+                "num_expanded": 135,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2139,8 +2139,8 @@
                 }
             },
             "hlmcut_unit": {
-                "num_generated_successors": 135,
-                "num_expanded": 125,
+                "num_generated_successors": 143,
+                "num_expanded": 135,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2174,8 +2174,8 @@
             "domain_file": "classical/tests/psr-middle/domain.pddl",
             "task_file": "classical/tests/psr-middle/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 368,
-                "num_expanded": 91,
+                "num_generated_successors": 1056,
+                "num_expanded": 368,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2190,8 +2190,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 368,
-                "num_expanded": 91,
+                "num_generated_successors": 1056,
+                "num_expanded": 368,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2206,8 +2206,8 @@
                 }
             },
             "hmax_unit": {
-                "num_generated_successors": 368,
-                "num_expanded": 91,
+                "num_generated_successors": 1056,
+                "num_expanded": 368,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2222,8 +2222,8 @@
                 }
             },
             "hadd_unit": {
-                "num_generated_successors": 368,
-                "num_expanded": 91,
+                "num_generated_successors": 1056,
+                "num_expanded": 368,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2238,8 +2238,8 @@
                 }
             },
             "hff_unit": {
-                "num_generated_successors": 368,
-                "num_expanded": 91,
+                "num_generated_successors": 1056,
+                "num_expanded": 368,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2254,8 +2254,8 @@
                 }
             },
             "hlmcut_unit": {
-                "num_generated_successors": 368,
-                "num_expanded": 91,
+                "num_generated_successors": 1056,
+                "num_expanded": 368,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2288,8 +2288,8 @@
             "domain_file": "classical/tests/reward/domain.pddl",
             "task_file": "classical/tests/reward/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 8,
-                "num_expanded": 7,
+                "num_generated_successors": 10,
+                "num_expanded": 8,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2304,8 +2304,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 8,
-                "num_expanded": 7,
+                "num_generated_successors": 10,
+                "num_expanded": 8,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2389,8 +2389,8 @@
             "domain_file": "classical/tests/rovers/domain.pddl",
             "task_file": "classical/tests/rovers/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 14,
-                "num_expanded": 10,
+                "num_generated_successors": 19,
+                "num_expanded": 14,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2405,8 +2405,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 14,
-                "num_expanded": 10,
+                "num_generated_successors": 19,
+                "num_expanded": 14,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2490,8 +2490,8 @@
             "domain_file": "classical/tests/satellite/domain.pddl",
             "task_file": "classical/tests/satellite/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 122,
-                "num_expanded": 56,
+                "num_generated_successors": 230,
+                "num_expanded": 121,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2509,8 +2509,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 122,
-                "num_expanded": 56,
+                "num_generated_successors": 230,
+                "num_expanded": 121,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2528,8 +2528,8 @@
                 }
             },
             "hmax_unit": {
-                "num_generated_successors": 58,
-                "num_expanded": 26,
+                "num_generated_successors": 61,
+                "num_expanded": 27,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2547,8 +2547,8 @@
                 }
             },
             "hadd_unit": {
-                "num_generated_successors": 28,
-                "num_expanded": 9,
+                "num_generated_successors": 31,
+                "num_expanded": 10,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2566,8 +2566,8 @@
                 }
             },
             "hff_unit": {
-                "num_generated_successors": 28,
-                "num_expanded": 12,
+                "num_generated_successors": 31,
+                "num_expanded": 13,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2585,8 +2585,8 @@
                 }
             },
             "hlmcut_unit": {
-                "num_generated_successors": 28,
-                "num_expanded": 12,
+                "num_generated_successors": 31,
+                "num_expanded": 13,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2609,8 +2609,8 @@
             "domain_file": "classical/tests/schedule/domain.pddl",
             "task_file": "classical/tests/schedule/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 485,
-                "num_expanded": 45,
+                "num_generated_successors": 2185,
+                "num_expanded": 484,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2623,6 +2623,20 @@
                 }
             },
             "blind_general": {
+                "num_generated_successors": 2185,
+                "num_expanded": 484,
+                "num_deadends": 0,
+                "num_pruned": 0,
+                "plan": {
+                    "cost": 2,
+                    "length": 2,
+                    "actions": [
+                        "(do-lathe a0)",
+                        "(do-roll b0)"
+                    ]
+                }
+            },
+            "hmax_unit": {
                 "num_generated_successors": 485,
                 "num_expanded": 45,
                 "num_deadends": 0,
@@ -2636,23 +2650,9 @@
                     ]
                 }
             },
-            "hmax_unit": {
-                "num_generated_successors": 373,
-                "num_expanded": 22,
-                "num_deadends": 0,
-                "num_pruned": 0,
-                "plan": {
-                    "cost": 2,
-                    "length": 2,
-                    "actions": [
-                        "(do-lathe a0)",
-                        "(do-roll b0)"
-                    ]
-                }
-            },
             "hadd_unit": {
-                "num_generated_successors": 66,
-                "num_expanded": 2,
+                "num_generated_successors": 130,
+                "num_expanded": 5,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2665,8 +2665,8 @@
                 }
             },
             "hff_unit": {
-                "num_generated_successors": 66,
-                "num_expanded": 2,
+                "num_generated_successors": 130,
+                "num_expanded": 5,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2679,8 +2679,8 @@
                 }
             },
             "hlmcut_unit": {
-                "num_generated_successors": 66,
-                "num_expanded": 2,
+                "num_generated_successors": 130,
+                "num_expanded": 5,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2698,9 +2698,9 @@
             "domain_file": "classical/tests/sokoban/domain.pddl",
             "task_file": "classical/tests/sokoban/test-1.pddl",
             "hff_unit": {
-                "num_generated_successors": 1083,
-                "num_expanded": 497,
-                "num_deadends": 34,
+                "num_generated_successors": 964,
+                "num_expanded": 420,
+                "num_deadends": 27,
                 "num_pruned": 0,
                 "plan": {
                     "cost": 38,
@@ -2861,8 +2861,8 @@
             "domain_file": "classical/tests/transport/domain.pddl",
             "task_file": "classical/tests/transport/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 132,
-                "num_expanded": 85,
+                "num_generated_successors": 172,
+                "num_expanded": 132,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2895,8 +2895,8 @@
                 }
             },
             "hmax_unit": {
-                "num_generated_successors": 81,
-                "num_expanded": 35,
+                "num_generated_successors": 86,
+                "num_expanded": 37,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2912,6 +2912,23 @@
                 }
             },
             "hadd_unit": {
+                "num_generated_successors": 25,
+                "num_expanded": 8,
+                "num_deadends": 0,
+                "num_pruned": 0,
+                "plan": {
+                    "cost": 5,
+                    "length": 5,
+                    "actions": [
+                        "(pick-up truck-1 city-loc-3 package-1 capacity-3 capacity-4)",
+                        "(pick-up truck-1 city-loc-3 package-2 capacity-2 capacity-3)",
+                        "(drive truck-1 city-loc-3 city-loc-2)",
+                        "(drop truck-1 city-loc-2 package-1 capacity-2 capacity-3)",
+                        "(drop truck-1 city-loc-2 package-2 capacity-3 capacity-4)"
+                    ]
+                }
+            },
+            "hff_unit": {
                 "num_generated_successors": 23,
                 "num_expanded": 7,
                 "num_deadends": 0,
@@ -2928,26 +2945,9 @@
                     ]
                 }
             },
-            "hff_unit": {
-                "num_generated_successors": 21,
-                "num_expanded": 6,
-                "num_deadends": 0,
-                "num_pruned": 0,
-                "plan": {
-                    "cost": 5,
-                    "length": 5,
-                    "actions": [
-                        "(pick-up truck-1 city-loc-3 package-1 capacity-3 capacity-4)",
-                        "(pick-up truck-1 city-loc-3 package-2 capacity-2 capacity-3)",
-                        "(drive truck-1 city-loc-3 city-loc-2)",
-                        "(drop truck-1 city-loc-2 package-1 capacity-2 capacity-3)",
-                        "(drop truck-1 city-loc-2 package-2 capacity-3 capacity-4)"
-                    ]
-                }
-            },
             "hlmcut_unit": {
-                "num_generated_successors": 46,
-                "num_expanded": 17,
+                "num_generated_successors": 48,
+                "num_expanded": 18,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2968,8 +2968,8 @@
             "domain_file": "classical/tests/visitall/domain.pddl",
             "task_file": "classical/tests/visitall/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 47,
-                "num_expanded": 41,
+                "num_generated_successors": 51,
+                "num_expanded": 47,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -2988,8 +2988,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 47,
-                "num_expanded": 41,
+                "num_generated_successors": 51,
+                "num_expanded": 47,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3099,8 +3099,8 @@
             "domain_file": "classical/tests/woodworking/domain.pddl",
             "task_file": "classical/tests/woodworking/test-1.pddl",
             "blind_general": {
-                "num_generated_successors": 14208,
-                "num_expanded": 10685,
+                "num_generated_successors": 14826,
+                "num_expanded": 11544,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3120,8 +3120,8 @@
                 }
             },
             "hmax_unit": {
-                "num_generated_successors": 3640,
-                "num_expanded": 2000,
+                "num_generated_successors": 4000,
+                "num_expanded": 2107,
                 "num_deadends": 654,
                 "num_pruned": 0,
                 "plan": {
@@ -3141,30 +3141,29 @@
                 }
             },
             "hadd_unit": {
-                "num_generated_successors": 486,
-                "num_expanded": 109,
+                "num_generated_successors": 507,
+                "num_expanded": 106,
                 "num_deadends": 3,
                 "num_pruned": 0,
                 "plan": {
-                    "cost": 10,
-                    "length": 10,
+                    "cost": 9,
+                    "length": 9,
                     "actions": [
                         "(do-saw-medium b0 p0 saw0 beech rough s3 s2 s1)",
                         "(do-saw-medium b1 p1 saw0 cherry rough s3 s2 s1)",
-                        "(do-glaze p1 glazer0 green)",
                         "(do-plane p0 planer0 rough natural untreated)",
+                        "(do-plane p1 planer0 rough natural untreated)",
+                        "(do-glaze p1 glazer0 green)",
                         "(do-grind p0 grinder0 smooth natural untreated untreated)",
                         "(do-immersion-varnish p0 immersion-varnisher0 mauve verysmooth)",
-                        "(do-plane p1 planer0 rough green glazed)",
-                        "(do-glaze p1 glazer0 green)",
                         "(do-grind p2 grinder0 verysmooth natural colourfragments untreated)",
                         "(do-glaze p2 glazer0 mauve)"
                     ]
                 }
             },
             "hff_unit": {
-                "num_generated_successors": 577,
-                "num_expanded": 98,
+                "num_generated_successors": 601,
+                "num_expanded": 103,
                 "num_deadends": 26,
                 "num_pruned": 0,
                 "plan": {
@@ -3193,8 +3192,8 @@
             "domain_file": "numeric/tests/fo-counters/domain.pddl",
             "task_file": "numeric/tests/fo-counters/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 283,
-                "num_expanded": 113,
+                "num_generated_successors": 651,
+                "num_expanded": 282,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3210,8 +3209,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 283,
-                "num_expanded": 113,
+                "num_generated_successors": 651,
+                "num_expanded": 282,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3227,8 +3226,8 @@
                 }
             },
             "hmax_unit": {
-                "num_generated_successors": 159,
-                "num_expanded": 53,
+                "num_generated_successors": 171,
+                "num_expanded": 58,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3244,8 +3243,8 @@
                 }
             },
             "hadd_unit": {
-                "num_generated_successors": 69,
-                "num_expanded": 18,
+                "num_generated_successors": 91,
+                "num_expanded": 25,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3261,8 +3260,8 @@
                 }
             },
             "hff_unit": {
-                "num_generated_successors": 74,
-                "num_expanded": 20,
+                "num_generated_successors": 96,
+                "num_expanded": 27,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3278,8 +3277,8 @@
                 }
             },
             "hlmcut_unit": {
-                "num_generated_successors": 159,
-                "num_expanded": 53,
+                "num_generated_successors": 171,
+                "num_expanded": 58,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3407,8 +3406,8 @@
             "domain_file": "numeric/tests/refuel-adl/domain.pddl",
             "task_file": "numeric/tests/refuel-adl/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 335,
-                "num_expanded": 320,
+                "num_generated_successors": 341,
+                "num_expanded": 335,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3429,8 +3428,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 335,
-                "num_expanded": 320,
+                "num_generated_successors": 341,
+                "num_expanded": 335,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3451,8 +3450,8 @@
                 }
             },
             "hmax_unit": {
-                "num_generated_successors": 335,
-                "num_expanded": 320,
+                "num_generated_successors": 341,
+                "num_expanded": 335,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3473,8 +3472,8 @@
                 }
             },
             "hadd_unit": {
-                "num_generated_successors": 335,
-                "num_expanded": 320,
+                "num_generated_successors": 341,
+                "num_expanded": 335,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3495,8 +3494,8 @@
                 }
             },
             "hff_unit": {
-                "num_generated_successors": 335,
-                "num_expanded": 320,
+                "num_generated_successors": 341,
+                "num_expanded": 335,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3517,8 +3516,8 @@
                 }
             },
             "hlmcut_unit": {
-                "num_generated_successors": 335,
-                "num_expanded": 320,
+                "num_generated_successors": 341,
+                "num_expanded": 335,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3544,8 +3543,8 @@
             "domain_file": "numeric/tests/tpp/domain.pddl",
             "task_file": "numeric/tests/tpp/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 567,
-                "num_expanded": 367,
+                "num_generated_successors": 789,
+                "num_expanded": 566,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3584,8 +3583,8 @@
                 }
             },
             "hmax_unit": {
-                "num_generated_successors": 344,
-                "num_expanded": 163,
+                "num_generated_successors": 401,
+                "num_expanded": 194,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3641,8 +3640,8 @@
                 }
             },
             "hlmcut_unit": {
-                "num_generated_successors": 344,
-                "num_expanded": 163,
+                "num_generated_successors": 401,
+                "num_expanded": 194,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3665,8 +3664,8 @@
             "domain_file": "numeric/tests/zenotravel/domain.pddl",
             "task_file": "numeric/tests/zenotravel/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 1768,
-                "num_expanded": 1084,
+                "num_generated_successors": 2767,
+                "num_expanded": 1767,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3686,8 +3685,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 454,
-                "num_expanded": 254,
+                "num_generated_successors": 533,
+                "num_expanded": 311,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3707,8 +3706,8 @@
                 }
             },
             "hmax_unit": {
-                "num_generated_successors": 577,
-                "num_expanded": 277,
+                "num_generated_successors": 669,
+                "num_expanded": 309,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3728,8 +3727,8 @@
                 }
             },
             "hadd_unit": {
-                "num_generated_successors": 45,
-                "num_expanded": 14,
+                "num_generated_successors": 46,
+                "num_expanded": 15,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3749,8 +3748,8 @@
                 }
             },
             "hff_unit": {
-                "num_generated_successors": 79,
-                "num_expanded": 27,
+                "num_generated_successors": 81,
+                "num_expanded": 30,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3770,8 +3769,8 @@
                 }
             },
             "hlmcut_unit": {
-                "num_generated_successors": 137,
-                "num_expanded": 52,
+                "num_generated_successors": 139,
+                "num_expanded": 55,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3796,8 +3795,8 @@
             "domain_file": "numeric/tests/block-grouping/domain.pddl",
             "task_file": "numeric/tests/block-grouping/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 199,
-                "num_expanded": 20,
+                "num_generated_successors": 1340,
+                "num_expanded": 199,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3810,8 +3809,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 199,
-                "num_expanded": 20,
+                "num_generated_successors": 1340,
+                "num_expanded": 199,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3824,8 +3823,8 @@
                 }
             },
             "hmax_unit": {
-                "num_generated_successors": 37,
-                "num_expanded": 2,
+                "num_generated_successors": 198,
+                "num_expanded": 19,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3838,8 +3837,8 @@
                 }
             },
             "hadd_unit": {
-                "num_generated_successors": 37,
-                "num_expanded": 2,
+                "num_generated_successors": 55,
+                "num_expanded": 3,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3852,8 +3851,8 @@
                 }
             },
             "hff_unit": {
-                "num_generated_successors": 37,
-                "num_expanded": 2,
+                "num_generated_successors": 55,
+                "num_expanded": 3,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3866,8 +3865,8 @@
                 }
             },
             "hlmcut_unit": {
-                "num_generated_successors": 37,
-                "num_expanded": 2,
+                "num_generated_successors": 198,
+                "num_expanded": 19,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3885,8 +3884,8 @@
             "domain_file": "numeric/tests/counters/domain.pddl",
             "task_file": "numeric/tests/counters/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 3904,
-                "num_expanded": 3277,
+                "num_generated_successors": 4496,
+                "num_expanded": 3901,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3909,8 +3908,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 3904,
-                "num_expanded": 3277,
+                "num_generated_successors": 4496,
+                "num_expanded": 3901,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3933,8 +3932,8 @@
                 }
             },
             "hmax_unit": {
-                "num_generated_successors": 2927,
-                "num_expanded": 2124,
+                "num_generated_successors": 3073,
+                "num_expanded": 2201,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3957,8 +3956,8 @@
                 }
             },
             "hadd_unit": {
-                "num_generated_successors": 1191,
-                "num_expanded": 547,
+                "num_generated_successors": 1242,
+                "num_expanded": 564,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -3981,8 +3980,8 @@
                 }
             },
             "hff_unit": {
-                "num_generated_successors": 2067,
-                "num_expanded": 1274,
+                "num_generated_successors": 2118,
+                "num_expanded": 1292,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4005,8 +4004,8 @@
                 }
             },
             "hlmcut_unit": {
-                "num_generated_successors": 2927,
-                "num_expanded": 2124,
+                "num_generated_successors": 3073,
+                "num_expanded": 2201,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4034,8 +4033,8 @@
             "domain_file": "numeric/tests/delivery/domain.pddl",
             "task_file": "numeric/tests/delivery/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 818,
-                "num_expanded": 171,
+                "num_generated_successors": 2908,
+                "num_expanded": 817,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4049,8 +4048,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 3051,
-                "num_expanded": 531,
+                "num_generated_successors": 5900,
+                "num_expanded": 1293,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4064,8 +4063,8 @@
                 }
             },
             "hmax_unit": {
-                "num_generated_successors": 181,
-                "num_expanded": 22,
+                "num_generated_successors": 210,
+                "num_expanded": 25,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4079,8 +4078,8 @@
                 }
             },
             "hadd_unit": {
-                "num_generated_successors": 86,
-                "num_expanded": 6,
+                "num_generated_successors": 115,
+                "num_expanded": 9,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4094,8 +4093,8 @@
                 }
             },
             "hff_unit": {
-                "num_generated_successors": 86,
-                "num_expanded": 6,
+                "num_generated_successors": 115,
+                "num_expanded": 9,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4109,8 +4108,8 @@
                 }
             },
             "hlmcut_unit": {
-                "num_generated_successors": 181,
-                "num_expanded": 22,
+                "num_generated_successors": 210,
+                "num_expanded": 25,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4129,8 +4128,8 @@
             "domain_file": "numeric/tests/drone/domain.pddl",
             "task_file": "numeric/tests/drone/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 76,
-                "num_expanded": 39,
+                "num_generated_successors": 127,
+                "num_expanded": 76,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4145,8 +4144,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 76,
-                "num_expanded": 39,
+                "num_generated_successors": 127,
+                "num_expanded": 76,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4161,8 +4160,8 @@
                 }
             },
             "hmax_unit": {
-                "num_generated_successors": 43,
-                "num_expanded": 16,
+                "num_generated_successors": 55,
+                "num_expanded": 19,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4193,8 +4192,8 @@
                 }
             },
             "hff_unit": {
-                "num_generated_successors": 35,
-                "num_expanded": 8,
+                "num_generated_successors": 39,
+                "num_expanded": 9,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4209,8 +4208,8 @@
                 }
             },
             "hlmcut_unit": {
-                "num_generated_successors": 31,
-                "num_expanded": 9,
+                "num_generated_successors": 48,
+                "num_expanded": 13,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4230,8 +4229,8 @@
             "domain_file": "numeric/tests/expedition/domain.pddl",
             "task_file": "numeric/tests/expedition/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 6,
-                "num_expanded": 1,
+                "num_generated_successors": 19,
+                "num_expanded": 6,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4243,8 +4242,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 6,
-                "num_expanded": 1,
+                "num_generated_successors": 19,
+                "num_expanded": 6,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4313,8 +4312,8 @@
             "domain_file": "numeric/tests/ext-plant-watering/domain.pddl",
             "task_file": "numeric/tests/ext-plant-watering/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 7427,
-                "num_expanded": 4883,
+                "num_generated_successors": 11065,
+                "num_expanded": 7427,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4333,8 +4332,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 7427,
-                "num_expanded": 4883,
+                "num_generated_successors": 11065,
+                "num_expanded": 7427,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4383,8 +4382,8 @@
             "domain_file": "numeric/tests/farmland/domain.pddl",
             "task_file": "numeric/tests/farmland/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 7,
-                "num_expanded": 4,
+                "num_generated_successors": 11,
+                "num_expanded": 6,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4397,6 +4396,48 @@
                 }
             },
             "blind_general": {
+                "num_generated_successors": 11,
+                "num_expanded": 6,
+                "num_deadends": 0,
+                "num_pruned": 0,
+                "plan": {
+                    "cost": 2,
+                    "length": 2,
+                    "actions": [
+                        "(move-fast farm0 farm1)",
+                        "(move-fast farm0 farm1)"
+                    ]
+                }
+            },
+            "hmax_unit": {
+                "num_generated_successors": 7,
+                "num_expanded": 3,
+                "num_deadends": 0,
+                "num_pruned": 0,
+                "plan": {
+                    "cost": 2,
+                    "length": 2,
+                    "actions": [
+                        "(move-fast farm0 farm1)",
+                        "(move-fast farm0 farm1)"
+                    ]
+                }
+            },
+            "hadd_unit": {
+                "num_generated_successors": 7,
+                "num_expanded": 3,
+                "num_deadends": 0,
+                "num_pruned": 0,
+                "plan": {
+                    "cost": 2,
+                    "length": 2,
+                    "actions": [
+                        "(move-fast farm0 farm1)",
+                        "(move-fast farm0 farm1)"
+                    ]
+                }
+            },
+            "hff_unit": {
                 "num_generated_successors": 7,
                 "num_expanded": 4,
                 "num_deadends": 0,
@@ -4410,51 +4451,9 @@
                     ]
                 }
             },
-            "hmax_unit": {
-                "num_generated_successors": 6,
-                "num_expanded": 2,
-                "num_deadends": 0,
-                "num_pruned": 0,
-                "plan": {
-                    "cost": 2,
-                    "length": 2,
-                    "actions": [
-                        "(move-fast farm0 farm1)",
-                        "(move-fast farm0 farm1)"
-                    ]
-                }
-            },
-            "hadd_unit": {
-                "num_generated_successors": 6,
-                "num_expanded": 2,
-                "num_deadends": 0,
-                "num_pruned": 0,
-                "plan": {
-                    "cost": 2,
-                    "length": 2,
-                    "actions": [
-                        "(move-fast farm0 farm1)",
-                        "(move-fast farm0 farm1)"
-                    ]
-                }
-            },
-            "hff_unit": {
-                "num_generated_successors": 6,
-                "num_expanded": 2,
-                "num_deadends": 0,
-                "num_pruned": 0,
-                "plan": {
-                    "cost": 2,
-                    "length": 2,
-                    "actions": [
-                        "(move-fast farm0 farm1)",
-                        "(move-fast farm0 farm1)"
-                    ]
-                }
-            },
             "hlmcut_unit": {
-                "num_generated_successors": 6,
-                "num_expanded": 2,
+                "num_generated_successors": 7,
+                "num_expanded": 3,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4472,8 +4471,8 @@
             "domain_file": "numeric/tests/fo-farmland/domain.pddl",
             "task_file": "numeric/tests/fo-farmland/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 8,
-                "num_expanded": 4,
+                "num_generated_successors": 16,
+                "num_expanded": 8,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4486,8 +4485,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 8,
-                "num_expanded": 4,
+                "num_generated_successors": 16,
+                "num_expanded": 8,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4561,8 +4560,8 @@
             "domain_file": "numeric/tests/fo-sailing/domain.pddl",
             "task_file": "numeric/tests/fo-sailing/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 49,
-                "num_expanded": 9,
+                "num_generated_successors": 209,
+                "num_expanded": 48,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4575,8 +4574,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 49,
-                "num_expanded": 9,
+                "num_generated_successors": 209,
+                "num_expanded": 48,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4589,8 +4588,8 @@
                 }
             },
             "hmax_unit": {
-                "num_generated_successors": 16,
-                "num_expanded": 2,
+                "num_generated_successors": 22,
+                "num_expanded": 3,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4603,8 +4602,8 @@
                 }
             },
             "hadd_unit": {
-                "num_generated_successors": 16,
-                "num_expanded": 2,
+                "num_generated_successors": 22,
+                "num_expanded": 3,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4617,8 +4616,8 @@
                 }
             },
             "hff_unit": {
-                "num_generated_successors": 16,
-                "num_expanded": 2,
+                "num_generated_successors": 22,
+                "num_expanded": 3,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4631,8 +4630,8 @@
                 }
             },
             "hlmcut_unit": {
-                "num_generated_successors": 16,
-                "num_expanded": 2,
+                "num_generated_successors": 22,
+                "num_expanded": 3,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4650,8 +4649,8 @@
             "domain_file": "numeric/tests/hydropower/domain.pddl",
             "task_file": "numeric/tests/hydropower/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 6,
-                "num_expanded": 3,
+                "num_generated_successors": 11,
+                "num_expanded": 6,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4664,8 +4663,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 6,
-                "num_expanded": 3,
+                "num_generated_successors": 11,
+                "num_expanded": 6,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4739,8 +4738,8 @@
             "domain_file": "numeric/tests/markettrader/domain.pddl",
             "task_file": "numeric/tests/markettrader/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 81,
-                "num_expanded": 13,
+                "num_generated_successors": 377,
+                "num_expanded": 80,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4753,8 +4752,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 81,
-                "num_expanded": 13,
+                "num_generated_successors": 377,
+                "num_expanded": 80,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4767,8 +4766,8 @@
                 }
             },
             "hmax_unit": {
-                "num_generated_successors": 49,
-                "num_expanded": 5,
+                "num_generated_successors": 80,
+                "num_expanded": 12,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4781,8 +4780,8 @@
                 }
             },
             "hadd_unit": {
-                "num_generated_successors": 23,
-                "num_expanded": 2,
+                "num_generated_successors": 36,
+                "num_expanded": 3,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4795,8 +4794,8 @@
                 }
             },
             "hff_unit": {
-                "num_generated_successors": 23,
-                "num_expanded": 2,
+                "num_generated_successors": 36,
+                "num_expanded": 3,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4809,8 +4808,8 @@
                 }
             },
             "hlmcut_unit": {
-                "num_generated_successors": 49,
-                "num_expanded": 5,
+                "num_generated_successors": 80,
+                "num_expanded": 12,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4828,8 +4827,8 @@
             "domain_file": "numeric/tests/mprime/domain.pddl",
             "task_file": "numeric/tests/mprime/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 2924,
-                "num_expanded": 897,
+                "num_generated_successors": 7580,
+                "num_expanded": 2923,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4844,8 +4843,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 2924,
-                "num_expanded": 897,
+                "num_generated_successors": 7580,
+                "num_expanded": 2923,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4860,8 +4859,8 @@
                 }
             },
             "hmax_unit": {
-                "num_generated_successors": 538,
-                "num_expanded": 61,
+                "num_generated_successors": 560,
+                "num_expanded": 62,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4876,8 +4875,8 @@
                 }
             },
             "hadd_unit": {
-                "num_generated_successors": 148,
-                "num_expanded": 7,
+                "num_generated_successors": 170,
+                "num_expanded": 8,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4892,8 +4891,8 @@
                 }
             },
             "hff_unit": {
-                "num_generated_successors": 148,
-                "num_expanded": 7,
+                "num_generated_successors": 170,
+                "num_expanded": 8,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4908,8 +4907,8 @@
                 }
             },
             "hlmcut_unit": {
-                "num_generated_successors": 538,
-                "num_expanded": 61,
+                "num_generated_successors": 560,
+                "num_expanded": 62,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4929,8 +4928,8 @@
             "domain_file": "numeric/tests/pathwaysmetric/domain.pddl",
             "task_file": "numeric/tests/pathwaysmetric/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 152,
-                "num_expanded": 17,
+                "num_generated_successors": 967,
+                "num_expanded": 152,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -4943,8 +4942,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 152,
-                "num_expanded": 17,
+                "num_generated_successors": 967,
+                "num_expanded": 152,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -5018,8 +5017,8 @@
             "domain_file": "numeric/tests/rover/domain.pddl",
             "task_file": "numeric/tests/rover/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 1937,
-                "num_expanded": 600,
+                "num_generated_successors": 5648,
+                "num_expanded": 1937,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -5035,25 +5034,16 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 1827,
-                "num_expanded": 524,
+                "num_generated_successors": 999,
+                "num_expanded": 249,
                 "num_deadends": 0,
                 "num_pruned": 0,
-                "plan": {
-                    "cost": 0,
-                    "length": 5,
-                    "actions": [
-                        "(sample_rock rover0 rover0store waypoint0)",
-                        "(communicate_rock_data rover0 general waypoint0 waypoint0 waypoint1)",
-                        "(drop rover0 rover0store)",
-                        "(sample_soil rover0 rover0store waypoint0)",
-                        "(communicate_soil_data rover0 general waypoint0 waypoint0 waypoint1)"
-                    ]
-                }
+                "max_num_states": 1000,
+                "status": "OUT_OF_STATES"
             },
             "hmax_unit": {
-                "num_generated_successors": 469,
-                "num_expanded": 79,
+                "num_generated_successors": 486,
+                "num_expanded": 84,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -5069,8 +5059,8 @@
                 }
             },
             "hadd_unit": {
-                "num_generated_successors": 89,
-                "num_expanded": 13,
+                "num_generated_successors": 96,
+                "num_expanded": 14,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -5086,8 +5076,8 @@
                 }
             },
             "hff_unit": {
-                "num_generated_successors": 89,
-                "num_expanded": 13,
+                "num_generated_successors": 96,
+                "num_expanded": 14,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -5103,8 +5093,8 @@
                 }
             },
             "hlmcut_unit": {
-                "num_generated_successors": 89,
-                "num_expanded": 13,
+                "num_generated_successors": 96,
+                "num_expanded": 14,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -5125,8 +5115,8 @@
             "domain_file": "numeric/tests/sailing/domain.pddl",
             "task_file": "numeric/tests/sailing/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 113,
-                "num_expanded": 15,
+                "num_generated_successors": 578,
+                "num_expanded": 112,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -5139,8 +5129,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 113,
-                "num_expanded": 15,
+                "num_generated_successors": 578,
+                "num_expanded": 112,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -5153,8 +5143,8 @@
                 }
             },
             "hmax_unit": {
-                "num_generated_successors": 28,
-                "num_expanded": 2,
+                "num_generated_successors": 40,
+                "num_expanded": 3,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -5167,8 +5157,8 @@
                 }
             },
             "hadd_unit": {
-                "num_generated_successors": 28,
-                "num_expanded": 2,
+                "num_generated_successors": 40,
+                "num_expanded": 3,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -5181,8 +5171,8 @@
                 }
             },
             "hff_unit": {
-                "num_generated_successors": 28,
-                "num_expanded": 2,
+                "num_generated_successors": 40,
+                "num_expanded": 3,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -5195,8 +5185,8 @@
                 }
             },
             "hlmcut_unit": {
-                "num_generated_successors": 28,
-                "num_expanded": 2,
+                "num_generated_successors": 40,
+                "num_expanded": 3,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -5214,8 +5204,8 @@
             "domain_file": "numeric/tests/settersnumeric/domain.pddl",
             "task_file": "numeric/tests/settersnumeric/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 7,
-                "num_expanded": 3,
+                "num_generated_successors": 16,
+                "num_expanded": 7,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -5228,8 +5218,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 5,
-                "num_expanded": 2,
+                "num_generated_successors": 10,
+                "num_expanded": 4,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -5303,8 +5293,8 @@
             "domain_file": "numeric/tests/sugar/domain.pddl",
             "task_file": "numeric/tests/sugar/test-1.pddl",
             "blind_unit": {
-                "num_generated_successors": 655,
-                "num_expanded": 132,
+                "num_generated_successors": 2474,
+                "num_expanded": 655,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {
@@ -5318,8 +5308,8 @@
                 }
             },
             "blind_general": {
-                "num_generated_successors": 655,
-                "num_expanded": 132,
+                "num_generated_successors": 2474,
+                "num_expanded": 655,
                 "num_deadends": 0,
                 "num_pruned": 0,
                 "plan": {

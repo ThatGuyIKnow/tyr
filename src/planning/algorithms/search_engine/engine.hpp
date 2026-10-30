@@ -148,10 +148,25 @@ public:
         ygg::Index<State<Kind>> get_search_node_index(ygg::Index<State<Kind>> state) const noexcept
         { return ExecutionPolicy::search_node_index(state, index, num_state_owners); }
 
-        SearchNode& initialize_start(ygg::Index<State<Kind>> state, ygg::float_t g_value, ygg::float_t h_value)
-        { return search.initialize_start(get_search_node_index(state), g_value, h_value); }
+        SearchPolicy& search_policy() noexcept
+        {
+            if constexpr (requires { ExecutionPolicy::uses_shared_search; })
+                return *shared_search;
+            else
+                return search;
+        }
+        const SearchPolicy& search_policy() const noexcept
+        {
+            if constexpr (requires { ExecutionPolicy::uses_shared_search; })
+                return *shared_search;
+            else
+                return search;
+        }
 
-        SearchNode& get_search_node(ygg::Index<State<Kind>> state) { return search.get_search_node(get_search_node_index(state)); }
+        SearchNode& initialize_start(ygg::Index<State<Kind>> state, ygg::float_t g_value, ygg::float_t h_value)
+        { return search_policy().initialize_start(get_search_node_index(state), g_value, h_value); }
+
+        SearchNode& get_search_node(ygg::Index<State<Kind>> state) { return search_policy().get_search_node(get_search_node_index(state)); }
 
         ygg::Index<Worker> index;
         size_t num_state_owners { 1 };
@@ -166,6 +181,7 @@ public:
         SuccessorGenerator<Kind>* successor_generator;
         Heuristic<Kind>* heuristic;
         SearchPolicy search;
+        SearchPolicy* shared_search = nullptr;
         WorkerExecutionState execution;
         std::mt19937_64 rng;
         std::vector<formalism::planning::ActionBindingView> applicable_actions;
@@ -234,10 +250,16 @@ public:
         }
         catch (...)
         {
-            worker.statistics.set_search_end_time_point(std::chrono::steady_clock::now());
+            if constexpr (requires { ExecutionPolicy::uses_shared_search; })
+                m_execution.finish_worker(worker);
+            else
+                worker.statistics.set_search_end_time_point(std::chrono::steady_clock::now());
             throw;
         }
-        worker.statistics.set_search_end_time_point(std::chrono::steady_clock::now());
+        if constexpr (requires { ExecutionPolicy::uses_shared_search; })
+            m_execution.finish_worker(worker);
+        else
+            worker.statistics.set_search_end_time_point(std::chrono::steady_clock::now());
     }
 
 private:
@@ -255,9 +277,14 @@ private:
             if (expand_one(worker))
                 continue;
 
-            const auto idle_start = std::chrono::steady_clock::now();
-            m_execution.wait_for_work(*this, worker);
-            worker.statistics.add_idle_time(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - idle_start));
+            if constexpr (requires { ExecutionPolicy::uses_shared_search; })
+                m_execution.wait_for_work(*this, worker);
+            else
+            {
+                const auto idle_start = std::chrono::steady_clock::now();
+                m_execution.wait_for_work(*this, worker);
+                worker.statistics.add_idle_time(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - idle_start));
+            }
             if (!m_execution.running())
                 return;
         }
@@ -354,7 +381,7 @@ private:
         }
         m_execution.initialize_best_h(start_h_value);
         auto& start_search_node = start_worker.initialize_start(start_state_index, start_g_value, start_h_value);
-        call_root_event([&](auto& handler) { SearchPolicy::on_start_search(handler, m_start_node, start_worker.search.get_start_priority()); });
+        call_root_event([&](auto& handler) { SearchPolicy::on_start_search(handler, m_start_node, start_worker.search_policy().get_start_priority()); });
 
         if (start_search_node.status == SearchNodeStatus::DEAD_END)
         {
@@ -363,8 +390,8 @@ private:
             return std::move(m_result);
         }
 
-        start_worker.search.open_start(start_state_index, start_search_node);
-        m_execution.start(deadline, start_worker.search.get_start_priority(), *m_options);
+        start_worker.search_policy().open_start(start_state_index, start_search_node);
+        m_execution.start(deadline, start_worker.search_policy().get_start_priority(), *m_options);
         try
         {
             m_execution.invoke(*this);
@@ -404,8 +431,8 @@ private:
                     return;
 
                 claimed = true;
-                const auto entry = worker.search.pop();
-                if (worker.search.should_discard(entry, m_execution.incumbent_cost()))
+                const auto entry = worker.search_policy().pop();
+                if (worker.search_policy().should_discard(entry, m_execution.incumbent_cost()))
                     return;
 
                 const auto is_stale = [](SearchNodeStatus status)
@@ -425,7 +452,7 @@ private:
                         search_node.status = SearchNodeStatus::GOAL;
                 }
 
-                const auto expansion_result = worker.search.prepare_expansion(
+                const auto expansion_result = worker.search_policy().prepare_expansion(
                     entry,
                     node,
                     search_node,
@@ -479,7 +506,7 @@ private:
                               [&](auto& handler)
                               { handler.on_generate_transition(source_node, LabeledNode<Kind> { labeled_successor.label, normalized_node }, outcome); });
         };
-        return worker.search.accept_successor(*this,
+        return worker.search_policy().accept_successor(*this,
                                               worker,
                                               source_node,
                                               normalized_node,
@@ -502,7 +529,13 @@ private:
 
             auto successor_state = worker.state_repository->get_state_builder();
             const auto auxiliary_value = worker.successor_generator->generate_successor_state(node, action, *successor_state, worker.successor_delta);
-            auto metadata = worker.search.make_successor_metadata(worker.index, node, action);
+            const auto parent_owner = [&] {
+                if constexpr (requires { ExecutionPolicy::uses_shared_search; })
+                    return ygg::Index<Worker>(0);
+                else
+                    return worker.index;
+            }();
+            auto metadata = worker.search_policy().make_successor_metadata(parent_owner, node, action);
             if (m_execution.route(*this, worker, node, std::move(successor_state), worker.successor_delta, auxiliary_value, action, std::move(metadata))
                     == AcceptanceResult::TERMINAL
                 || !m_execution.running())
@@ -515,7 +548,13 @@ private:
 
     void solve(WorkerData& worker, const Node<Kind>& node)
     {
-        const auto goal = WorkerStateIndex<Kind> { worker.index, node.get_state().get_index() };
+        const auto goal_owner = [&] {
+            if constexpr (requires { ExecutionPolicy::uses_shared_search; })
+                return ygg::Index<Worker>(0);
+            else
+                return worker.index;
+        }();
+        const auto goal = WorkerStateIndex<Kind> { goal_owner, node.get_state().get_index() };
         if (m_execution.consider_goal(goal, node.get_metric(), SearchPolicy::terminate_on_goal))
             call_worker_event(worker, [&](auto& handler) { handler.on_expand_goal_node(node); });
     }

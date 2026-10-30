@@ -54,6 +54,22 @@ inline void print_summary(const formalism::planning::Repository& repository)
 template<TaskKind Kind>
 void print_search_statistics(const planning::SearchResult<Kind>& result)
 {
+    const auto status = [&] {
+        switch (result.status)
+        {
+            case planning::SearchStatus::IN_PROGRESS: return "IN_PROGRESS";
+            case planning::SearchStatus::OUT_OF_TIME: return "OUT_OF_TIME";
+            case planning::SearchStatus::OUT_OF_MEMORY: return "OUT_OF_MEMORY";
+            case planning::SearchStatus::OUT_OF_STATES: return "OUT_OF_STATES";
+            case planning::SearchStatus::FAILED: return "FAILED";
+            case planning::SearchStatus::EXHAUSTED: return "EXHAUSTED";
+            case planning::SearchStatus::CYCLE: return "CYCLE";
+            case planning::SearchStatus::SOLVED: return "SOLVED";
+            case planning::SearchStatus::UNSOLVABLE: return "UNSOLVABLE";
+        }
+        return "UNKNOWN";
+    }();
+    fmt::print(std::cout, "[Search] Status: {}\n", status);
     fmt::print(std::cout, "[Search] Worker utilization: {}\n", result.get_worker_utilization());
     for (std::size_t i = 0; i < result.worker_statistics.size(); ++i)
     {

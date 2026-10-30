@@ -59,6 +59,8 @@ struct SearchStatistics
 {
     planning::ProgressStatistics::Snapshot statistics;
     std::optional<PlanStatistics> plan;
+    std::optional<std::string> status;
+    std::optional<ygg::uint_t> max_num_states;
 };
 
 /// Parse the four counters from an object that carries them inline (returns nullopt when absent).
@@ -100,7 +102,11 @@ inline std::optional<SearchStatistics> parse_optional_statistics(const boost::js
     if (!value)
         return std::nullopt;
     const auto& stats = value->as_object();
-    return SearchStatistics { parse_optional_counters(stats).value(), parse_optional_plan(stats) };
+    const auto* status = stats.if_contains("status");
+    const auto* limit = stats.if_contains("max_num_states");
+    return SearchStatistics { parse_optional_counters(stats).value(), parse_optional_plan(stats),
+                              status ? std::make_optional(boost::json::value_to<std::string>(*status)) : std::nullopt,
+                              limit ? std::make_optional(boost::json::value_to<ygg::uint_t>(*limit)) : std::nullopt };
 }
 
 template<TaskKind Kind>
@@ -120,10 +126,17 @@ void expect_plan(const PlanStatistics& expected, const planning::Plan<Kind>& act
     EXPECT_EQ(plan_actions(actual), expected.actions);
 }
 
+inline planning::SearchStatus parse_search_status(const std::string& status);
+
 template<TaskKind Kind>
 void expect_statistics(const SearchStatistics& expected, const planning::Statistics& actual, const planning::SearchResult<Kind>& result)
 {
     expect_counters(expected.statistics, actual);
+
+    if (expected.status)
+    {
+        EXPECT_EQ(result.status, parse_search_status(*expected.status));
+    }
 
     ASSERT_EQ(result.plan.has_value(), expected.plan.has_value());
     if (expected.plan)

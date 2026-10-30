@@ -32,6 +32,12 @@
 namespace tyr::planning::astar_eager
 {
 
+enum class AStarArchitecture : uint8_t
+{
+    HASH_DISTRIBUTED,
+    K_PARALLEL,
+};
+
 enum class ParallelSearchMode : uint8_t
 {
     SYNCHRONOUS,
@@ -50,6 +56,7 @@ struct Options
     CostMode cost_mode = CostMode::GENERAL;
     /// Values above one enable parallel search. A concurrent state repository shares storage; a private one is hash-distributed.
     size_t num_search_workers = 1;
+    AStarArchitecture architecture = AStarArchitecture::HASH_DISTRIBUTED;
     DistHashMode dist_hash_mode = DistHashMode::RANDOM;
     ParallelSearchMode parallel_search_mode = ParallelSearchMode::SYNCHRONOUS;
     bool collect_destination_lock_statistics = false;

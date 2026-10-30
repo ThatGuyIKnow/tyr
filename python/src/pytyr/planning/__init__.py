@@ -5,6 +5,7 @@
 # Import all classes for better IDE support
 
 from pytyr._pytyr.planning import (
+    AStarArchitecture as AStarArchitecture,
     CostMode as CostMode,
     DistHashMode as DistHashMode,
     ParallelSearchMode as ParallelSearchMode,

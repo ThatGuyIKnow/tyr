@@ -19,6 +19,7 @@
 
 #include "search_engine/astar_eager.hpp"
 #include "search_engine/parallel.hpp"
+#include "search_engine/k_parallel.hpp"
 #include "search_engine/sequential.hpp"
 #include "tyr/planning/algorithms/concepts.hpp"
 
@@ -35,6 +36,14 @@ SearchResult<Kind> find_solution(Task<Kind>& task,
 {
     if (options.num_search_workers == 0)
         throw std::invalid_argument("astar_eager::find_solution(...): num_search_workers must be greater than zero.");
+    if (options.architecture == AStarArchitecture::K_PARALLEL)
+    {
+        using Search = detail::EagerAStarPolicy<Kind, ParallelSearch>;
+        using Execution = detail::KParallelExecutionPolicy<Kind, Search>;
+        return detail::SearchEngine<Kind, Search, Execution>::find_solution(task, state_repository, axiom_evaluator, successor_generator, heuristic, options);
+    }
+    if (options.architecture != AStarArchitecture::HASH_DISTRIBUTED)
+        throw std::invalid_argument("astar_eager::find_solution(...): unknown search architecture.");
     if (options.num_search_workers > 1)
     {
         using Search = detail::EagerAStarPolicy<Kind, ParallelSearch>;

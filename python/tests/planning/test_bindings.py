@@ -392,6 +392,7 @@ def test_algorithm_options_are_default_constructible_with_expected_fields() -> N
             "goal_strategy": None,
             "cost_mode": planning.CostMode.GENERAL,
             "num_search_workers": 1,
+            "architecture": planning.AStarArchitecture.HASH_DISTRIBUTED,
             "dist_hash_mode": planning.DistHashMode.RANDOM,
             "parallel_search_mode": planning.ParallelSearchMode.SYNCHRONOUS,
             "collect_destination_lock_statistics": False,
@@ -448,6 +449,7 @@ def test_algorithm_options_are_default_constructible_with_expected_fields() -> N
             "search_budget",
             "cost_mode",
             "num_search_workers",
+            "architecture",
             "dist_hash_mode",
             "parallel_search_mode",
             "collect_destination_lock_statistics",
@@ -1204,6 +1206,39 @@ def test_parallel_astar_search_mode_is_bound() -> None:
         assert options.parallel_search_mode == planning.ParallelSearchMode.SYNCHRONOUS
         options.parallel_search_mode = planning.ParallelSearchMode.ASYNCHRONOUS
         assert options.parallel_search_mode == planning.ParallelSearchMode.ASYNCHRONOUS
+
+
+def test_astar_architecture_is_bound() -> None:
+    assert planning.AStarArchitecture.HASH_DISTRIBUTED != planning.AStarArchitecture.K_PARALLEL
+    for task_module in (planning.ground, planning.lifted):
+        options = task_module.astar_eager.Options()
+        assert options.architecture == planning.AStarArchitecture.HASH_DISTRIBUTED
+        options.architecture = planning.AStarArchitecture.K_PARALLEL
+        assert options.architecture == planning.AStarArchitecture.K_PARALLEL
+
+
+def test_k_parallel_solver_matches_sequential_cost_and_exports_worker_statistics() -> None:
+    ground, lifted = _make_gripper_tasks()
+    for module, task, make_components in (
+        (planning.ground, ground, _make_components_ground),
+        (planning.lifted, lifted, _make_components_lifted),
+    ):
+        repository, evaluator, generator = make_components(task, concurrent=True)
+        reference = module.astar_eager.find_solution(task, repository, evaluator, generator, module.BlindHeuristic(), module.astar_eager.Options())
+        assert reference.status == planning.SearchStatus.SOLVED
+        for workers in (1, 2, 4):
+            repository, evaluator, generator = make_components(task, concurrent=True)
+            options = module.astar_eager.Options()
+            options.architecture = planning.AStarArchitecture.K_PARALLEL
+            options.num_search_workers = workers
+            options.search_budget.max_time = timedelta(seconds=5)
+            result = module.astar_eager.find_solution(task, repository, evaluator, generator, module.BlindHeuristic(), options)
+            assert result.status == planning.SearchStatus.SOLVED
+            assert result.plan is not None
+            assert result.plan.get_cost() == reference.plan.get_cost()
+            assert len(result.worker_statistics) == workers
+            assert result.worker_statistics[0].get_num_registered_states() == result.statistics.get_num_registered_states()
+            assert all(row.get_num_registered_states() == 0 for row in result.worker_statistics[1:])
 
 
 def test_state_repository_concurrency_is_bound() -> None:

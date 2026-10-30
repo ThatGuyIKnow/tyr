@@ -743,6 +743,12 @@ public:
     {
         const auto num_workers = ExecutionPolicy::num_workers(options);
         constexpr auto uses_owner_repositories = ExecutionPolicy::uses_owner_repositories;
+        constexpr auto uses_shared_search = requires { ExecutionPolicy::uses_shared_search; };
+        if constexpr (uses_shared_search)
+        {
+            if (!state_repository.is_concurrent())
+                m_owner_state_repositories.push_back(StateRepositoryFactory<Kind> {}.create_concurrent(state_repository.get_task()));
+        }
         if constexpr (uses_owner_repositories)
         {
             auto state_repository_factory = StateRepositoryFactory<Kind> {};
@@ -756,7 +762,14 @@ public:
         auto pruning_strategy = options.pruning_strategy ? options.pruning_strategy : PruningStrategy<Kind>::create();
         auto goal_strategy = options.goal_strategy ? options.goal_strategy : ConjunctiveGoalStrategy<Kind>::create(task);
         const auto num_datalog_threads = axiom_evaluator.get_execution_context()->get_num_threads();
-        auto& root_state_repository = uses_owner_repositories ? *m_owner_state_repositories.front() : state_repository;
+        auto& root_state_repository = [&]() -> StateRepository<Kind>& {
+            if constexpr (uses_shared_search)
+                return m_owner_state_repositories.empty() ? state_repository : *m_owner_state_repositories.front();
+            else if constexpr (uses_owner_repositories)
+                return *m_owner_state_repositories.front();
+            else
+                return state_repository;
+        }();
         m_workers.push_back(std::make_unique<WorkerData>(ygg::Index<Worker>(0),
                                                          root_state_repository,
                                                          axiom_evaluator,
@@ -772,7 +785,14 @@ public:
         {
             const auto index = ygg::Index<Worker>(static_cast<ygg::uint_t>(i));
             auto execution_context = ygg::ExecutionContext::create(num_datalog_threads);
-            auto worker_state_repository = uses_owner_repositories ? m_owner_state_repositories[i] : state_repository.make_worker();
+            auto worker_state_repository = [&]() -> StateRepositoryPtr<Kind> {
+                if constexpr (uses_shared_search)
+                    return root_state_repository.make_worker();
+                else if constexpr (uses_owner_repositories)
+                    return m_owner_state_repositories[i];
+                else
+                    return state_repository.make_worker();
+            }();
             auto worker_axiom_evaluator = axiom_evaluator.make_worker(execution_context);
             auto worker_successor_generator = successor_generator.make_worker(execution_context);
             auto worker_heuristic = heuristic.make_worker(execution_context);
@@ -802,6 +822,10 @@ public:
                                                              std::move(worker_goal_strategy),
                                                              std::move(worker_event_handler)));
         }
+
+        if constexpr (uses_shared_search)
+            for (auto& worker : m_workers)
+                worker->shared_search = &m_workers.front()->search;
 
         if constexpr (uses_owner_repositories)
         {
@@ -849,7 +873,7 @@ public:
                     *worker.state_repository,
                     *worker.axiom_evaluator,
                     *worker.successor_generator,
-                    worker.search.get_search_nodes(),
+                    worker.search_policy().get_search_nodes(),
                     state_index_divisor,
                 });
             });

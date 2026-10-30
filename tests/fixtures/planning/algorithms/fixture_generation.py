@@ -249,7 +249,16 @@ def run_search_config(algorithm: Algorithm, run: ConfigRun) -> ConfigResult | st
     context = make_context(run.kind, run.domain_file, run.task_file)
     module = getattr(planning_module(context), algorithm)  # runtime-selected submodule (see module docstring)
     options = cast("SearchOptionsLike", module.Options())
-    if run.apply_limits:
+    expected: ConfigResult = {}
+    for case in cast("list[FixtureCase]", run.suite.get("cases", [])):
+        if (BENCHMARKS_ROOT / str(case["domain_file"]) == run.domain_file
+                and BENCHMARKS_ROOT / str(case["task_file"]) == run.task_file):
+            expected = cast("ConfigResult", case.get(config_label(run.heuristic_name, run.cost_suffix), {}))
+            break
+    max_states = expected.get("max_num_states")
+    if max_states is not None:
+        options.search_budget = SearchBudget(max_num_states=cast("int", max_states))
+    elif run.apply_limits:
         options.search_budget = SearchBudget(MAX_NUM_STATES, timedelta(seconds=MAX_TIME))
 
     if run.heuristic_name is None:
@@ -281,10 +290,13 @@ def run_search_config(algorithm: Algorithm, run: ConfigRun) -> ConfigResult | st
             ),
         )
 
-    if result.status not in RECORDED_STATUSES:
+    if result.status not in RECORDED_STATUSES and max_states is None:
         return f"status {SEARCH_STATUS_NAMES[result.status]} within {MAX_TIME}s/{MAX_NUM_STATES} states"
 
     config: ConfigResult = dict(counters_of(result.statistics))
+    if max_states is not None:
+        config["max_num_states"] = max_states
+        config["status"] = SEARCH_STATUS_NAMES[result.status]
     plan = result.plan
     if plan is not None:
         config["plan"] = plan_of(plan)

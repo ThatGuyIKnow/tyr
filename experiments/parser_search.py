@@ -59,7 +59,7 @@ def process_invalid(_content: str, props: Props) -> None:
 
 def process_unsolvable(_content: str, props: Props) -> None:
     """Set `unsolvable` to 1 if the task was reported unsolvable, otherwise 0."""
-    props["unsolvable"] = int("unsolvable" in props)
+    props["unsolvable"] = int("unsolvable" in props or props.get("search_status") == "UNSOLVABLE")
 
 
 def add_search_time_s(_content: str, props: Props) -> None:
@@ -301,17 +301,19 @@ def add_out_of_memory(content: str, props: Props) -> None:
 
 def add_out_of_time(content: str, props: Props) -> None:
     """Set `out_of_time` to 1 if the driver log reports an exceeded time limit, otherwise 0."""
-    props["out_of_time"] = int(bool(re.search(r"exceeded (?:CPU|wall-clock) time limit:", content)))
+    props["out_of_time"] = int(props.get("search_status") == "OUT_OF_TIME" or bool(re.search(r"exceeded (?:CPU|wall-clock) time limit:", content)))
 
 
 # Each Lab pattern: the property name, the regex capturing its value, and the type of the value.
 SEARCH_PATTERNS: tuple[tuple[str, str, type[float | int | str]], ...] = (
+    ("search_status", r"\[Search\] Status: ([A-Z_]+)", str),
     ("cost", rf"\[.*\] Plan cost: {FLOAT}", float),
     ("length", r"\[.*\] Plan length: (\d+)", int),
     ("initial_h_value", rf"\[.*\] Start node h_value: {FLOAT}", float),
     ("initial_f_value", rf"\[.*\] Start node f_value: {FLOAT}", float),
     ("num_datalog_threads", r"\[INPUT\] Num Datalog threads: (\d+)", int),
     ("num_search_workers", r"\[INPUT\] Num search workers: (\d+)", int),
+    ("search_architecture", r"\[INPUT\] Search architecture: (hash-distributed|k-parallel)", str),
     ("state_repository_mode", r"\[INPUT\] State repository mode: (hash-distributed|shared)", str),
     ("dist_hash_mode", r"\[INPUT\] Distribution hash mode: (random|lmcut)", str),
     ("parallel_search_mode", r"\[INPUT\] Parallel search mode: (synchronous|asynchronous)", str),
@@ -437,6 +439,8 @@ class SearchParser(Parser):
             "initial_f_value",
             "num_datalog_threads",
             "num_search_workers",
+            "search_status",
+            "search_architecture",
             "state_repository_mode",
             "dist_hash_mode",
             "parallel_search_mode",

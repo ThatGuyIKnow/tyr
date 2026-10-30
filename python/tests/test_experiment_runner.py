@@ -186,6 +186,7 @@ def test_search_parser_reads_parallel_statistics(tmp_path: Path) -> None:
     (tmp_path / "run.log").write_text(
         """[INPUT] Num Datalog threads: 1
 [INPUT] Num search workers: 2
+[INPUT] Search architecture: k-parallel
 [INPUT] State repository mode: shared
 [INPUT] Distribution hash mode: lmcut
 [INPUT] Parallel search mode: synchronous
@@ -237,6 +238,7 @@ state_storage=400 bytes
     assert props["state_repository_mode"] == "shared"
     assert props["dist_hash_mode"] == "lmcut"
     assert props["parallel_search_mode"] == "synchronous"
+    assert props["search_architecture"] == "k-parallel"
     assert props["idle_time_ns"] == 75_000_000
     assert props["idle_time_s"] == 0.075
     assert props["worker_utilization"] == 0.8125
@@ -636,3 +638,16 @@ def test_planner_command(config: dict[str, object], expected: list[str]) -> None
         "plan.out",
         *expected,
     ]
+
+@pytest.mark.parametrize(('status', 'unsolvable', 'out_of_time'), [
+    ('UNSOLVABLE', 1, 0), ('OUT_OF_TIME', 0, 1), ('EXHAUSTED', 0, 0),
+])
+def test_search_parser_preserves_explicit_native_terminal_status(tmp_path: Path, status: str, unsolvable: int, out_of_time: int) -> None:
+    (tmp_path / 'run.log').write_text(f'[Search] Status: {status}\n[INPUT] Search architecture: k-parallel\n')
+    (tmp_path / 'driver.log').write_text('')
+    props: dict[str, object] = {}
+    SearchParser().parse(tmp_path, props)
+    assert props['search_status'] == status
+    assert props['search_architecture'] == 'k-parallel'
+    assert props['unsolvable'] == unsolvable
+    assert props['out_of_time'] == out_of_time
