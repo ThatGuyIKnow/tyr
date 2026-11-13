@@ -28,6 +28,11 @@ public:
 
     explicit KParallelExecutionPolicy(uint64_t) noexcept {}
 
+    bool goal_is_proven(ygg::float_t cost) const noexcept { return m_synchronous && cost <= m_layer; }
+    template<typename Engine> void wake_for_progress(Engine&) { m_condition.notify_all(); }
+    template<typename Engine> ygg::float_t progress_priority(Engine&) const noexcept
+    { return m_synchronous ? m_layer : std::numeric_limits<ygg::float_t>::infinity(); }
+
     static void validate(const OptionsT<SearchPolicy>& options)
     {
         if (options.num_search_workers == 0 || options.num_search_workers > std::numeric_limits<ygg::uint_t>::max())
@@ -111,7 +116,7 @@ public:
     bool can_expand_locked(Engine& engine, WorkerData& worker)
     {
         auto& search = worker.search_policy();
-        if (!running() || search.empty())
+        if (!running() || search.empty() || engine.progress_requested())
             return false;
         const auto priority = search.get_min_priority();
         if (priority > incumbent_cost())
@@ -204,7 +209,7 @@ public:
     }
 
     template<typename Engine, typename WorkerData>
-    void wait_for_work(Engine&, WorkerData& worker)
+    void wait_for_work(Engine& engine, WorkerData& worker)
     {
         const auto idle_start = std::chrono::steady_clock::now();
         auto lock = std::unique_lock(m_mutex);
@@ -213,6 +218,7 @@ public:
         };
         while (running())
         {
+            if (engine.progress_requested()) { record_idle(); return; }
             if (timed_out())
             {
                 set_terminal(SearchStatus::OUT_OF_TIME);

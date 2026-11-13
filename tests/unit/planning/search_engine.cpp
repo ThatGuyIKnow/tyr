@@ -1382,6 +1382,48 @@ TEST(TyrPlanningSearchEngineTest, KParallelCompletesFinalLayerAndCountsSharedSto
 }
 
 template<TaskKind Kind>
+void expect_progress_preserves_final_layer(const tyr::planning::TaskPtr<Kind>& task)
+{
+    for (const auto architecture : { tyr::planning::astar_eager::AStarArchitecture::K_PARALLEL,
+                                     tyr::planning::astar_eager::AStarArchitecture::HASH_DISTRIBUTED })
+        for (const auto workers : { size_t { 1 }, size_t { 4 } })
+        {
+            auto context = make_search_context(task, architecture == tyr::planning::astar_eager::AStarArchitecture::K_PARALLEL);
+            auto heuristic = tyr::planning::BlindHeuristic<Kind>::create();
+            auto options = tyr::planning::astar_eager::Options<Kind> {};
+            options.architecture = architecture;
+            options.num_search_workers = workers;
+            auto optimal_calls = size_t { 0 };
+            auto last_layer = ygg::float_t { -1 };
+            auto final_expanded = uint64_t { 0 };
+            options.progress_callback = [&](std::optional<ygg::float_t> layer, const tyr::planning::Plan<Kind>* plan,
+                                            const tyr::planning::Statistics& stats, const std::vector<tyr::planning::Statistics>& by_worker) {
+                ASSERT_EQ(by_worker.size(), workers);
+                uint64_t total = 0;
+                for (const auto& worker : by_worker) total += worker.get_num_expanded();
+                EXPECT_EQ(total, stats.get_num_expanded());
+                if (plan) { ++optimal_calls; EXPECT_EQ(plan->get_cost(), 2); }
+                if (layer) { last_layer = *layer; final_expanded = stats.get_num_expanded(); }
+                if (layer && *layer == 2) EXPECT_EQ(optimal_calls, 1);
+            };
+            const auto result = tyr::planning::astar_eager::find_solution(
+                *task, *context.repository, *context.axiom_evaluator, *context.successor_generator, *heuristic, options);
+            ASSERT_EQ(result.status, tyr::planning::SearchStatus::SOLVED);
+            EXPECT_EQ(optimal_calls, 1);
+            EXPECT_EQ(last_layer, 2);
+            EXPECT_EQ(final_expanded, 4);
+            EXPECT_EQ(result.statistics.get_num_expanded(), 4);
+        }
+}
+
+TEST(TyrPlanningSearchEngineTest, ProgressReportsOptimalPlanAndStillCompletesFinalLayer)
+{
+    const auto tasks = parse_tasks("parallel_search_final_layer.pddl");
+    expect_progress_preserves_final_layer(tasks.ground);
+    expect_progress_preserves_final_layer(tasks.lifted);
+}
+
+template<TaskKind Kind>
 void expect_k_parallel_weighted_cost(const tyr::planning::TaskPtr<Kind>& task)
 {
     for (const auto workers : { size_t { 1 }, size_t { 2 }, size_t { 4 } })

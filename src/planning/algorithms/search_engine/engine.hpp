@@ -40,12 +40,15 @@
 #include "tyr/planning/worker_state_index.hpp"
 
 #include <cassert>
+#include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <random>
 #include <stdexcept>
@@ -219,10 +222,37 @@ public:
 
     WorkerData& get_worker(ygg::Index<Worker> index) noexcept { return m_workers.get(index); }
 
+    bool progress_requested() const noexcept { return m_progress_requested.load(std::memory_order_acquire); }
+
+    bool has_progress_callback() const noexcept
+    {
+        if constexpr (requires { m_options->progress_callback; }) return bool(m_options->progress_callback);
+        return false;
+    }
+
+    Statistics collect_progress_statistics()
+    {
+        m_execution.snapshot_worker_state_statistics(*this);
+        auto total = Statistics {};
+        m_progress_workers.clear();
+        const auto now = std::chrono::steady_clock::now();
+        for_each_worker([&](const auto& worker) {
+            auto statistics = worker.statistics;
+            statistics.set_search_end_time_point(now);
+            total.add(statistics);
+            m_progress_workers.push_back(statistics);
+        });
+        total.set_search_start_time_point(m_search_start_time_point);
+        total.set_search_end_time_point(now);
+        return total;
+    }
+
     std::optional<Statistics> collect_priority_layer_statistics()
     {
-        if (!m_event_handler || !SearchPolicy::emits_priority_layer_events)
+        if ((!m_event_handler && !has_progress_callback()) || !SearchPolicy::emits_priority_layer_events)
             return std::nullopt;
+
+        if (has_progress_callback()) return collect_progress_statistics();
 
         auto statistics = Statistics {};
         for_each_worker([&](const auto& worker) { statistics.add(worker.statistics); });
@@ -233,7 +263,10 @@ public:
 
     void on_finish_priority_layer(ygg::float_t priority, const Statistics& statistics)
     {
+        m_last_progress_layer = priority;
         call_root_event([&](auto& handler) { SearchPolicy::on_finish_priority_layer(handler, priority, statistics); });
+        if constexpr (requires { m_options->progress_callback; })
+            if (m_options->progress_callback) m_options->progress_callback(priority, nullptr, statistics, m_progress_workers);
     }
 
     void on_finish_priority_layer(ygg::float_t priority)
@@ -265,8 +298,10 @@ public:
 private:
     void worker_loop_impl(WorkerData& worker)
     {
-        while (m_execution.begin_iteration(*this, worker))
+        while (true)
         {
+            progress_checkpoint(worker);
+            if (!m_execution.begin_iteration(*this, worker)) break;
             if (m_execution.timed_out())
             {
                 m_execution.set_terminal(SearchStatus::OUT_OF_TIME);
@@ -285,8 +320,7 @@ private:
                 m_execution.wait_for_work(*this, worker);
                 worker.statistics.add_idle_time(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - idle_start));
             }
-            if (!m_execution.running())
-                return;
+            if (!m_execution.running()) { progress_checkpoint(worker); return; }
         }
     }
 
@@ -305,6 +339,7 @@ private:
         m_execution(options.random_seed),
         m_workers(task, state_repository, axiom_evaluator, successor_generator, heuristic, options, m_event_handler)
     {
+        m_progress_arrived.resize(num_workers(), 0);
     }
 
     SearchResult<Kind> run()
@@ -480,6 +515,7 @@ private:
             expand_successors(worker, *prepared);
         }
         m_execution.finish_expansion(*this);
+        if (progress_requested()) m_execution.wake_for_progress(*this);
         return true;
     }
 
@@ -556,7 +592,44 @@ private:
         }();
         const auto goal = WorkerStateIndex<Kind> { goal_owner, node.get_state().get_index() };
         if (m_execution.consider_goal(goal, node.get_metric(), SearchPolicy::terminate_on_goal))
+        {
             call_worker_event(worker, [&](auto& handler) { handler.on_expand_goal_node(node); });
+            if (has_progress_callback() && m_execution.goal_is_proven(node.get_metric()))
+                m_progress_requested.store(true, std::memory_order_release);
+        }
+    }
+
+    void publish_optimal_plan()
+    {
+        if constexpr (requires { m_options->progress_callback; })
+        {
+            if (!m_options->progress_callback || m_optimal_published || !m_execution.goal()) return;
+            auto [plan, goal_node] = m_workers.reconstruct_solution(*m_execution.goal(), *m_options);
+            m_result.plan = std::move(plan);
+            m_result.goal_node = std::move(goal_node);
+            const auto statistics = collect_progress_statistics();
+            m_options->progress_callback(std::nullopt, &*m_result.plan, statistics, m_progress_workers);
+            m_optimal_published = true;
+        }
+    }
+
+    void progress_checkpoint(WorkerData& worker)
+    {
+        if (!progress_requested()) return;
+        auto lock = std::unique_lock(m_progress_mutex);
+        const auto cancelled = [&] { return !m_execution.running() && m_execution.status() != SearchStatus::SOLVED; };
+        if (cancelled()) return;
+        const auto index = static_cast<size_t>(ygg::uint_t(worker.index));
+        if (!m_progress_arrived[index]) { m_progress_arrived[index] = 1; ++m_progress_waiting; }
+        if (m_progress_waiting == num_workers())
+        {
+            try { publish_optimal_plan(); }
+            catch (...) { m_progress_requested.store(false, std::memory_order_release); m_progress_condition.notify_all(); throw; }
+            m_progress_requested.store(false, std::memory_order_release);
+            m_progress_condition.notify_all();
+        }
+        else
+            while (progress_requested() && !cancelled()) m_progress_condition.wait_for(lock, std::chrono::milliseconds(10));
     }
 
     void finalize(SearchStatus status)
@@ -610,14 +683,26 @@ private:
             std::rethrow_exception(exception);
         }
 
+        if (has_progress_callback())
+        {
+            if (progress_requested() || m_execution.status() == SearchStatus::SOLVED) publish_optimal_plan();
+            if (m_execution.status() == SearchStatus::SOLVED || m_execution.status() == SearchStatus::EXHAUSTED)
+            {
+                const auto priority = m_execution.progress_priority(*this);
+                if (std::isfinite(priority) && (!m_last_progress_layer || *m_last_progress_layer != priority)) on_finish_priority_layer(priority);
+            }
+        }
         m_result.status = m_execution.status();
         if (m_result.status == SearchStatus::SOLVED)
         {
             const auto goal = m_execution.goal();
             assert(goal);
-            auto [plan, goal_node] = m_workers.reconstruct_solution(*goal, *m_options);
-            m_result.plan = std::move(plan);
-            m_result.goal_node = std::move(goal_node);
+            if (!m_result.plan)
+            {
+                auto [plan, goal_node] = m_workers.reconstruct_solution(*goal, *m_options);
+                m_result.plan = std::move(plan);
+                m_result.goal_node = std::move(goal_node);
+            }
         }
 
         finalize(m_result.status);
@@ -650,6 +735,14 @@ private:
     SearchResult<Kind> m_result;
     bool m_statistics_snapshotted { false };
     bool m_finalized { false };
+    std::atomic_bool m_progress_requested { false };
+    std::mutex m_progress_mutex;
+    std::condition_variable m_progress_condition;
+    std::vector<uint8_t> m_progress_arrived;
+    size_t m_progress_waiting { 0 };
+    bool m_optimal_published { false };
+    std::optional<ygg::float_t> m_last_progress_layer;
+    std::vector<Statistics> m_progress_workers;
 };
 
 }

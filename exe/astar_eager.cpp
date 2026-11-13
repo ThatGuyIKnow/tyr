@@ -47,6 +47,7 @@
 #include <yggdrasil/core/config.hpp>
 #include <yggdrasil/core/memory.hpp>
 #include <yggdrasil/execution/onetbb.hpp>
+#include "search_progress.hpp"
 
 namespace
 {
@@ -118,6 +119,7 @@ int run(int argc, char** argv)
         auto domain_filepath = program.get<std::string>("--domain-filepath");
         auto problem_filepath = program.get<std::string>("--problem-filepath");
         auto plan_filepath = program.get<std::string>("--plan-filepath");
+        auto progress = tyr::cli::SearchProgress(plan_filepath, program.get<bool>("--instantiate-ground-task"));
         auto num_datalog_threads = program.get<std::size_t>("--num-datalog-threads");
         auto num_search_workers = program.get<std::size_t>("--num-search-workers");
         auto state_repository_mode_name = program.get<std::string>("--state-repository-mode");
@@ -139,6 +141,8 @@ int run(int argc, char** argv)
         auto heuristic_cost_mode = program.get<std::string>("--heuristic-cost-type") == "unit" ? tyr::CostMode::UNIT : tyr::CostMode::GENERAL;
         auto search_cost_mode = program.get<std::string>("--search-cost-type") == "unit" ? tyr::CostMode::UNIT : tyr::CostMode::GENERAL;
         auto verbosity = program.get<size_t>("--verbosity");
+        const bool admissible_progress = heuristic_type == "blind" ||
+            ((heuristic_type == "rpg_max" || heuristic_type == "lmcut") && heuristic_cost_mode == search_cost_mode);
 
         if (num_search_workers == 0)
         {
@@ -163,6 +167,7 @@ int run(int argc, char** argv)
         auto domain = parser.get_domain();
 
         auto lifted_task = tyr::planning::Task<tyr::LiftedTag>::create(parser.parse_task(problem_filepath));
+        progress.stage("parsing", *lifted_task);
 
         if (verbosity > 1)
             fmt::print(std::cout, "{}\n", domain);
@@ -193,6 +198,7 @@ int run(int argc, char** argv)
             }
 
             auto options = tyr::planning::astar_eager::Options<tyr::LiftedTag>();
+            if (admissible_progress) progress.attach(options, lifted_task);
             options.start_node = successor_generator->get_initial_node(*state_repository, *axiom_evaluator);
             options.event_handler = tyr::planning::astar_eager::DefaultEventHandler<tyr::LiftedTag>::create(verbosity);
             options.cost_mode = search_cost_mode;
@@ -222,11 +228,12 @@ int run(int argc, char** argv)
             else
                 throw std::invalid_argument("The heuristic is not implemented.");
 
+            progress.stage("setup", *lifted_task);
             auto result =
                 tyr::planning::astar_eager::find_solution(*lifted_task, *state_repository, *axiom_evaluator, *successor_generator, *heuristic, options);
             tyr::cli::print_search_statistics(result);
 
-            if (result.status == tyr::planning::SearchStatus::SOLVED)
+            if (result.status == tyr::planning::SearchStatus::SOLVED && !progress.has_plan())
             {
                 std::ofstream plan_file;
                 plan_file.open(plan_filepath);
@@ -246,6 +253,7 @@ int run(int argc, char** argv)
         }
         else
         {
+            progress.begin_stage("grounding");
             auto ground_task_instantiation_options = tyr::planning::GroundTaskInstantiationOptions();
             ground_task_instantiation_options.disable_invariant_synthesis = disable_invariant_synthesis;
             auto ground_task_instantiation_result = lifted_task->instantiate_ground_task(*execution_context, ground_task_instantiation_options);
@@ -257,6 +265,7 @@ int run(int argc, char** argv)
             else if (ground_task_instantiation_result.status == tyr::planning::GroundTaskInstantiationStatus::SUCCESS)
             {
                 auto ground_task = ground_task_instantiation_result.task;
+                progress.stage("grounding", *ground_task);
 
                 auto axiom_evaluator = tyr::planning::AxiomEvaluatorFactory<tyr::GroundTag>().create(ground_task, execution_context);
                 auto state_repository_factory = tyr::planning::StateRepositoryFactory<tyr::GroundTag>();
@@ -265,6 +274,7 @@ int run(int argc, char** argv)
                 auto successor_generator = tyr::planning::SuccessorGeneratorFactory<tyr::GroundTag>().create(ground_task, execution_context);
 
                 auto options = tyr::planning::astar_eager::Options<tyr::GroundTag>();
+                if (admissible_progress) progress.attach(options, ground_task);
                 options.start_node = successor_generator->get_initial_node(*state_repository, *axiom_evaluator);
                 options.event_handler = tyr::planning::astar_eager::DefaultEventHandler<tyr::GroundTag>::create(verbosity);
                 options.cost_mode = search_cost_mode;
@@ -294,11 +304,12 @@ int run(int argc, char** argv)
                 else
                     throw std::invalid_argument("The heuristic is not implemented.");
 
+                progress.stage("setup", *ground_task);
                 auto result =
                     tyr::planning::astar_eager::find_solution(*ground_task, *state_repository, *axiom_evaluator, *successor_generator, *heuristic, options);
                 tyr::cli::print_search_statistics(result);
 
-                if (result.status == tyr::planning::SearchStatus::SOLVED)
+                if (result.status == tyr::planning::SearchStatus::SOLVED && !progress.has_plan())
                 {
                     std::ofstream plan_file;
                     plan_file.open(plan_filepath);

@@ -52,6 +52,11 @@ public:
 
     explicit SequentialExecutionPolicy(uint64_t) noexcept {}
 
+    bool goal_is_proven(ygg::float_t) const noexcept { return true; }
+    template<typename Engine> static void wake_for_progress(Engine&) noexcept {}
+    template<typename Engine> static ygg::float_t progress_priority(Engine& engine)
+    { return engine.get_worker(ygg::Index<Worker>(0)).search_policy().get_start_priority(); }
+
     struct WorkerState
     {
     };

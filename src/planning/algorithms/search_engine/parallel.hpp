@@ -202,6 +202,8 @@ template<typename SearchPolicy>
 class ParallelLayerCoordinationPolicy<SearchPolicy, false>
 {
 public:
+    bool goal_is_proven(ygg::float_t) const noexcept { return false; }
+    ygg::float_t progress_priority() const noexcept { return std::numeric_limits<ygg::float_t>::infinity(); }
     void start(ygg::float_t, const OptionsT<SearchPolicy>&, size_t) noexcept {}
 
     template<typename ExecutionPolicy, typename WorkerData>
@@ -217,6 +219,10 @@ template<typename SearchPolicy>
 class ParallelLayerCoordinationPolicy<SearchPolicy, true>
 {
 public:
+    bool goal_is_proven(ygg::float_t cost) const noexcept
+    { return m_synchronize_priority_layers && cost <= m_active_priority.load(std::memory_order_acquire); }
+    ygg::float_t progress_priority() const noexcept
+    { return m_synchronize_priority_layers ? m_active_priority.load(std::memory_order_acquire) : std::numeric_limits<ygg::float_t>::infinity(); }
     void start(ygg::float_t start_priority, const OptionsT<SearchPolicy>& options, size_t num_workers)
     {
         m_synchronize_priority_layers = SearchPolicy::synchronize_priority_layers(options);
@@ -251,6 +257,8 @@ private:
     template<typename ExecutionPolicy, typename Engine, typename WorkerData>
     void wait_for_priority_layer(ExecutionPolicy& execution, Engine& engine, WorkerData& worker)
     {
+        if constexpr (requires { engine.progress_requested(); })
+            if (engine.progress_requested()) return;
         auto generation = size_t { 0 };
         auto terminal_status = std::optional<SearchStatus> {};
         auto finished_priority = std::optional<ygg::float_t> {};
@@ -331,7 +339,11 @@ private:
 
         auto lock = std::unique_lock(worker.execution.mutex);
         const auto ready = [&]
-        { return !execution.running() || m_layer_generation.load(std::memory_order_acquire) != generation || can_expand(execution, worker); };
+        {
+            if constexpr (requires { engine.progress_requested(); })
+                if (engine.progress_requested()) return true;
+            return !execution.running() || m_layer_generation.load(std::memory_order_acquire) != generation || can_expand(execution, worker);
+        };
         auto timed_out = false;
         if (execution.m_deadline)
             timed_out = !worker.execution.condition.wait_until(lock, *execution.m_deadline, ready) && execution.running();
@@ -388,6 +400,10 @@ public:
     };
 
     explicit ParallelExecutionPolicy(uint64_t seed) : m_state_policy(seed) {}
+
+    bool goal_is_proven(ygg::float_t cost) const noexcept { return m_coordination.goal_is_proven(cost); }
+    template<typename Engine> void wake_for_progress(Engine& engine) { notify_workers(engine); }
+    template<typename Engine> ygg::float_t progress_priority(Engine&) const noexcept { return m_coordination.progress_priority(); }
 
     template<typename Options>
     static void validate(const Options& options)
@@ -516,8 +532,8 @@ public:
     ygg::float_t incumbent_cost() const noexcept { return m_incumbent_cost.load(std::memory_order_relaxed); }
 
     template<typename Engine, typename WorkerData>
-    bool can_expand_locked(Engine&, WorkerData& worker) const noexcept
-    { return m_coordination.can_expand(*this, worker); }
+    bool can_expand_locked(Engine& engine, WorkerData& worker) const noexcept
+    { return !engine.progress_requested() && m_coordination.can_expand(*this, worker); }
 
     template<typename WorkerData, typename Callback>
     static decltype(auto) with_worker_lock(WorkerData& worker, Callback&& callback)

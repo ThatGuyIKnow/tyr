@@ -21,9 +21,11 @@
 #include "tyr/planning/algorithms/utils.hpp"
 #include "tyr/planning/declarations.hpp"
 #include "tyr/planning/search_budget.hpp"
+#include "tyr/planning/algorithms/statistics.hpp"
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -50,6 +52,8 @@ struct Options
     /// Optional initial node. It must belong to this task; search materializes it in the caller repository while preserving its metric.
     std::optional<Node<Kind>> start_node = std::nullopt;
     EventHandlerPtr<Kind> event_handler = nullptr;
+    /// Runs with workers paused. A non-null plan is proven optimal assuming an admissible heuristic; otherwise f is a completed layer.
+    std::function<void(std::optional<ygg::float_t>, const Plan<Kind>*, const Statistics&, const std::vector<Statistics>&)> progress_callback;
     PruningStrategyPtr<Kind> pruning_strategy = nullptr;
     GoalStrategyPtr<Kind> goal_strategy = nullptr;
     SearchBudget search_budget;
