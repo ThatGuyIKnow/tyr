@@ -73,8 +73,11 @@ template<typename Tag>
 using PreconditionOccurrences = ygg::UnorderedMap<PreconditionVariant, ElementViews<Tag>>;
 
 template<typename Tag>
-using PreconditionDetails =
-    ygg::UnorderedMap<ElementView<Tag>, ygg::UnorderedMap<PreconditionVariant, std::variant<std::monostate, bool, formalism::planning::FDRValue>>>;
+struct PreconditionDetails
+{
+    ygg::UnorderedMap<ElementView<Tag>, ygg::UnorderedMap<PreconditionVariant, std::variant<std::monostate, bool, formalism::planning::FDRValue>>> values;
+    ygg::UnorderedMap<ElementView<Tag>, std::vector<size_t>> positions;
+};
 
 template<typename Tag>
 struct BaseEntry
@@ -396,10 +399,10 @@ static std::optional<StackEntry<Tag>> try_create_atom_stack_entry(ygg::Index<for
 
     auto category = [&](ElementView<Tag> e) -> ygg::uint_t
     {
-        if (!details.at(e).contains(atom))
+        if (!details.values.at(e).contains(atom))
             return 2;  // dontcare
 
-        const auto polarity = std::get<bool>(details.at(e).at(atom));
+        const auto polarity = std::get<bool>(details.values.at(e).at(atom));
         return polarity ? 0 : 1;  // true first, then false
     };
 
@@ -441,10 +444,10 @@ static std::optional<StackEntry<Tag>> try_create_variable_stack_entry(formalism:
 
     auto category = [&](ElementView<Tag> e) -> ygg::uint_t
     {
-        if (!details.at(e).contains(variable))
+        if (!details.values.at(e).contains(variable))
             return domain_size;  // dontcare
 
-        const auto value = std::get<formalism::planning::FDRValue>(details.at(e).at(variable));
+        const auto value = std::get<formalism::planning::FDRValue>(details.values.at(e).at(variable));
         return ygg::uint_t(value);
     };
 
@@ -501,14 +504,14 @@ static std::optional<StackEntry<Tag>> try_create_negative_fact_stack_entry(ygg::
                      base.elements.end(),
                      [&](auto&& lhs, auto&& rhs)
                      {
-                         const auto lhs_has = details.at(lhs).contains(fact);
-                         const auto rhs_has = details.at(rhs).contains(fact);
+                         const auto lhs_has = details.values.at(lhs).contains(fact);
+                         const auto rhs_has = details.values.at(rhs).contains(fact);
                          if (lhs_has == rhs_has)
                              return lhs < rhs;
                          return lhs_has > rhs_has;  // true < dontcare
                      });
 
-    const auto mid = std::find_if(base.elements.begin(), base.elements.end(), [&](auto&& e) { return !details.at(e).contains(fact); });
+    const auto mid = std::find_if(base.elements.begin(), base.elements.end(), [&](auto&& e) { return !details.values.at(e).contains(fact); });
 
     const auto true_elements = ElementSpan<Tag>(base.elements.begin(), mid);
     const auto dontcare_elements = ElementSpan<Tag>(mid, base.elements.end());
@@ -533,14 +536,14 @@ static std::optional<StackEntry<Tag>> try_create_constraint_stack_entry(ygg::Dat
                      base.elements.end(),
                      [&](auto&& lhs, auto&& rhs)
                      {
-                         const auto lhs_has = details.at(lhs).contains(constraint);
-                         const auto rhs_has = details.at(rhs).contains(constraint);
+                         const auto lhs_has = details.values.at(lhs).contains(constraint);
+                         const auto rhs_has = details.values.at(rhs).contains(constraint);
                          if (lhs_has == rhs_has)
                              return lhs < rhs;
                          return lhs_has > rhs_has;  // true < dontcare
                      });
 
-    const auto mid = std::find_if(base.elements.begin(), base.elements.end(), [&](auto&& e) { return !details.at(e).contains(constraint); });
+    const auto mid = std::find_if(base.elements.begin(), base.elements.end(), [&](auto&& e) { return !details.values.at(e).contains(constraint); });
 
     const auto true_elements = ElementSpan<Tag>(base.elements.begin(), mid);
     const auto dontcare_elements = ElementSpan<Tag>(mid, base.elements.end());
@@ -587,15 +590,21 @@ static std::optional<StackEntry<Tag>> try_create_stack_entry(BaseEntry<Tag> base
                                                              const PreconditionDetails<Tag>& details,
                                                              Builder<Tag>& builder)
 {
-    if (!base.elements.empty())
+    if (base.elements.empty()) return std::nullopt;
+    while (base.depth < sorted_preconditions.size())
     {
-        for (; base.depth < sorted_preconditions.size(); ++base.depth)
-            if (auto entry = try_create_selector_stack_entry(base, sorted_preconditions, details, builder))
-                return entry;
+        auto next = sorted_preconditions.size();
+        for (const auto element : base.elements)
+            if (const auto found = details.positions.find(element); found != details.positions.end()) {
+                const auto& positions = found->second;
+                const auto position = std::lower_bound(positions.begin(), positions.end(), base.depth);
+                if (position != positions.end()) next = std::min(next, *position);
+            }
+        if (next == sorted_preconditions.size()) break;
+        base.depth = next;
+        if (auto entry = try_create_selector_stack_entry(base, sorted_preconditions, details, builder)) return entry;
+        ++base.depth;
     }
-    else
-        return std::nullopt;
-
     return create_generator_stack_entry(base, builder);
 }
 
@@ -618,34 +627,34 @@ MatchTree<Tag>::MatchTree(std::vector<ygg::View<ygg::Index<Tag>, formalism::plan
     {
         const auto condition = get_condition(element);
 
-        details.try_emplace(element);  //
+        details.values.try_emplace(element);  //
 
         for (const auto fact : condition.template get_facts<formalism::PositiveTag>())
         {
             const auto key = fact.get_variable();
             occurrences[key].push_back(element);
-            details[element][key] = fact.get_value();
+            details.values[element][key] = fact.get_value();
         }
 
         for (const auto fact : condition.template get_facts<formalism::NegativeTag>())
         {
             const auto key = fact.get_data();
             occurrences[key].push_back(element);
-            details[element][key] = std::monostate {};
+            details.values[element][key] = std::monostate {};
         }
 
         for (const auto literal : condition.template get_literals<formalism::DerivedTag>())
         {
             const auto key = literal.get_atom().get_index();
             occurrences[key].push_back(element);
-            details[element][key] = literal.get_polarity();
+            details.values[element][key] = literal.get_polarity();
         }
 
         for (const auto constraint : condition.get_numeric_constraints())
         {
             const auto& key = constraint.get_data();
             occurrences[key].push_back(element);
-            details[element][key] = std::monostate {};
+            details.values[element][key] = std::monostate {};
         }
     }
 
@@ -668,6 +677,10 @@ MatchTree<Tag>::MatchTree(std::vector<ygg::View<ygg::Index<Tag>, formalism::plan
                       return a.second.size() > b.second.size();
                   return precondition_less(a.first, b.first);
               });
+
+    for (size_t position = 0; position < sorted_preconditions.size(); ++position)
+        for (const auto element : sorted_preconditions[position].second)
+            details.positions[element].push_back(position);
 
     // std::cout << details << std::endl;
     // std::cout << sorted_preconditions << std::endl;

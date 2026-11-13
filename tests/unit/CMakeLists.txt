@@ -116,6 +116,8 @@ foreach(task_kind ground lifted)
     endforeach()
 endforeach()
 
+target_include_directories(planning_heuristics_ground_rpg_max PRIVATE ${PROJECT_SOURCE_DIR}/src)
+
 foreach(task_kind ground lifted)
     foreach(algorithm brfs astar gbfs iw siw)
         add_gtest(
