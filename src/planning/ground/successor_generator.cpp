@@ -35,7 +35,6 @@
 
 #include <algorithm>
 #include <cassert>
-#include <mutex>
 #include <stdexcept>
 #include <utility>
 #include <yggdrasil/containers/associative_containers.hpp>
@@ -76,9 +75,7 @@ struct SuccessorGenerator<GroundTag>::Impl
 
         TaskPtr<GroundTag> task;
         match_tree::MatchTreePtr<formalism::planning::Action<GroundTag>> action_match_tree_prototype;
-        ygg::UnorderedMap<formalism::planning::ActionView<LiftedTag>, formalism::planning::ActionViewList<GroundTag>> schema_actions;
-        mutable std::mutex schema_mutex;
-        mutable ActionMatchTrees schema_match_tree_prototypes;
+        ActionMatchTrees schema_match_tree_prototypes;
         ActionBindingMap action_binding_to_ground_action;
     };
 
@@ -112,18 +109,11 @@ struct SuccessorGenerator<GroundTag>::Impl
 
     match_tree::MatchTree<formalism::planning::Action<GroundTag>>& get_schema_match_tree(formalism::planning::ActionView<LiftedTag> action)
     {
-        const auto found = definition->schema_actions.find(action);
+        const auto it = evaluator.schema_match_trees.find(action);
         // Repository indices can collide across independent factories.
-        if (found == definition->schema_actions.end() || &action.get_context() != &found->first.get_context())
+        if (it == evaluator.schema_match_trees.end() || &action.get_context() != &it->first.get_context())
             throw std::invalid_argument("SuccessorGenerator: action schema does not belong to the task domain.");
-        if (const auto it = evaluator.schema_match_trees.find(action); it != evaluator.schema_match_trees.end()) return *it->second;
-        const auto lock = std::lock_guard(definition->schema_mutex);
-        auto prototype = definition->schema_match_tree_prototypes.find(action);
-        if (prototype == definition->schema_match_tree_prototypes.end()) {
-            auto tree = match_tree::MatchTree<formalism::planning::Action<GroundTag>>::create(found->second, definition->task->get_task().get_context());
-            prototype = definition->schema_match_tree_prototypes.emplace(action, std::move(tree)).first;
-        }
-        return *evaluator.schema_match_trees.emplace(action, prototype->second->make_worker()).first->second;
+        return *it->second;
     }
 
     template<StateViewConcept<GroundTag> S, typename Objects>
@@ -175,6 +165,7 @@ SuccessorGenerator<GroundTag>::Impl::Definition::Definition(TaskPtr<GroundTag> t
         task->get_task().get_context())),
     action_binding_to_ground_action()
 {
+    auto schema_actions = ygg::UnorderedMap<formalism::planning::ActionView<LiftedTag>, formalism::planning::ActionViewList<GroundTag>> {};
     for (const auto action : task->get_task().get_domain().get_actions())
         schema_actions.try_emplace(action);
     for (const auto action : task->get_task().get_ground_actions())
@@ -182,7 +173,10 @@ SuccessorGenerator<GroundTag>::Impl::Definition::Definition(TaskPtr<GroundTag> t
         action_binding_to_ground_action.emplace(action.get_row(), action);
         schema_actions.at(action.get_action()).push_back(action);
     }
-
+    for (auto& [schema, actions] : schema_actions)
+        schema_match_tree_prototypes.emplace(
+            schema,
+            match_tree::MatchTree<formalism::planning::Action<GroundTag>>::create(std::move(actions), task->get_task().get_context()));
 }
 
 SuccessorGenerator<GroundTag>::Impl::Evaluator::Evaluator(const Definition& definition) :
@@ -190,7 +184,8 @@ SuccessorGenerator<GroundTag>::Impl::Evaluator::Evaluator(const Definition& defi
     applicable_actions(),
     executor()
 {
-
+    for (const auto& [schema, tree] : definition.schema_match_tree_prototypes)
+        schema_match_trees.emplace(schema, tree->make_worker());
 }
 
 SuccessorGenerator<GroundTag>::SuccessorGenerator(ygg::uint_t index,
