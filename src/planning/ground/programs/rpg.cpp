@@ -287,19 +287,21 @@ formalism::datalog::ProgramView<GroundTag> finish_program(GroundProgramBuildCont
 
 void translate_action_to_delete_free_rules(formalism::planning::ActionView<GroundTag> action,
                                            ygg::Data<formalism::datalog::Program<GroundTag>>& program,
-                                           const MetricTerms& terms, bool general,
+                                           const MetricTerms& terms, bool general, bool direct_effect_rules,
                                            TranslationContext<GroundTag>& translation_context,
                                            GroundProgramBuildContext& context,
                                            RPGProgram<GroundTag>::RuleToActionMappings& rule_to_action)
 {
     const auto costs = general ? metric_effects(action, terms, context.merge_context) : MetricEffects {};
-    const auto applicability_atom = create_applicability_atom(action, context);
-    const auto applicability_rule = create_applicability_rule(action, applicability_atom, translation_context, context);
-    program.predicate_rules.push_back(applicability_rule.get_index());
+    std::optional<formalism::datalog::AtomView<GroundTag, formalism::FluentTag>> applicability_atom;
+    if (!direct_effect_rules) {
+        applicability_atom = create_applicability_atom(action, context);
+        program.predicate_rules.push_back(create_applicability_rule(action, *applicability_atom, translation_context, context).get_index());
+    }
 
     for (const auto cond_eff : action.get_effects())
     {
-        const auto body = create_delete_free_effect_condition(applicability_atom, cond_eff.get_condition(), translation_context, context);
+        const auto body = direct_effect_rules ? create_delete_free_numeric_effect_condition(action.get_condition(), cond_eff.get_condition(), translation_context, context) : create_delete_free_effect_condition(*applicability_atom, cond_eff.get_condition(), translation_context, context);
 
         auto heads = ygg::IndexList<formalism::datalog::Atom<GroundTag, formalism::FluentTag>> {};
         for (const auto fact : cond_eff.get_effect().get_facts<formalism::PositiveTag>())
@@ -323,7 +325,7 @@ void translate_action_to_delete_free_rules(formalism::planning::ActionView<Groun
     }
 }
 
-formalism::datalog::ProgramView<GroundTag> create_rpg_ground_program(formalism::planning::TaskView<GroundTag> task, CostMode cost_mode,
+formalism::datalog::ProgramView<GroundTag> create_rpg_ground_program(formalism::planning::TaskView<GroundTag> task, CostMode cost_mode, bool direct_effect_rules,
                                                                      TranslationContext<GroundTag>& translation_context,
                                                                      RPGProgram<GroundTag>::RuleToActionMappings& mapping,
                                                                      formalism::datalog::Repository& repository)
@@ -412,7 +414,7 @@ formalism::datalog::ProgramView<GroundTag> create_rpg_ground_program(formalism::
         formalism::datalog::collect_fterms(ygg::make_view(expr, merge_context.destination()), terms);
     }
     for (const auto action : task.get_ground_actions())
-        translate_action_to_delete_free_rules(action, *context.program, terms, general, translation_context, context, mapping);
+        translate_action_to_delete_free_rules(action, *context.program, terms, general, direct_effect_rules, translation_context, context, mapping);
 
     return finish_program(context);
 }
@@ -470,14 +472,14 @@ datalog::Program<GroundTag> create_rpg_datalog_program(formalism::planning::Task
                                                        CostMode cost_mode,
                                                        TranslationContext<GroundTag>& translation_context,
                                                        RPGProgram<GroundTag>::RuleToActionMappings& mapping,
-                                                       RPGProgram<GroundTag>::MetricTargets& metric_targets)
+                                                       RPGProgram<GroundTag>::MetricTargets& metric_targets, bool direct_effect_rules)
 {
     auto factory = std::make_shared<formalism::datalog::RepositoryFactory>();
     const auto num_objects = task.get_num_objects();
     auto source_repository = factory->create(num_objects);
     auto source_translation_context = TranslationContext<GroundTag> {};
     auto source_mapping = RPGProgram<GroundTag>::RuleToActionMappings {};
-    const auto source_program = create_rpg_ground_program(task, cost_mode, source_translation_context, source_mapping, source_repository);
+    const auto source_program = create_rpg_ground_program(task, cost_mode, direct_effect_rules, source_translation_context, source_mapping, source_repository);
     const auto source_static_fact_sets = datalog::TaggedFactSets<formalism::StaticTag>(source_program.get_predicates<formalism::StaticTag>(),
                                                                                        source_program.get_functions<formalism::StaticTag>(),
                                                                                        source_program.get_atoms<formalism::StaticTag>(),
@@ -512,10 +514,10 @@ datalog::Program<GroundTag> create_rpg_datalog_program(formalism::planning::Task
 }  // namespace
 
 template<>
-RPGProgram<GroundTag>::RPGProgram(formalism::planning::TaskView<GroundTag> task, CostMode cost_mode, bool) :
+RPGProgram<GroundTag>::RPGProgram(formalism::planning::TaskView<GroundTag> task, CostMode cost_mode, bool direct_effect_rules) :
     m_translation_context(),
     m_rule_to_action(),
-    m_datalog_program(create_rpg_datalog_program(task, cost_mode, m_translation_context, m_rule_to_action, m_metric_targets))
+    m_datalog_program(create_rpg_datalog_program(task, cost_mode, m_translation_context, m_rule_to_action, m_metric_targets, direct_effect_rules))
 {
 }
 

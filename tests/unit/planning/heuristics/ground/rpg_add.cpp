@@ -22,7 +22,11 @@
 namespace tyr::tests
 {
 TEST(TyrPlanningGroundAddRPGHeuristicTest, SetGoalReconfiguresEvaluator) { expect_builtin_set_goal_reconfigures_evaluator<GroundTag>(); }
-TEST(TyrPlanningGroundAddRPGHeuristicTest, GeneralCostModeThrows) { expect_general_cost_mode_throws<GroundTag, tyr::planning::AddRPGHeuristic>(); }
+TEST(TyrPlanningGroundAddRPGHeuristicTest, GeneralCostModeIsSupported)
+{
+    auto context = create_preferred_action_reset_context<GroundTag>();
+    EXPECT_NO_THROW(tyr::planning::AddRPGHeuristic<GroundTag>::create(context.task, context.execution_context, CostMode::GENERAL));
+}
 }
 
 namespace tyr::tests

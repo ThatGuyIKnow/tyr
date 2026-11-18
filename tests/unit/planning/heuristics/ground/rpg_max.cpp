@@ -36,6 +36,7 @@ struct ReferenceHMax : planning::detail::RPGEvaluator<ReferenceHMax, GroundTag,
         datalog::MinCostAnnotationPolicy<datalog::MaxAggregation>, datalog::TerminationPolicy<datalog::MaxAggregation>>;
     using Base::Base;
     using Base::evaluate;
+    bool fires_once() const { return workspace().scheduler.fires_once(); }
     ygg::float_t evaluate(const planning::StateView<GroundTag>& state) { return Base::evaluate(state.get_state_builder()); }
 };
 
@@ -62,6 +63,7 @@ TEST(TyrPlanningGroundHMaxGraphTest, FractionalStaticCostsZeroCyclesAndGoalChang
     const auto initial = context.successor_generator->get_initial_node(*context.state_repository, *context.axiom_evaluator);
     EXPECT_EQ(fast->evaluate(initial.get_state()), 2.5);
     EXPECT_EQ(fast->evaluate(initial.get_state()), reference.evaluate(initial.get_state()));
+    EXPECT_TRUE(reference.fires_once());
     const auto successors = context.successor_generator->get_labeled_successor_nodes(initial, *context.state_repository, *context.axiom_evaluator);
     for (const auto& successor : successors) {
         EXPECT_EQ(fast->evaluate(successor.node.get_state()), reference.evaluate(successor.node.get_state()));
@@ -86,6 +88,25 @@ TEST(TyrPlanningGroundHMaxGraphTest, ReusesBuffersAcrossZeroCostCyclesAndUnreach
     EXPECT_EQ(evaluator.evaluate(empty, *context.task->get_repository(), {3}), std::numeric_limits<ygg::float_t>::infinity());
     EXPECT_EQ(evaluator.evaluate(empty, *context.task->get_repository(), {0, 2}), 2.5);
     EXPECT_EQ(evaluator.evaluate(empty, *context.task->get_repository(), {}), 0);
+}
+
+TEST(TyrPlanningGroundHMaxGraphTest, DynamicMetricCostsKeepNumericPropagation)
+{
+    const auto domain = std::string(R"((define (domain dynamic-check)
+      (:requirements :strips :numeric-fluents :action-costs)
+      (:predicates (start) (goal)) (:functions (total-cost) (step-cost))
+      (:action finish :parameters () :precondition (start)
+        :effect (and (goal) (increase (total-cost) (step-cost)) (increase (step-cost) 1)))))");
+    const auto problem = std::string(R"((define (problem dynamic-check) (:domain dynamic-check)
+      (:init (start) (= (total-cost) 0) (= (step-cost) 2.5)) (:goal (goal)) (:metric minimize (total-cost))))");
+    auto parser = formalism::planning::Parser(domain, "dynamic-check-domain.pddl");
+    auto context = create_heuristic_context<GroundTag>(planning::Task<LiftedTag>::create(parser.parse_task(problem, "dynamic-check-problem.pddl")));
+    auto reference = ReferenceHMax(context.task, context.execution_context, CostMode::GENERAL);
+    auto heuristic = planning::MaxRPGHeuristic<GroundTag>::create(context.task, context.execution_context, CostMode::GENERAL);
+    const auto initial = context.successor_generator->get_initial_node(*context.state_repository, *context.axiom_evaluator);
+    EXPECT_EQ(reference.evaluate(initial.get_state()), 2.5);
+    EXPECT_FALSE(reference.fires_once());
+    EXPECT_EQ(heuristic->evaluate(initial.get_state()), 2.5);
 }
 
 TEST_P(HeuristicFixtureTest, MatchesGeneralEvaluatorOnSuccessors)

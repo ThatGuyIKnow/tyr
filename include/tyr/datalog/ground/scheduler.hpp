@@ -27,6 +27,7 @@
 #include "tyr/datalog/policies/termination_concepts.hpp"
 #include "tyr/datalog/rule_evaluation.hpp"
 #include "tyr/formalism/datalog/repository.hpp"
+#include "tyr/formalism/datalog/expression_properties.hpp"
 
 #include <algorithm>
 #include <concepts>
@@ -108,11 +109,12 @@ public:
 
     void reset(const FactSets& fact_sets)
     {
+        m_new_run = true;
         m_predicate_queue.clear();
         m_function_queue.clear();
         m_statistics = {};
         m_scratch.clear();
-        initialize_rule_states<formalism::PredicateTag>(fact_sets);
+        if (!m_once_supported) initialize_rule_states<formalism::PredicateTag>(fact_sets);
         initialize_rule_states<formalism::FunctionTag>(fact_sets);
     }
 
@@ -200,6 +202,11 @@ public:
     GroundSchedulerScratch& scratch() noexcept { return m_scratch; }
     [[nodiscard]] const GroundSchedulerScratch& scratch() const noexcept { return m_scratch; }
 
+    bool fires_once() const noexcept { return m_fires_once; }
+    auto& ready() noexcept { return m_ready; }
+    Cost ready_cost(formalism::datalog::RuleView<GroundTag, formalism::PredicateTag> rule) const
+    { const auto i = ygg::uint_t(rule.get_index()); return m_support[i] + m_edges[i]; }
+
 private:
     template<formalism::RelationKind R, AnnotationPolicyConcept AP, TerminationPolicyConcept TP, RuleCostPolicyConcept CP>
     void schedule(formalism::datalog::RuleView<GroundTag, R> rule, ProgramExecutionContext<GroundTag, AP, TP, CP>& ctx);
@@ -266,6 +273,14 @@ private:
     std::vector<GroundQueueEntry<formalism::FunctionTag>> m_function_queue;
     GroundQueueStatistics m_statistics;
     GroundSchedulerScratch m_scratch;
+    bool m_fires_once = false;
+    bool m_new_run = true;
+    bool m_checked_once = false;
+    bool m_once_supported = false;
+    std::vector<Cost> m_edges;
+    std::vector<Cost> m_support;
+    std::vector<ygg::uint_t> m_conditions;
+    std::vector<formalism::datalog::RuleView<GroundTag, formalism::PredicateTag>> m_ready;
 };
 
 }

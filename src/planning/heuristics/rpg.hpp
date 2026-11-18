@@ -123,7 +123,7 @@ public:
 
     RPGEvaluator(TaskPtr<Kind> task, ygg::ExecutionContextPtr execution_context, CostMode cost_mode = CostMode::UNIT) :
         // h_max, h_add and FF aggregate over the minimal bindings of a rule, so splitting preserves them (LM-cut builds its own definition).
-        RPGEvaluator(std::make_shared<Definition>(std::move(task), cost_mode, true), std::move(execution_context))
+        RPGEvaluator(std::make_shared<Definition>(std::move(task), cost_mode, !std::same_as<Kind, GroundTag> || std::same_as<AP, datalog::MinCostAnnotationPolicy<datalog::MaxAggregation>>), std::move(execution_context))
     {
     }
 

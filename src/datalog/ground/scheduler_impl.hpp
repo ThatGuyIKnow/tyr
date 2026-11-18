@@ -27,6 +27,8 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
+#include <utility>
 #include <yggdrasil/core/config.hpp>
 
 namespace tyr::datalog
@@ -84,6 +86,14 @@ void Scheduler<GroundTag>::notify_predicate_generated_for(formalism::datalog::Pr
         if (unsatisfied_count == 0)
             continue;
 
+        if constexpr (std::same_as<R, formalism::PredicateTag>)
+            if (m_fires_once) {
+                auto& support = m_support[ygg::uint_t(dependent_rule.get_index())];
+                support = std::max(support, ctx.out().annotations().fetch_cost(fact));
+                if (--unsatisfied_count == 0) m_ready.push_back(dependent_rule);
+                continue;
+            }
+
         --unsatisfied_count;
         schedule(dependent_rule, ctx);
     }
@@ -108,6 +118,58 @@ void Scheduler<GroundTag>::notify_numeric_changed_for(formalism::datalog::Functi
 template<AnnotationPolicyConcept AP, TerminationPolicyConcept TP, RuleCostPolicyConcept CP>
 void Scheduler<GroundTag>::begin_stratum(ProgramExecutionContext<GroundTag, AP, TP, CP>& ctx)
 {
+    // A resumed solve may need to restore staged annotations to the frontier.
+    if (m_fires_once && !m_new_run) {
+        const auto facts = FactSets {ctx.in().facts().fact_sets, ctx.out().facts().fact_sets};
+        initialize_rule_states<formalism::PredicateTag>(facts);
+    }
+    m_fires_once = false;
+    m_ready.clear();
+    const auto new_run = std::exchange(m_new_run, false);
+    // Dynamic numeric support and cost overrides retain the general evaluator.
+    if constexpr (std::same_as<AP, MinCostAnnotationPolicy<MaxAggregation>> && std::same_as<CP, RuleCostPolicy>) {
+        if (!m_checked_once) {
+            m_checked_once = true;
+            m_once_supported = m_program.get_rules<formalism::FunctionTag>().empty();
+            const auto facts = FactSets {ctx.in().facts().fact_sets, ctx.out().facts().fact_sets};
+            for (const auto rule : m_program.get_rules<formalism::PredicateTag>()) {
+                auto edge = static_cast<Cost>(rule.get_cost());
+                m_once_supported &= rule.get_body().get_numeric_constraints().empty()
+                    && formalism::datalog::collect_fluent_reads(rule).empty();
+                for (const auto literal : rule.get_body().template get_literals<formalism::FluentTag>())
+                    m_once_supported &= literal.get_polarity();
+                for (const auto effect : rule.get_metric_effects())
+                    ygg::visit([&](auto numeric) {
+                        if (!ctx.out().cost_policy().is_metric_target(numeric.get_fterm().get_row().get_index())) return;
+                        if (numeric.get_operator() != formalism::NumericEffectOperatorKind::Increase) {
+                            m_once_supported = false;
+                            return;
+                        }
+                        if (!formalism::datalog::collect_fluent_reads(rule).empty()) return;
+                        const auto value = evaluate(numeric.get_fexpr(), facts);
+                        if (empty(value) || !std::isfinite(lower(value)) || lower(value) != upper(value)) m_once_supported = false;
+                        else edge += std::max(lower(value), Cost(0));
+                    }, effect.get_variant());
+                m_once_supported &= std::isfinite(edge) && edge >= 0;
+                m_edges.push_back(edge);
+                m_conditions.push_back(rule.get_body().template get_literals<formalism::FluentTag>().size());
+            }
+        }
+        if (m_once_supported && new_run) {
+            m_fires_once = true;
+            m_support.assign(m_edges.size(), Cost(0));
+            for (const auto rule : m_program.get_rules<formalism::PredicateTag>()) {
+                const auto i = ygg::uint_t(rule.get_index());
+                get_states<formalism::PredicateTag>()[i].unsatisfied_count = m_conditions[i];
+                if (m_conditions[i] == 0)
+                    m_ready.push_back(rule);
+            }
+            for (const auto& set : ctx.out().facts().fact_sets.predicate.get_sets())
+                for (const auto binding : set.get_bindings())
+                    notify_predicate_generated_for<formalism::PredicateTag>(binding.get_index(), ctx);
+            return;
+        }
+    }
     for (const auto rule : m_program.get_rules<formalism::PredicateTag>())
         update_numeric_constraint_satisfaction(rule, ctx);
     for (const auto rule : m_program.get_rules<formalism::FunctionTag>())
@@ -139,6 +201,10 @@ void Scheduler<GroundTag>::notify_numeric_changed(formalism::datalog::FunctionBi
 template<AnnotationPolicyConcept AP, TerminationPolicyConcept TP, RuleCostPolicyConcept CP>
 void Scheduler<GroundTag>::notify_generated(const CostBuckets::Bucket& bucket, ProgramExecutionContext<GroundTag, AP, TP, CP>& ctx)
 {
+    if (m_fires_once) {
+        for (const auto fact : bucket.predicate) notify_predicate_generated(fact, ctx);
+        return;
+    }
     m_scratch.changed_facts.assign(bucket.predicate.begin(), bucket.predicate.end());
     m_scratch.changed_terms.clear();
     m_scratch.changed_terms.reserve(bucket.function.size());

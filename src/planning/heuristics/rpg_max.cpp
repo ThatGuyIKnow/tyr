@@ -18,7 +18,6 @@
 #include "tyr/planning/heuristics/rpg_max.hpp"
 
 #include "../ground/heuristics/rpg.hpp"
-#include "../ground/heuristics/hmax_graph.hpp"
 #include "../lifted/heuristics/rpg.hpp"
 #include "rpg.hpp"
 #include "tyr/datalog/policies/annotation.hpp"
@@ -38,59 +37,6 @@ struct MaxRPGHeuristic<Kind>::Impl :
         detail::RPGEvaluator<Impl, Kind, datalog::MinCostAnnotationPolicy<datalog::MaxAggregation>, datalog::TerminationPolicy<datalog::MaxAggregation>>;
 
     using Base::Base;
-};
-
-template<>
-struct MaxRPGHeuristic<GroundTag>::Impl
-{
-    struct General : detail::RPGEvaluator<General, GroundTag, datalog::MinCostAnnotationPolicy<datalog::MaxAggregation>,
-                                         datalog::TerminationPolicy<datalog::MaxAggregation>>
-    {
-        using Base = detail::RPGEvaluator<General, GroundTag, datalog::MinCostAnnotationPolicy<datalog::MaxAggregation>,
-                                          datalog::TerminationPolicy<datalog::MaxAggregation>>;
-        using Base::Base;
-    };
-
-    TaskPtr<GroundTag> task;
-    ygg::ExecutionContextPtr execution_context;
-    CostMode cost_mode;
-    std::shared_ptr<const detail::HMaxGraph> graph;
-    std::optional<detail::HMaxGraphEvaluator> fast;
-    std::vector<ygg::uint_t> goals;
-    std::unique_ptr<General> general;
-
-    Impl(TaskPtr<GroundTag> task_, ygg::ExecutionContextPtr context, CostMode mode) :
-        task(std::move(task_)), execution_context(std::move(context)), cost_mode(mode), graph(detail::HMaxGraph::create(task, mode))
-    {
-        if (graph) {
-            fast.emplace(graph);
-            goals = detail::HMaxGraph::atoms(task->get_task().get_goal());
-        } else general = std::make_unique<General>(task, execution_context, cost_mode);
-    }
-
-    Impl(const Impl& other, ygg::ExecutionContextPtr context) :
-        task(other.task), execution_context(std::move(context)), cost_mode(other.cost_mode), graph(other.graph), goals(other.goals)
-    {
-        if (other.general) general = std::make_unique<General>(*other.general, execution_context);
-        else fast.emplace(graph);
-    }
-
-    void set_goal(formalism::planning::ConjunctiveConditionView<GroundTag> goal)
-    {
-        if (!general && detail::HMaxGraph::supports(goal)) goals = detail::HMaxGraph::atoms(goal);
-        else {
-            if (!general) {
-                general = std::make_unique<General>(task, execution_context, cost_mode);
-                fast.reset();
-            }
-            general->set_goal(goal);
-        }
-    }
-
-    ygg::float_t evaluate(const ygg::Builder<State<GroundTag>>& state)
-    { return general ? general->evaluate(state) : fast->evaluate(state, *task->get_repository(), goals); }
-
-    void print_summary(size_t verbosity) const { if (general) general->print_summary(verbosity); }
 };
 
 template<TaskKind Kind>

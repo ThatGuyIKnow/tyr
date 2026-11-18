@@ -45,6 +45,28 @@ public:
 
     bool generate_updates(CostBuckets& cost_buckets, PendingPredicateAchievers& pending_achievers)
     {
+        if constexpr (std::same_as<AP, MinCostAnnotationPolicy<MaxAggregation>> && std::same_as<CP, RuleCostPolicy>)
+            if (scheduler().fires_once()) {
+                auto& out = m_ctx->out();
+                auto& scratch = scheduler().scratch();
+                for (const auto rule : scheduler().ready()) {
+                    scratch.clear_updates();
+                    const auto cost = scheduler().ready_cost(rule);
+                    for (const auto head : rule.get_heads()) {
+                        const auto key = head.get_row().get_index();
+                        if (out.annotation_policy().can_update(key, cost, out.annotations(), scratch.delta_annotations)) {
+                            out.annotation_policy().try_update_candidate(key,
+                                WitnessAnnotation<formalism::PredicateTag>(rule.get_row().get_index(), cost, std::vector<NumericSupport>{}), scratch.delta_annotations);
+                            scratch.predicate_updates.insert(key);
+                        }
+                    }
+                    ++scheduler().statistics().num_rules_fired;
+                    reduce_predicate_head_updates(scratch.predicate_updates, out.annotation_policy(), out.facts().fact_sets.predicate,
+                        scratch.delta_annotations, out.annotations(), cost_buckets, pending_achievers);
+                }
+                scheduler().ready().clear();
+                return false;
+            }
         while (scheduler().next_cost() != std::numeric_limits<Cost>::max())
             process_rule_frontier(cost_buckets, pending_achievers, scheduler().next_cost());
         return false;

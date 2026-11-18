@@ -457,6 +457,31 @@ TEST(TyrDatalogGroundQueueTest, MultiPreconditionRuleWaitsForAllFacts)
     EXPECT_EQ(result.statistics.num_facts_derived, 2);
 }
 
+TEST(TyrDatalogGroundQueueTest, MaxRulesFireOnceWithFinalSupportAndResetBetweenStates)
+{
+    auto fixture = GroundQueueFixture();
+    const auto a = fixture.fluent_atom("a");
+    const auto b = fixture.fluent_atom("b");
+    const auto goal = fixture.fluent_atom("goal");
+    fixture.rule(fixture.condition(), a, fixture.fresh_rule_binding(), 9);
+    fixture.rule(fixture.condition(), b, fixture.fresh_rule_binding(), 2.5);
+    fixture.rule(fixture.condition({fixture.fluent_literal(b)}), a, fixture.fresh_rule_binding(), 0);
+    fixture.rule(fixture.condition({fixture.fluent_literal(a), fixture.fluent_literal(b)}), goal, fixture.fresh_rule_binding(), 1);
+    fixture.rule(fixture.condition({fixture.fluent_literal(goal)}), b, fixture.fresh_rule_binding(), 0);
+    const auto const_workspace = datalog::ConstProgramWorkspace<GroundTag>(fixture.program());
+    using Workspace = datalog::ProgramWorkspace<GroundTag, datalog::MinCostAnnotationPolicy<datalog::MaxAggregation>>;
+    auto workspace = Workspace(const_workspace, datalog::MinCostAnnotationPolicy<datalog::MaxAggregation>());
+    auto ctx = datalog::ProgramExecutionContext(workspace);
+    for (int run = 0; run < 2; ++run) {
+        ctx.initialize(fixture.initial_fluent_atoms);
+        datalog::compute_model(ctx);
+        EXPECT_TRUE(ctx.out().scheduler().fires_once());
+        EXPECT_EQ(ctx.out().annotations().fetch_cost(goal.get_row().get_index()), 3.5);
+        EXPECT_EQ(ctx.out().scheduler().statistics().num_rules_fired, 5);
+        EXPECT_EQ(ctx.out().scheduler().statistics().num_queue_pushes, 0);
+    }
+}
+
 TEST(TyrDatalogGroundQueueTest, PositiveFluentPreconditionIndexMapsFactToWaitingRules)
 {
     auto fixture = GroundQueueFixture();
