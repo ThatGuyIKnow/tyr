@@ -202,6 +202,8 @@ public:
     GroundSchedulerScratch& scratch() noexcept { return m_scratch; }
     [[nodiscard]] const GroundSchedulerScratch& scratch() const noexcept { return m_scratch; }
 
+    void use_cost_only_annotations() noexcept { m_cost_only_annotations = true; }
+    bool cost_only_annotations() const noexcept { return m_cost_only_annotations; }
     bool fires_once() const noexcept { return m_fires_once; }
     auto& ready() noexcept { return m_ready; }
     Cost ready_cost(formalism::datalog::RuleView<GroundTag, formalism::PredicateTag> rule) const
@@ -273,6 +275,7 @@ private:
     std::vector<GroundQueueEntry<formalism::FunctionTag>> m_function_queue;
     GroundQueueStatistics m_statistics;
     GroundSchedulerScratch m_scratch;
+    bool m_cost_only_annotations = false;
     bool m_fires_once = false;
     bool m_new_run = true;
     bool m_checked_once = false;

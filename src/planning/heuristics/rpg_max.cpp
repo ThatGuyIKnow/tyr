@@ -37,6 +37,15 @@ struct MaxRPGHeuristic<Kind>::Impl :
         detail::RPGEvaluator<Impl, Kind, datalog::MinCostAnnotationPolicy<datalog::MaxAggregation>, datalog::TerminationPolicy<datalog::MaxAggregation>>;
 
     using Base::Base;
+    Impl(TaskPtr<Kind> task, ygg::ExecutionContextPtr context, CostMode mode) : Base(std::move(task), std::move(context), mode)
+    {
+        if constexpr (std::same_as<Kind, GroundTag>) this->workspace().scheduler.use_cost_only_annotations();
+    }
+    Impl(const Impl& other, ygg::ExecutionContextPtr context) : Base(other, std::move(context))
+    {
+        if constexpr (std::same_as<Kind, GroundTag>) this->workspace().scheduler.use_cost_only_annotations();
+    }
+
 };
 
 template<TaskKind Kind>

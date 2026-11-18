@@ -55,7 +55,9 @@ public:
                     for (const auto head : rule.get_heads()) {
                         const auto key = head.get_row().get_index();
                         if (out.annotation_policy().can_update(key, cost, out.annotations(), scratch.delta_annotations)) {
-                            out.annotation_policy().try_update_candidate(key,
+                            if (scheduler().cost_only_annotations())
+                                scratch.delta_annotations.insert_if_better(key, Annotation<>(BaseAnnotation(cost)));
+                            else out.annotation_policy().try_update_candidate(key,
                                 WitnessAnnotation<formalism::PredicateTag>(rule.get_row().get_index(), cost, std::vector<NumericSupport>{}), scratch.delta_annotations);
                             scratch.predicate_updates.insert(key);
                         }

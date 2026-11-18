@@ -482,6 +482,26 @@ TEST(TyrDatalogGroundQueueTest, MaxRulesFireOnceWithFinalSupportAndResetBetweenS
     }
 }
 
+TEST(TyrDatalogGroundQueueTest, CostOnlyAnnotationsAreExplicitAndPreserveCosts)
+{
+    auto fixture = GroundQueueFixture();
+    const auto goal = fixture.fluent_atom("goal");
+    fixture.rule(fixture.condition(), goal, fixture.fresh_rule_binding(), 2.5);
+    const auto const_workspace = datalog::ConstProgramWorkspace<GroundTag>(fixture.program());
+    using Workspace = datalog::ProgramWorkspace<GroundTag, datalog::MinCostAnnotationPolicy<datalog::MaxAggregation>>;
+    auto workspace = Workspace(const_workspace, datalog::MinCostAnnotationPolicy<datalog::MaxAggregation>());
+    auto ctx = datalog::ProgramExecutionContext(workspace);
+    ctx.initialize(fixture.initial_fluent_atoms);
+    datalog::compute_model(ctx);
+    const auto key = goal.get_row().get_index();
+    ASSERT_NE(std::get_if<datalog::WitnessAnnotation<formalism::PredicateTag>>(ctx.out().annotations().find(key)), nullptr);
+    ctx.out().scheduler().use_cost_only_annotations();
+    ctx.initialize(fixture.initial_fluent_atoms);
+    datalog::compute_model(ctx);
+    ASSERT_NE(std::get_if<datalog::BaseAnnotation>(ctx.out().annotations().find(key)), nullptr);
+    EXPECT_EQ(ctx.out().annotations().fetch_cost(key), 2.5);
+}
+
 TEST(TyrDatalogGroundQueueTest, PositiveFluentPreconditionIndexMapsFactToWaitingRules)
 {
     auto fixture = GroundQueueFixture();
